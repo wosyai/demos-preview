@@ -111,9 +111,13 @@ f32 avatar_yaw = 0.0;
 f32 gait_phase = 0.0;
 f32 gait_weight = 0.0;
 f32 air_weight = 0.0;
+f32 swim_weight = 0.0;
+f32 swim_phase = 0.0;
 f32 avatar_phase = 0.0;
 f32 avatar_gait = 0.0;
 f32 avatar_air = 0.0;
+f32 avatar_swim = 0.0;
+f32 avatar_swim_phase = 0.0;
 f32 flight_pitch = 0.0;
 f32 flight_bank = 0.0;
 f32 avatar_flight_pitch = 0.0;
@@ -226,6 +230,8 @@ bool(i32, i32, i32) inside = fn(x, y, z) {
 u8(i32, i32, i32) cell = fn(x, y, z) {
 	if (inside(x, y, z)) { world[index_of(y)][index_of(z)][index_of(x)] } else { 0 }
 };
+
+f32(f32) absolute_f = fn(value) { if (value < 0.0) { 0.0 - value } else { value } };
 
 i32(i32) abs_i = fn(value) {
 	if (value < 0) { -value } else { value }
@@ -955,6 +961,8 @@ i32() start_beacon = fn {
 	gait_phase = 0.0;
 	gait_weight = 0.0;
 	air_weight = 0.0;
+	swim_weight = 0.0;
+	swim_phase = 0.0;
 	selected_material = 5;
 	prepare_atlas();
 	publish_water();
@@ -1141,6 +1149,8 @@ unit() spawn_player = fn {
 	gait_phase = 0.0;
 	gait_weight = 0.0;
 	air_weight = if (grounded) { 0.0 } else { 1.0 };
+	swim_weight = 0.0;
+	swim_phase = 0.0;
 	flight_pitch = 0.0;
 	flight_bank = 0.0;
 	selected_hit = -2;
@@ -1369,6 +1379,21 @@ unit(f32, f32, f32) move_camera = fn(dt, sy, cy) {
 		f32 air_target = if (grounded && !flying) { 0.0 } else { 1.0 };
 		f32 air_step = dt * 9.0;
 		air_weight = air_weight + clamp_f(air_target - air_weight, 0.0 - air_step, air_step);
+		if (flying) {
+			swim_weight = 0.0;
+			swim_phase = 0.0;
+		} else {
+			f32 swim_target = if (grounded) { 0.0 } else { clamp_f((immersion - 0.28) * 2.9, 0.0, 1.0) };
+			f32 swim_step = dt * 5.6;
+			swim_weight = swim_weight + clamp_f(swim_target - swim_weight, 0.0 - swim_step, swim_step);
+			if (swim_target > 0.0) {
+				f32 advance = absolute_f(camera_pose.x - previous_x) + absolute_f(camera_pose.z - previous_z)
+					+ 0.30 * absolute_f(camera_pose.y - previous_y);
+				swim_phase = wrap_yaw(swim_phase + advance * 5.8);
+			} else {
+				if (swim_weight == 0.0) { swim_phase = 0.0; };
+			};
+		};
 		if (camera_pose.y < -6.0) { spawn_player(); };
 		if (camera_pose.x != previous_x || camera_pose.y != previous_y || camera_pose.z != previous_z) { target_dirty = true; };
 		pulse_controls = 0;
@@ -1590,7 +1615,7 @@ unit(f32, f32, f32, f32, f32, f32) avatar_vertex = fn(x, y, z, r, g, b) {
 	f32 joint_dy = dy * avatar_joint_cosine;
 	f32 joint_dz = z * avatar_joint_sine;
 	f32 body_x = x;
-	if (avatar_flight_pitch != 0.0 || avatar_flight_bank != 0.0) {
+	if (avatar_flight_pitch != 0.0 || avatar_flight_bank != 0.0 || avatar_swim != 0.0) {
 		f32 local_y = avatar_joint_y + joint_dy - joint_dz + 0.50;
 		f32 tilted_y = local_y * avatar_pitch_cosine - body_z * avatar_pitch_sine;
 		body_z = local_y * avatar_pitch_sine + body_z * avatar_pitch_cosine;
@@ -1635,7 +1660,8 @@ unit(bool) publish_avatar = fn(visible) {
 	if (visible) {
 		if (!avatar_visible || avatar_x != camera_pose.x || avatar_y != camera_pose.y || avatar_z != camera_pose.z || avatar_yaw != camera_pose.yaw
 			|| avatar_phase != gait_phase || avatar_gait != gait_weight || avatar_air != air_weight
-			|| avatar_flight_pitch != flight_pitch || avatar_flight_bank != flight_bank) {
+			|| avatar_flight_pitch != flight_pitch || avatar_flight_bank != flight_bank
+			|| avatar_swim != swim_weight || avatar_swim_phase != swim_phase) {
 			avatar_x = camera_pose.x;
 			avatar_y = camera_pose.y;
 			avatar_z = camera_pose.z;
@@ -1643,32 +1669,38 @@ unit(bool) publish_avatar = fn(visible) {
 			avatar_phase = gait_phase;
 			avatar_gait = gait_weight;
 			avatar_air = air_weight;
-			if (avatar_flight_pitch != flight_pitch) {
+			if (avatar_flight_pitch != flight_pitch || avatar_swim != swim_weight) {
 				avatar_flight_pitch = flight_pitch;
-				avatar_pitch_sine = if (flight_pitch == 0.0) { 0.0 } else { sine(flight_pitch) };
-				avatar_pitch_cosine = if (flight_pitch == 0.0) { 1.0 } else { cosine(flight_pitch) };
+				avatar_swim = swim_weight;
+				f32 pitch = flight_pitch + swim_weight * 0.63;
+				avatar_pitch_sine = if (pitch == 0.0) { 0.0 } else { sine(pitch) };
+				avatar_pitch_cosine = if (pitch == 0.0) { 1.0 } else { cosine(pitch) };
 			};
+			avatar_swim_phase = swim_phase;
 			if (avatar_flight_bank != flight_bank) {
 				avatar_flight_bank = flight_bank;
 				avatar_bank_sine = if (flight_bank == 0.0) { 0.0 } else { sine(flight_bank) };
 				avatar_bank_cosine = if (flight_bank == 0.0) { 1.0 } else { cosine(flight_bank) };
 			};
 			avatar_position = 0;
-			f32 swing = sine(gait_phase) * gait_weight * (1.0 - air_weight);
+			f32 dry = 1.0 - swim_weight;
+			f32 swinging_air = air_weight * dry;
+			f32 swing = sine(gait_phase) * gait_weight * (1.0 - air_weight) * dry;
+			f32 stroke = if (swim_weight == 0.0) { 0.0 } else { sine(swim_phase) * swim_weight };
 			avatar_joint(0.0, 0.0);
 			avatar_box(-0.19,0.19, -0.23,0.15, -0.18,0.18, 0.91,0.66,0.39);
 			avatar_box(-0.21,0.21, -0.84,-0.24, -0.14,0.14, 0.91,0.61,0.14);
 			avatar_box(-0.205,0.205, 0.10,0.178, -0.20,0.20, 0.21,0.36,0.34);
 			avatar_box(-0.18,0.18, 0.081,0.11, 0.16,0.28, 0.26,0.44,0.40);
 			avatar_box(-0.15,0.15, -0.76,-0.30, -0.26,-0.127, 0.26,0.40,0.29);
-			avatar_joint(-0.25, swing * 0.60 - air_weight * 0.57);
+			avatar_joint(-0.25, swing * 0.60 - swinging_air * 0.57 - swim_weight * 1.25 + stroke * 0.80);
 			avatar_box(-0.28,-0.202, -0.79,-0.25, -0.095,0.095, 0.63,0.42,0.26);
-			avatar_joint(-0.25, 0.0 - swing * 0.60 - air_weight * 0.37);
+			avatar_joint(-0.25, 0.0 - swing * 0.60 - swinging_air * 0.37 - swim_weight * 1.25 - stroke * 0.80);
 			avatar_box(0.202,0.28, -0.79,-0.25, -0.095,0.095, 0.63,0.42,0.26);
-			avatar_joint(-0.84, 0.0 - swing * 0.66 - air_weight * 0.44);
+			avatar_joint(-0.84, 0.0 - swing * 0.66 - swinging_air * 0.44 - stroke * 0.32);
 			avatar_box(-0.17,-0.021, -1.59,-0.84, -0.13,0.13, 0.22,0.32,0.45);
 			avatar_box(-0.18,-0.02, -1.62,-1.42, -0.14,0.20, 0.23,0.14,0.09);
-			avatar_joint(-0.84, swing * 0.66 + air_weight * 0.29);
+			avatar_joint(-0.84, swing * 0.66 + swinging_air * 0.29 + stroke * 0.32);
 			avatar_box(0.021,0.17, -1.59,-0.84, -0.13,0.13, 0.22,0.32,0.45);
 			avatar_box(0.02,0.18, -1.62,-1.42, -0.14,0.20, 0.23,0.14,0.09);
 			unsafe { host.player(core.pointer_cast<*?u8>(&?avatar_vertices[0][0][0]), avatar_position); };

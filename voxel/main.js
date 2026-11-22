@@ -394,7 +394,7 @@ async function boot() {
   }
   try {
     prepareGraphics();
-    const response = await fetch(new URL("./engine.wasm?v=beacon-wood-guide-v1", import.meta.url));
+    const response = await fetch(new URL("./engine.wasm?v=beacon-swim-v1", import.meta.url));
     if (!response.ok) throw new Error(`Engine not found (HTTP ${response.status}).`);
     const bytes = await response.arrayBuffer();
     const api = {

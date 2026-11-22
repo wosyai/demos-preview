@@ -1,4 +1,4 @@
-export const ENGINE_PATH = "./ferry.wasm?v=annex-ferry-v4";
+export const ENGINE_PATH = "./ferry.wasm?v=ferry-guided-routes-v2";
 const INPUTS = new Map([
   ["KeyA","left"],["ArrowLeft","left"],["KeyD","right"],["ArrowRight","right"],
   ["KeyW","up"],["ArrowUp","up"],["KeyS","down"],["ArrowDown","down"],["Space","brake"],
@@ -55,7 +55,7 @@ function routeMapBounds(roads) {
   }
   return [minX,maxX,minZ,maxZ];
 }
-function drawRouteMap(ctx,roads,bounds,frame) {
+function drawRouteMap(ctx,roads,bounds,frame,route) {
   if(!bounds||!roads.length) return;
   const {width,height}=ctx.canvas, active=[0,1,8].includes(frame[17]);
   let minX=Math.min(bounds[0],frame[26]),maxX=Math.max(bounds[1],frame[26]);
@@ -70,6 +70,19 @@ function drawRouteMap(ctx,roads,bounds,frame) {
   ctx.clearRect(0,0,width,height);
   ctx.fillStyle="#49716d";
   for(const [rx,rz,w,d] of roads) ctx.fillRect(x(rx),z(rz+d),w*scale,d*scale);
+  if(route.length>1) {
+    ctx.beginPath();
+    ctx.moveTo(x(route[0][0]),z(route[0][1]));
+    for(let i=1;i<route.length;i++) ctx.lineTo(x(route[i][0]),z(route[i][1]));
+    ctx.lineJoin="round";
+    ctx.lineCap="round";
+    ctx.strokeStyle="#101924";
+    ctx.lineWidth=4.5;
+    ctx.stroke();
+    ctx.strokeStyle="#ffc276";
+    ctx.lineWidth=2.25;
+    ctx.stroke();
+  }
   const dot=(px,pz,r,color)=>{
     ctx.fillStyle=color; ctx.beginPath(); ctx.arc(x(px),z(pz),r,0,Math.PI*2); ctx.fill();
   };
@@ -235,7 +248,7 @@ export async function boot(env=globalThis,createGraphics=graphics) {
   const touch=get("touch"), trip=get("trip"), departure=get("departure"), brakeIcon=get("brake-icon"), actionIcon=get("action-icon");
   const input=inputState(), meshes=new Map();
   const map=get("city-map"), chart=get("city-chart").getContext?.("2d");
-  let roads=[], roadBounds;
+  let roads=[], roadBounds, routeKey=-1, route=[];
   let engine, renderer, frame, aspect=0, menuText="Loading the waterfront…", failed=false, noticeUntil=0, notice="", last=0, playing=false, lost=false, ready=false, paused=false, mode=0, event=0, previousCue=-1, previousState=-1;
   const heldButtons=[power,brake,action];
   const renderThumb=(x,y)=>{
@@ -274,7 +287,25 @@ export async function boot(env=globalThis,createGraphics=graphics) {
     map.hidden=pause.disabled||!chart;
     label(summary,lost&&!failed ? "Graphics interrupted. Waiting for the browser to restore the scene." : menuText);
   }
-  map.addEventListener("toggle",()=>{ if(chart&&frame&&map.open&&!map.hidden) drawRouteMap(chart,roads,roadBounds,frame); });
+  function paintMap() {
+    if(!chart||!frame||!map.open||map.hidden) return;
+    const selected=engine.route_selection();
+    if(selected!==routeKey) {
+      const next=[];
+      if(selected!==0) {
+        const length=engine.route_value(selected,-1,0);
+        if(!Number.isInteger(length)||length<2||length>16) throw Error("The guide route is unreadable.");
+        for(let i=0;i<length;i++) {
+          const x=engine.route_value(selected,i,0),z=engine.route_value(selected,i,1);
+          if(!Number.isFinite(x)||!Number.isFinite(z)) throw Error("The guide route is unreadable.");
+          next.push([x,z]);
+        }
+      }
+      route=next; routeKey=selected;
+    }
+    drawRouteMap(chart,roads,roadBounds,frame,route);
+  }
+  map.addEventListener("toggle",()=>{ if(ready) paintMap(); });
   function syncAspect(next) {
     aspect=next;
     engine.tick(0,0,0,0,aspect);
@@ -283,7 +314,7 @@ export async function boot(env=globalThis,createGraphics=graphics) {
   function show() {
     if(!frame || !renderer) return;
     renderer.draw(frame);
-    if(chart&&map.open&&!map.hidden) drawRouteMap(chart,roads,roadBounds,frame);
+    paintMap();
     const foot=frame[16]===0,state=frame[17],cue=frame[20],hit=frame[21],target=state===0||state===1||state===8;
     label(objective,OBJECTIVES[state]||"Find the ferry");
     label(stats,target ? `${Math.round(frame[23])} m` : "");
@@ -435,7 +466,7 @@ export async function boot(env=globalThis,createGraphics=graphics) {
     if(failed) return;
     const exports=module.instance.exports;
     if(!(exports.memory instanceof WebAssembly.Memory) ||
-      !["_start","reset","tick","cancel_action","map_value"].every((name)=>typeof exports[name]==="function")) {
+      !["_start","reset","tick","cancel_action","map_value","route_selection","route_value"].every((name)=>typeof exports[name]==="function")) {
       throw Error("The game engine could not be initialized.");
     }
     engine=exports;

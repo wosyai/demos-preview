@@ -1218,6 +1218,17 @@ bool() at_park_handoff = fn {
 };
 bool() uses_park_exit = fn { !in_car && park_walk && foot_z<61.9 && foot_x< -4.3 };
 bool() uses_harbor_walk = fn { !in_car && foot_z>61.4 && foot_x<7.85 };
+i32() harbor_walk_leg = fn {
+    if (uses_park_exit()) { 0 }
+    else { if (uses_harbor_walk()) { if (foot_x<3.45 && foot_z<harbor_crosswalk_z-0.40) { 1 } else { 2 } } else { -1 } }
+};
+f32(i32,i32) harbor_walk_point = fn(row,column) {
+    if (column==0) { if (row<2) { -4.55 } else { 8.10 } }
+    else { if (row==0) { 62.10 } else { harbor_crosswalk_z } }
+};
+bool() at_pier_approach = fn {
+    !in_car && foot_x>=7.85 && foot_x<=14.35 && foot_z>=harbor_crosswalk_z-0.4
+};
 unit() advance_waterfront = fn {
     if (stage==MissionStage::reach_pier && !in_car && waterfront_leg>=0) {
         bool left_path=if (waterfront_leg==0) { foot_x< -84.6 || foot_z<34.4 || foot_z>40.5 }
@@ -1263,21 +1274,78 @@ f32() pier_guide_x = fn {
     if (avenue_leg>=0) { if (in_car) { avenue_route[ix(avenue_leg)][0] } else { car_x } }
     else { if (avenue_walk_leg>=0) { avenue_foot[ix(avenue_walk_leg)][0] }
     else { if (waterfront_leg>=0) { waterfront_route[ix(waterfront_leg)][0] }
-    else { if (uses_park_exit()) { -4.55 } else {
-        if (uses_harbor_walk()) {
-            if (foot_x<3.45 && foot_z<harbor_crosswalk_z-0.40) { -4.55 } else { 8.10 }
-        } else { if (follows_return()) { return_route[ix(return_leg)][0] } else { dock_x } }
-    } } } }
+    else {
+        i32 harbor_leg=harbor_walk_leg();
+        if (harbor_leg>=0) { harbor_walk_point(harbor_leg,0) }
+        else { if (follows_return()) { return_route[ix(return_leg)][0] } else { dock_x } }
+    } } }
 };
 f32() pier_guide_z = fn {
     if (avenue_leg>=0) { if (in_car) { avenue_route[ix(avenue_leg)][1] } else { car_z } }
     else { if (avenue_walk_leg>=0) { avenue_foot[ix(avenue_walk_leg)][1] }
     else { if (waterfront_leg>=0) { waterfront_route[ix(waterfront_leg)][1] }
-    else { if (uses_park_exit()) { 62.10 } else {
-        if (uses_harbor_walk()) { harbor_crosswalk_z }
-        else { if (follows_return()) { return_route[ix(return_leg)][1] } else { dock_z } }
-    } } } }
+    else {
+        if (uses_park_exit()) { harbor_walk_point(0,1) }
+        else { if (uses_harbor_walk()) { harbor_crosswalk_z }
+        else { if (follows_return()) { return_route[ix(return_leg)][1] } else { dock_z } } }
+    } } }
 };
+
+i32() route_selection = fn {
+    if (stage==MissionStage::pickup_tape && follows_backstreet()) { 16+pickup_leg }
+    else {
+        if (stage!=MissionStage::reach_pier) { 0 }
+        else {
+            if (avenue_leg>=0 && in_car) { 32+avenue_leg }
+            else {
+                if (avenue_walk_leg>=0) { 48+avenue_walk_leg }
+                else {
+                    if (waterfront_leg>=0) { 64+waterfront_leg }
+                    else {
+                        if (follows_return() && !park_walk && avenue_leg<0) { 80+return_leg }
+                        else {
+                            i32 harbor_leg=harbor_walk_leg();
+                            if (harbor_leg>=0 && avenue_leg<0) { 96+harbor_leg }
+                            else { if (at_pier_approach() && avenue_leg<0) { 99 } else { 0 } }
+                        }
+                    }
+                }
+            }
+        }
+    }
+};
+
+f32(i32,i32,i32) route_value = fn(key,row,column) {
+    i32 route=key/16;
+    i32 leg=key%16;
+    i32 start=if (leg>0) { leg-1 } else { 0 };
+    i32 route_count=if (route==1) { 4 }
+    else { if (route==2) { 10 }
+    else { if (route==3) { 5 }
+    else { if (route==4) { 4 }
+    else { if (route==5) { 7 } else { if (route==6) { 4 } else { 0 } } } } } };
+    if (key<=0 || leg>=route_count) { 0.0 }
+    else {
+        if (row==-1 && column==0) { float_i(route_count-start) }
+        else {
+            if (row<0 || row>=route_count-start || column<0 || column>1) { 0.0 }
+            else {
+                i32 point=start+row;
+                u64 n=ix(point); u64 c=ix(column);
+                if ((route==3 || route==4 || route==6) && point==route_count-1) {
+                    if (column==0) { dock_x } else { dock_z }
+                } else {
+                    if (route==1) { pickup_route[n][c] }
+                    else { if (route==2) { avenue_route[n][c] }
+                    else { if (route==3) { avenue_foot[n][c] }
+                    else { if (route==4) { waterfront_route[n][c] }
+                    else { if (route==5) { return_route[n][c] } else { harbor_walk_point(point,column) } } } } }
+                }
+            }
+        }
+    }
+};
+
 bool() avenue_prepared = fn {
     abs_f(car_x-avenue_prep_x)<0.85 && abs_f(car_z-shop_service_z)<0.40 &&
         sin_small(car_yaw)>0.994 && abs_f(cos_small(car_yaw))<0.10 && sq(vx)+sq(vz)<0.04

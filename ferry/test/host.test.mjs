@@ -30,9 +30,9 @@ test("pedals and one-shot action coexist with analog steering; keyboard axis pre
 test("loader agrees with shell version, WebAssembly triangle shape, and 30-float engine frame",async()=>{
   const html=await readFile(new URL("../index.html",import.meta.url),"utf8");
   const version=html.match(/host\.mjs\?v=([^"]+)/)?.[1];
-  assert.equal(version,"ferry-mobile-hud-v5-arcade-ui4");
-  assert(html.includes(`style.css?v=${version}`));
-  assert.equal(ENGINE_PATH,"./ferry.wasm?v=annex-ferry-v4","a host-only UI update keeps the verified annex asset token");
+  assert.equal(version,"ferry-guided-routes-v2-arcade-ui4");
+  assert(html.includes('style.css?v=ferry-mobile-hud-v5-arcade-ui4"'));
+  assert.equal(ENGINE_PATH,"./ferry.wasm?v=ferry-guided-routes-v2");
   assert.match(html,/<div id="play-hud" class="play-hud" hidden>[\s\S]*?<header[^>]*>[\s\S]*?id="camera-view"[\s\S]*?id="hint"[\s\S]*?<\/header>[\s\S]*?id="city-map"/);
   assert.match(html,/id="action-icon"[\s\S]*?<span id="action-caption">Interact<\/span>/);
   assert(html.includes('lang="en"')&&html.includes('id="roam"'));
@@ -78,14 +78,15 @@ function shell({defer=false,missing="",cue=1}={}) {
   chart.getContext=()=>({
     canvas:chart, clearRect(){mapPaint.push(["clear"]);},
     fillRect(...args){mapPaint.push(["road",...args]);},
-    beginPath(){}, arc(...args){mapPaint.push(["dot",this.fillStyle,...args]);}, fill(){},
+    beginPath(){}, moveTo(...args){mapPaint.push(["route-start",...args]);},
+    lineTo(...args){mapPaint.push(["route-leg",...args]);}, stroke(){mapPaint.push(["stroke",this.strokeStyle]);}, arc(...args){mapPaint.push(["dot",this.fillStyle,...args]);}, fill(){},
   });
   const window=new Target(), document=Object.assign(new Target(),{getElementById:get});
   window.screen={orientation:new Target()};
   const memory=new WebAssembly.Memory({initial:1});
   const frames=[],ticks=[],draws=[],uploads=[],resets=[];
   let finishFetch,cancellations=0,wasmStarts=0,time=0;
-  let state=0,seconds=90,turn=0;
+  let state=0,seconds=90,turn=0,selection=0,routeReads=0;
   const fetchGate=new Promise(resolve=>{finishFetch=resolve;});
   const env={
     window,document,devicePixelRatio:1,performance:{now:()=>time},
@@ -106,6 +107,8 @@ function shell({defer=false,missing="",cue=1}={}) {
           tick(...values){ticks.push(values);publish();},
           cancel_action(){cancellations++;},
           map_value(row,column){ return row===-1 ? 1 : [-1,2,3,4][column]; },
+          route_selection(){ return selection; },
+          route_value(key,row,column){ routeReads++; return row===-1 ? 3 : [[-1,2],[-1,4],[2,4]][row][column]; },
         };
         if(missing)delete exports[missing];
         return {instance:{exports}};
@@ -116,7 +119,8 @@ function shell({defer=false,missing="",cue=1}={}) {
   return {
     get,window,document,ticks,draws,uploads,resets,started,finishFetch,mapPaint,
     advance(){ const frame=frames.shift(); assert(frame,"animation callback was scheduled");frame(time+=16); },
-    mission(next){({state,seconds,turn,cue}={state,seconds,turn,cue,...next});},
+    mission(next){({state,seconds,turn,cue,selection}={state,seconds,turn,cue,selection,...next});},
+    get routeReads(){return routeReads;},
     get wasmStarts(){return wasmStarts;},
     get cancellations(){return cancellations;},
   };
@@ -339,4 +343,29 @@ test("touch action caption follows the same Wosy cue as its accessible name",asy
   assert.equal(action.hidden,true);
   app.get("pause").emit("click");
   assert.equal(hud.hidden,true);
+});
+
+test("the minimap paints Wosy turns and reads path points only on selection changes",async()=>{
+  const app=shell(); await app.started;
+  app.get("start").emit("click");
+  app.mission({state:1,selection:64});
+  app.advance();
+  assert.equal(app.routeReads,0,"the closed map has no path work");
+  const map=app.get("city-map");
+  map.open=true; map.emit("toggle");
+  assert.equal(app.routeReads,7);
+  const start=app.mapPaint.find(row=>row[0]==="route-start");
+  const legs=app.mapPaint.filter(row=>row[0]==="route-leg");
+  assert.equal(legs.length,2);
+  assert.equal(legs[0][1],start[1],"first segment shares the same map x");
+  assert.equal(legs[1][2],legs[0][2],"second segment changes direction, not a diagonal to the goal");
+  app.advance(); app.advance();
+  assert.equal(app.routeReads,7,"unchanged legs render from cached points");
+  app.mission({state:1,selection:65});
+  app.advance();
+  assert.equal(app.routeReads,14);
+  app.mapPaint.length=0;
+  app.mission({state:1,selection:0});
+  app.advance();
+  assert(!app.mapPaint.some(row=>row[0]==="route-start"),"when no route exists do not draw a shortcut");
 });

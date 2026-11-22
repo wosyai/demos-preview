@@ -341,6 +341,7 @@ function sortie(course, mode = "normal") {
     const observer = observeMarkers(course, mode);
     let premature = false, canceled = false, wrongWindow = false, checkedSupply = false, confirmed = 0;
     let surveyCruise = false, surveyEast = false;
+    let checkedPortraitDrop = false, checkedChaseDrop = false;
     function step(input = 0, dt = 1/30, aspect = 1.65) {
         const gates = frame[32];
         tick(input,dt,aspect);
@@ -437,7 +438,20 @@ function sortie(course, mode = "normal") {
         if (phase === 1) {
             if (mode === "riverside") {
                 assert(surveyCruise, "the survey reached roof clearance before leaving the launch corridor");
+                if (!comparisonBaseline && !checkedPortraitDrop && p.y >= 35) {
+                    const before = frame.slice();
+                    engine.select_view(1);
+                    tick(0, 0, .45);
+                    assert.equal(marker([.99,.72,.29]).length, 105, "the anchored DROP objective is still generated in tall portrait cockpit");
+                    assert.equal(marker([.035,.095,.10]).length, 24, "the directional fallback remains when the high cockpit can look over the target");
+                    assert.deepEqual(frame.subarray(16), before.subarray(16), "the cockpit check cannot change route state");
+                    engine.select_view(0);
+                    tick(0, 0, 1.65);
+                    assert.deepEqual(frame, before, "restore the ordinary route camera");
+                    checkedPortraitDrop = true;
+                }
                 if (surveyEast && p.z > 447 && p.x > 315 && p.x < 435 && p.y > 19) {
+                    assert(comparisonBaseline || checkedPortraitDrop, "the northeast survey exercised a high cockpit portrait cue");
                     return {result: "northeast reach", position: p};
                 }
                 if (p.x >= 310 && p.z >= 240 && p.z <= 310) surveyEast = true;
@@ -445,6 +459,16 @@ function sortie(course, mode = "normal") {
                 input = pilot(p, Math.atan2(target[0]-p.x, target[1]-p.z), 38, 0, 16);
                 step(input);
                 continue;
+            }
+            if (!comparisonBaseline && mode === "normal") {
+                const dropMarker = marker([.99,.72,.29]);
+                if (!checkedChaseDrop) {
+                    assert.equal(marker([.035,.095,.10]).length, 24, "the ordinary chase approach retains its directional cue");
+                    checkedChaseDrop = true;
+                }
+                assert.equal(dropMarker.length, 105, "the Wosy DROP sign remains visible while approaching the delivery point");
+                assert(dropMarker.some(([x,y,z]) => Math.abs(x-109)<.001 && Math.abs(y-4.7)<.001 && Math.abs(z-218)<.001),
+                    "the tip stays anchored to the actual mail target");
             }
             input = pilot(p,Math.atan2(109-p.x,218-p.z),mode === "high" ? 20 : 11,0,32);
             if (mode === "high" && status === 5) {
@@ -457,6 +481,8 @@ function sortie(course, mode = "normal") {
             if (status === 9) input |= 128;
         }
         if (phase === 5 || phase === 2) {
+            if (!comparisonBaseline && course === 1 && mode === "normal")
+                assert.equal(marker([.99,.72,.29]).length, 0, "the delivery objective clears after release");
             const final = course ? 290 : 331, endX = course ? 125 : -15;
             const bearing = p.z >= final-13 ? 0 : clamp(Math.atan2(endX-p.x,Math.max(22,final+8-p.z)),-.38,.38);
             const target = final+(course?15:10), slope = course?-.207:-.133;

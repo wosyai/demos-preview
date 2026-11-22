@@ -79,3 +79,7 @@ Press V or tap Cockpit to switch the aircraft-mounted view and the exterior
 chase view. Speed and altitude use the same Wosy instrument data in either.
 The WebAssembly export `select_view(1)` selects cockpit; zero selects chase.
 It changes presentation only: camera preference is not part of a v7 replay.
+
+In Paris, follow the amber DROP sign anchored above the mail target. The sign
+persists through approach, and the HUD says “Drop here” only when the real
+flight engine permits release. The cue is visual and leaves v7 replays valid.

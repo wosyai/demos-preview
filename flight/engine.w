@@ -1597,6 +1597,45 @@ unit() supply_beacon = fn {
 	ground_patch(x+4.38,z-5.38,0.62,10.76,0.39,0.14,0.72,0.67);
 };
 
+unit(f32,f32,f32,f32,f32,f32,f32,f32) drop_ink = fn(x,z,rx,rz,left,bottom,width,height) {
+	f32 ax = x+rx*left;
+	f32 az = z+rz*left;
+	f32 bx = ax+rx*width;
+	f32 bz = az+rz*width;
+	quad(ax,bottom,az,bx,bottom,bz,bx,bottom+height,bz,ax,bottom+height,az,0.99,0.72,0.29);
+};
+
+unit(f32,f32) drop_waypoint = fn(hx,hz) {
+	f32 x = drop_x();
+	f32 z = drop_z();
+	f32 rx = hz;
+	f32 rz = -hx;
+	f32 l = -5.4;
+	f32 r = 5.4;
+	quad(x+rx*l,5.9,z+rz*l,x+rx*r,5.9,z+rz*r,x+rx*r,9.1,z+rz*r,x+rx*l,9.1,z+rz*l,0.19,0.13,0.10);
+	tri(x-rx*0.85,5.9,z-rz*0.85,x+rx*0.85,5.9,z+rz*0.85,x,4.7,z,0.99,0.72,0.29);
+	f32 ix0 = x-hx*0.035;
+	f32 iz0 = z-hz*0.035;
+	drop_ink(ix0,iz0,rx,rz,-4.5,6.5,0.28,2.0);
+	drop_ink(ix0,iz0,rx,rz,-4.22,6.5,1.08,0.28);
+	drop_ink(ix0,iz0,rx,rz,-4.22,8.22,1.08,0.28);
+	drop_ink(ix0,iz0,rx,rz,-3.14,6.78,0.28,1.44);
+	drop_ink(ix0,iz0,rx,rz,-2.2,6.5,0.28,2.0);
+	drop_ink(ix0,iz0,rx,rz,-1.92,8.22,1.08,0.28);
+	drop_ink(ix0,iz0,rx,rz,-0.84,7.6,0.28,0.62);
+	drop_ink(ix0,iz0,rx,rz,-1.92,7.32,1.08,0.28);
+	tri(ix0-rx*1.64,7.32,iz0-rz*1.64,ix0-rx*1.30,7.32,iz0-rz*1.30,ix0-rx*0.62,6.50,iz0-rz*0.62,0.99,0.72,0.29);
+	tri(ix0-rx*1.64,7.32,iz0-rz*1.64,ix0-rx*0.62,6.50,iz0-rz*0.62,ix0-rx*0.97,6.50,iz0-rz*0.97,0.99,0.72,0.29);
+	drop_ink(ix0,iz0,rx,rz,0.10,6.5,0.28,2.0);
+	drop_ink(ix0,iz0,rx,rz,0.38,6.5,1.08,0.28);
+	drop_ink(ix0,iz0,rx,rz,0.38,8.22,1.08,0.28);
+	drop_ink(ix0,iz0,rx,rz,1.46,6.78,0.28,1.44);
+	drop_ink(ix0,iz0,rx,rz,2.40,6.5,0.28,2.0);
+	drop_ink(ix0,iz0,rx,rz,2.68,8.22,1.08,0.28);
+	drop_ink(ix0,iz0,rx,rz,3.76,7.6,0.28,0.62);
+	drop_ink(ix0,iz0,rx,rz,2.68,7.32,1.08,0.28);
+};
+
 unit() flight_guides = fn {
 	i32 next = next_gate[0];
 	if (next < 3) { gate_arch(gate_x(next),gate_y(next),gate_z(next),0,false); };
@@ -1627,6 +1666,7 @@ unit() flight_guides = fn {
 			if (abs_f(dx)+abs_f(dz) > 2.0) {
 				direction_arrow(x+hx*10.0,y+3.9,z+hz*10.0,dx,dz);
 			};
+			if (stage == MissionPhase::mail_approach) { drop_waypoint(hx,hz); };
 			if (stage == MissionPhase::supply_approach || stage == MissionPhase::supply_rollout) {
 				supply_beacon();
 			};

@@ -14,8 +14,8 @@ const LANDING_CUES = [
   "Ease your descent", "Aligned · ease onto the strip",
 ];
 const RELEASE_CUES = [
-  "", "", "", "", "", "Descend into the drop window", "Climb a little before dropping",
-  "Level your wings and face the yellow target", "Move closer to the yellow target", "Drop now",
+  "", "", "", "", "", "Descend to the drop window", "Climb to the drop window",
+  "Level out and align", "Aim at DROP", "Drop here",
 ];
 const FAILURE_CUES = [
   "", "", "You hit an obstacle. Give it more clearance.", "You left the flight area or ran out of time.",
@@ -756,7 +756,7 @@ export function bootFlight(win, doc) {
     if (!gl) { failure("This game needs WebGL 2. Try a current browser with hardware acceleration enabled."); return; }
     try {
       gpu = graphics(gl);
-      const wasm = await win.fetch(new URL("./flight.wasm?v=cockpit-flight-v7", import.meta.url));
+      const wasm = await win.fetch(new URL("./flight.wasm?v=drop-marker-flight-v7", import.meta.url));
       if (!wasm.ok) throw new Error("The flight engine could not be downloaded.");
       const { instance } = await win.WebAssembly.instantiate(await wasm.arrayBuffer(), imports);
       engine = instance.exports;
