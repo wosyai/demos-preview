@@ -57,7 +57,7 @@ class Element {
   }
 }
 
-async function loadHost(caseId, startsLost = false, stored = null, mobile = false, modernOrientation = false) {
+async function loadHost(caseId, startsLost = false, stored = null, mobile = false, modernOrientation = false, seedStore = null) {
   const nodes = new Map();
   const node = (id) => {
     if (!nodes.has(id)) nodes.set(id, new Element());
@@ -143,11 +143,17 @@ async function loadHost(caseId, startsLost = false, stored = null, mobile = fals
     window: win,
     HTMLInputElement: class extends Element {},
     matchMedia: () => ({ matches: mobile }),
-    localStorage: { getItem() { return stored; }, setItem(key, seed) { counters.stored.push([key, seed]); } },
+    localStorage: {
+      getItem(key) { return seedStore ? (seedStore.get(key) ?? null) : stored; },
+      setItem(key, seed) {
+        counters.stored.push([key, seed]);
+        if (seedStore) seedStore.set(key, seed);
+      },
+    },
     devicePixelRatio: 1,
     fetch(url) {
       assert(url.pathname.endsWith('/voxel/engine.wasm'));
-      assert.equal(url.search, '?v=typed-state-v1');
+      assert.equal(url.search, '?v=beacon-mode-sea-v1');
       return fetchResponse.promise;
     },
     requestAnimationFrame(fn) { frames.set(++frameId, fn); return frameId; },
@@ -179,6 +185,7 @@ async function loadHost(caseId, startsLost = false, stored = null, mobile = fals
         const call = counters.parser.at(-1);
         call.complete = true;
         const text = String.fromCharCode(...call.units);
+        if (seedStore && /^(37|53)$/.test(text)) return BigInt(text);
         return text === '  -2147483648 ' && call.trim === 1
           ? -2147483648n : text === '7' && call.trim === 0 ? 7n : 2147483648n;
       },
@@ -458,7 +465,26 @@ await fallback.resolveFetch();
 assert.equal(fallback.counters.defaults,1);
 assert.deepEqual(fallback.counters.seeds,[471]);
 assert.deepEqual(fallback.counters.parser,[{trim:0,units:[32,56,32],complete:true}]);
-assert.deepEqual(fallback.counters.stored,[['wosy-voxel-seed','471']]);
+assert.deepEqual(fallback.counters.stored,[['wosy-voxel-seed-preview','471']]);
+const liveSeedKey = 'wosy-voxel-seed';
+const previewSeedKey = 'wosy-voxel-seed-preview';
+const liveOnlyStore = new Map([[liveSeedKey, '7']]);
+const firstPreview = await loadHost('preview-ignores-live-seed', false, null, false, false, liveOnlyStore);
+await firstPreview.resolveFetch();
+assert.deepEqual(firstPreview.counters.seeds, [471]);
+assert.deepEqual([...liveOnlyStore], [[liveSeedKey, '7'], [previewSeedKey, '471']]);
+const sameOriginStore = new Map([[liveSeedKey, '7'], [previewSeedKey, '37']]);
+const separateSeeds = await loadHost('preview-seed-isolation', false, null, false, false, sameOriginStore);
+await separateSeeds.resolveFetch();
+assert.deepEqual(separateSeeds.counters.seeds, [37]);
+separateSeeds.node('seed').value = '53';
+separateSeeds.node('seed-form').dispatch('submit');
+assert.deepEqual(separateSeeds.counters.seeds, [37, 53]);
+assert.deepEqual([...sameOriginStore], [[liveSeedKey, '7'], [previewSeedKey, '53']]);
+const reloadPreview = await loadHost('preview-seed-isolation-reload', false, null, false, false, sameOriginStore);
+await reloadPreview.resolveFetch();
+assert.deepEqual(reloadPreview.counters.seeds, [53]);
+assert.equal(sameOriginStore.get(liveSeedKey), '7');
 console.log('Seed host smoke passed: literal UTF-16 code units, Wosy defaults/trim/range sentinel, canonical persistence.');
 
 const edits = await loadHost('batched-editor');

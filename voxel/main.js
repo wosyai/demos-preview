@@ -1,3 +1,4 @@
+const SEED_STORAGE_KEY = "wosy-voxel-seed-preview";
 const get = (id) => document.getElementById(id);
 const shell = get("game");
 const canvas = get("scene");
@@ -377,7 +378,7 @@ function generate(seed) {
   if (!atlas.data || previousMesh === terrainVersion || previousWater === layers.water.version) {
     throw new Error("The engine did not return geometry for the new island.");
   }
-  try { localStorage.setItem("wosy-voxel-seed", String(seed)); } catch {}
+  try { localStorage.setItem(SEED_STORAGE_KEY, String(seed)); } catch {}
   seedInput.value = String(seed);
 }
 
@@ -420,7 +421,7 @@ async function boot() {
     if (gl.isContextLost()) loseGraphics();
     engine._start();
     let stored = null;
-    try { stored = localStorage.getItem("wosy-voxel-seed"); } catch {}
+    try { stored = localStorage.getItem(SEED_STORAGE_KEY); } catch {}
     generate(readSeed(stored, false) ?? engine.default_seed());
     loaded = true;
     if (gl.isContextLost()) loseGraphics();
