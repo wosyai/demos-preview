@@ -221,6 +221,39 @@ for (const aspect of [.56, 1.67]) {
   assert.equal(water[farSample], 76);
   assert.equal(water[farSample + 2], 76);
   assert(water[farSample + 1] > 2 && water[farSample + 1] < 5, 'the physical sea grid covers the far islands');
+  engine.look(-farYaw / .0034, hud[19] / .0034);
+  tick();
+  move(1, 18, 15.37, 1);
+  move(3, 16, 72.5, 1);
+  move(1, 18, 21.1, 1);
+  const archLane = hud[18];
+  assert(archLane >= 21.1 && archLane < 21.36);
+  assert.deepEqual(hitCell(engine.pick(78.5, 6.25, archLane, 0, 1, 0)), [78, 8, 21],
+    'the east sea arch has a real continuous roof');
+  assert.deepEqual(hitCell(engine.pick(78.5, 6.25, archLane, 0, -1, 0)), [78, 4, 21],
+    'the arch retains a physical walking floor');
+  assert.deepEqual(hitCell(engine.pick(78.5, 6.25, archLane, 0, 0, -1)), [78, 6, 19],
+    'rock forms one of the visible side buttresses');
+  const crest = hitCell(engine.pick(79.5, 15, 23.5, 0, -1, 0));
+  assert(crest[1] >= 10, 'the new rock skyline rises above the former tiered banks');
+  const through = (button, limit, sign) => {
+    const visited = new Set();
+    engine.control(button, 1);
+    for (let i = 0; i < 75 && (limit - hud[16]) * sign > 0; i++) {
+      engine.tick(.05, aspect, 1);
+      assert.equal(hud[25], 1, 'arch traversal stays within the ongoing Beacon Run');
+      assert.equal(hud[29], 1, 'exploring the arch adds no objective');
+      assert.equal(hud[28], 1, 'the optional passage requires no building stock');
+      assert(Math.abs(hud[17] - 6.62) < .03 && Math.abs(hud[18] - archLane) < .015);
+      const cell = Math.floor(hud[16]);
+      if (cell >= 77 && cell <= 80) visited.add(cell);
+    }
+    engine.control(button, 0);
+    assert((limit - hud[16]) * sign <= 0, 'ordinary movement reaches the other open mouth');
+    assert.deepEqual([...visited].sort((a, b) => a - b), [77, 78, 79, 80]);
+  };
+  through(3, 82.25, 1);
+  through(2, 75.6, -1);
   engine.leave_beacon();
   tick();
   assert.equal(hud[25], 0);

@@ -132,7 +132,7 @@ const roads=[
   [-127,25.35,16,7.65],[-143,25.35,16,7.65],[-159,25.35,16,7.65],
   [-127,40,14,5.6],[-143,40,16,5.6],[-159,40,16,5.6],
   [-127,54.5,16,7.6],[-143,54.5,16,7.6],[-159,54.5,16,7.6],
-  [-127,27,5.4,33],[-143,27,5.4,33],[-159,27,5,33]
+  [-127,27,5.4,33],[-143,27,5.4,33],[-159,27,5,33],[-113,40,5.5,5.6]
 ];
 assert.equal(engine.map_value(-1,0),roads.length);
 for(const [row,road] of roads.entries()) {
@@ -195,6 +195,16 @@ walkTo(-118,58);
 assert(frame[26]<-117 && Math.abs(frame[27]-58)<.11,
   "the same northern junction allows ordinary re-entry");
 assert.equal(frame[17],4);
+for(const p of [[-124,58],[-124,43],[-108,43]]) walkTo(...p);
+assert(frame[26]>-110.69 && Math.abs(frame[27]-43)<.11,
+  "the middle annex avenue crosses into the existing west trunk");
+walkTo(-108,39.2);
+run(140,-1,0,1);
+assert(frame[26]>-110.70,
+  "the boundary immediately off the middle avenue is still solid");
+for(const p of [[-108,43],[-124,43]]) walkTo(...p);
+assert(frame[26]<-117 && Math.abs(frame[27]-43)<.11,
+  "the middle annex avenue supports ordinary re-entry");
 assert.equal(worldSends,1);
 engine.reset(0);
 tick(0,0,0,0,.53);

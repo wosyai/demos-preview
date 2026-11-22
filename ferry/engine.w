@@ -486,7 +486,9 @@ unit() draw_landmarks = fn {
     neon_words(2,0,8.26,3.94,75.08,0.234,false,0.98,0.83,0.53);
 };
 
-f32[4][23] map_roads = [
+i32 annex_middle_road = 23;
+i32 map_road_count = 24;
+f32[4][24] map_roads = [
     [-111.0,25.35,110.0,7.65],
     [-111.0,54.5,112.0,7.6],
     [-65.0,-17.0,9.0,91.5],
@@ -501,7 +503,8 @@ f32[4][23] map_roads = [
     [-127.0,25.35,16.0,7.65],[-143.0,25.35,16.0,7.65],[-159.0,25.35,16.0,7.65],
     [-127.0,40.0,14.0,5.6],[-143.0,40.0,16.0,5.6],[-159.0,40.0,16.0,5.6],
     [-127.0,54.5,16.0,7.6],[-143.0,54.5,16.0,7.6],[-159.0,54.5,16.0,7.6],
-    [-127.0,27.0,5.4,33.0],[-143.0,27.0,5.4,33.0],[-159.0,27.0,5.0,33.0]
+    [-127.0,27.0,5.4,33.0],[-143.0,27.0,5.4,33.0],[-159.0,27.0,5.0,33.0],
+    [-113.0,40.0,5.5,5.6]
 ];
 
 f32(i32) road_z = fn(row) {
@@ -510,8 +513,8 @@ f32(i32) road_z = fn(row) {
 };
 
 f32(i32,i32) map_value = fn(row,column) {
-    if (row>=0 && row<23 && column>=0 && column<4) { if (column==1) { road_z(row) } else { map_roads[ix(row)][ix(column)] } } else {
-        if (row==-1 && column==0) { 23.0 } else { 0.0 }
+    if (row>=0 && row<map_road_count && column>=0 && column<4) { if (column==1) { road_z(row) } else { map_roads[ix(row)][ix(column)] } } else {
+        if (row==-1 && column==0) { float_i(map_road_count) } else { 0.0 }
     }
 };
 
@@ -603,7 +606,7 @@ unit(i32) draw_skyline = fn(i) {
 };
 
 unit(i32) draw_annex_roads = fn(i) {
-    if (i<23) {
+    if (i<annex_middle_road) {
         road_ground(i,0.018,0.26,0.30,0.37);
         draw_annex_roads(i+1);
     };
@@ -741,6 +744,7 @@ unit() render_world = fn {
     ground(-161.0,23.0,44.0,41.0,-0.035,0.43,0.37,0.43);
     draw_annex_roads(11);
     draw_annex_buildings(30);
+    road_ground(annex_middle_road,0.020,0.26,0.30,0.37);
     unsafe { host.world(core.pointer_cast<*?u8>(&?scenery[0][0][0][0][0]),vertex_count*6); };
     world_ready=true;
 };
@@ -793,7 +797,7 @@ bool(f32,f32,i32) inside_annex_gate = fn(z,r,i) {
 
 bool(f32,f32,f32) annex_clear = fn(x,z,r) {
     stage==MissionStage::free_roam && x>= -161.0+r && z>=23.0+r && z<=64.0-r &&
-        (x<= -117.0-r || inside_annex_gate(z,r,11) || inside_annex_gate(z,r,17))
+        (x<= -117.0-r || inside_annex_gate(z,r,11) || inside_annex_gate(z,r,17) || inside_annex_gate(z,r,annex_middle_road))
 };
 
 i32(f32,f32,f32,bool) static_hit = fn(x,z,r,vehicle) {

@@ -738,19 +738,40 @@ i32(i32, i32, i32, i32, i32, i32) tidal_bank = fn(x, z, west, east, north, south
 	}
 };
 
+bool(i32, i32) east_shelf = fn(x, z) {
+	x >= 69 && x <= 84 && z >= 15 && z <= 22
+};
+
+i32(i32, i32) east_headland = fn(x, z) {
+	if (x < 74 || x > 84 || z < 17 || z > 25) { -1 } else {
+		i32 rib = min_i(x - 74, 84 - x);
+		if (z >= 20 && z <= 22 && (x < 77 || x > 80)) { 4 } else {
+			i32 crown = min_i(11, 5 + rib + (if (z >= 22) { 1 } else { 0 }));
+			if (z == 17 || z == 25) { crown - 1 } else { crown }
+		}
+	}
+};
+
 i32(i32, i32) outer_ground = fn(x, z) {
 	bool stepping_stone = (x >= 44 && x <= 46) || (x >= 48 && x <= 50)
 		|| (x >= 52 && x <= 55) || (x >= 57 && x <= 60) || (x >= 62 && x <= 64);
 	if (z >= 13 && z <= 16 && (stepping_stone || (x >= 65 && x <= 68))) { 4 } else {
 		i32 east_bank = tidal_bank(x, z, 65, 86, 9, 27);
-		if (east_bank > 0) { east_bank } else { tidal_bank(x, z, 63, 89, 61, 84) }
+		i32 headland = east_headland(x, z);
+		if (headland >= 0) { headland } else {
+			if (east_shelf(x, z)) { 4 } else {
+				if (east_bank > 0) { east_bank } else { tidal_bank(x, z, 63, 89, 61, 84) }
+			}
+		}
 	}
 };
 
 u8(i32, i32, i32, i32) outer_tile = fn(x, y, z, ground) {
 	if (x == 67 && z == 14 && y >= 5 && y <= 7) { 5 } else {
-		if (y == ground) { if (ground < 5) { 4 } else { 1 } } else {
-			if (y < ground) { 3 } else { 0 }
+		if (x >= 77 && x <= 80 && z >= 20 && z <= 22 && y >= 5 && y <= 7) { 0 } else {
+			if (y == ground) {
+				if (east_headland(x, z) > 4) { 3 } else { if (ground < 5) { 4 } else { 1 } }
+			} else { if (y < ground) { 3 } else { 0 } }
 		}
 	}
 };
