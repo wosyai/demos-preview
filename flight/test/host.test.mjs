@@ -388,10 +388,10 @@ test("the Flight pause host has its own release token with matching v7 assets", 
   const sim = mock();
   await sim.ready;
   const html = await readFile(new URL("../index.html", import.meta.url), "utf8");
-  assert.match(html, /href="\.\/style\.css\?v=load-waypoint-flight-v7-arcade-ui4"/);
-  assert.match(html, /src="\.\/host\.mjs\?v=load-waypoint-flight-v7-arcade-ui4-space1"/);
+  assert.match(html, /href="\.\/style\.css\?v=labeled-cockpit-flight-v7-arcade-ui4"/);
+  assert.match(html, /src="\.\/host\.mjs\?v=labeled-cockpit-flight-v7-arcade-ui4-space1"/);
   assert.deepEqual(sim.called.requests.map((url) => [url.pathname.split("/").at(-1), url.search]),
-    [["flight.wasm", "?v=load-waypoint-flight-v7"]]);
+    [["flight.wasm", "?v=labeled-cockpit-flight-v7"]]);
 });
 
 test("view button and V toggle the engine camera without resetting a route", async () => {
@@ -473,6 +473,26 @@ test("phone rotation releases the old touch and accepts a fresh steer in the new
     assert.equal((sim.called.tick.at(-1)[1] >> 8) & 255, 129);
     assert.equal(sim.doc.activeElement, sim.nodes.get("game"));
   }
+});
+
+test("Paris impact guidance never marks a high or early release ready", async () => {
+  const sim = mock({inputVersion: 1});
+  await sim.ready;
+  const drop = sim.nodes.get("drop"), callout = sim.nodes.get("callout");
+  sim.courses[1].events("click");
+  sim.guidance(0, 0, false);
+  sim.cue({phase: 1, dropStatus: 5, route: 2});
+  sim.frame(20);
+  assert.equal(callout.textContent, "Descend to the drop window");
+  assert.equal(drop.classes.has("drop-ready"), false);
+  sim.cue({phase: 1, dropStatus: 8, route: 2});
+  sim.frame(120);
+  assert.equal(callout.textContent, "Line up the blue impact marker with DROP");
+  assert.equal(drop.classes.has("drop-ready"), false);
+  sim.cue({phase: 1, dropStatus: 9, route: 2});
+  sim.frame(220);
+  assert.equal(callout.textContent, "Drop here");
+  assert.equal(drop.classes.has("drop-ready"), true);
 });
 
 test("the Paris drop control supports quick taps and keyboard without swallowing other controls", async () => {

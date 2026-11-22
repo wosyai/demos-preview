@@ -15,7 +15,7 @@ const LANDING_CUES = [
 ];
 const RELEASE_CUES = [
   "", "", "", "", "", "Descend to the drop window", "Climb to the drop window",
-  "Level out and align", "Aim at DROP", "Drop here",
+  "Level out and align", "Line up the blue impact marker with DROP", "Drop here",
 ];
 const FAILURE_CUES = [
   "", "", "You hit an obstacle. Give it more clearance.", "You left the flight area or ran out of time.",
@@ -472,7 +472,7 @@ export function bootFlight(win, doc) {
     }
     setText(instruments[1], label);
     const routeLabel = route === 1 ? "Low route." : route === 2 ? "Wide route." : "";
-    setText(callout, gateFeedback ? `Ring cleared · +80 · ${cue}` : phase === 1 && dropStatus !== 9 ? `${cue} · ${meters}` : cue);
+    setText(callout, gateFeedback ? `Ring cleared · +80 · ${cue}` : cue);
     callout.hidden = false;
     setText(flightCue, `${gateFeedback ? "Ring cleared. " : ""}${label}. ${phase === 3 ? "Steer gently and hold Brake to stop" : phase === 2 ? LANDING_CUES[frame[29]] ?? LANDING_CUES[0] : cue}. ${routeLabel}`.trim());
   }
@@ -759,7 +759,7 @@ export function bootFlight(win, doc) {
     if (!gl) { failure("This game needs WebGL 2. Try a current browser with hardware acceleration enabled."); return; }
     try {
       gpu = graphics(gl);
-      const wasm = await win.fetch(new URL("./flight.wasm?v=load-waypoint-flight-v7", import.meta.url));
+      const wasm = await win.fetch(new URL("./flight.wasm?v=labeled-cockpit-flight-v7", import.meta.url));
       if (!wasm.ok) throw new Error("The flight engine could not be downloaded.");
       const { instance } = await win.WebAssembly.instantiate(await wasm.arrayBuffer(), imports);
       engine = instance.exports;

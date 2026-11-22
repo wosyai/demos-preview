@@ -258,6 +258,74 @@ if (!comparisonBaseline) {
     }
 }
 
+if (!comparisonBaseline) {
+    const controls = [
+        [.98,.52,.28], [.46,.86,.95], [.59,.96,.54], [.94,.62,.27],
+    ];
+    const plaqueInk = [.99,.91,.71];
+    const scales = [
+        [[.195,.136,.083],[.95,.68,.33],27],
+        [[.087,.172,.209],[.58,.85,.94],27],
+        [[.119,.195,.126],[.77,.93,.64],15],
+    ];
+    const materials = [[.67,.43,.23],[.34,.18,.12]];
+    const projection = ([x,y,z], i) => frame[i]*x+frame[i+4]*y+frame[i+8]*z+frame[i+12];
+    const instrument = points => points.map(point => [0,1,2].map(i => projection(point,i)/projection(point,3)));
+    const vertical = points => Math.max(...instrument(points).map(point => point[1]));
+    for (const kind of [0,1]) {
+        engine.select_view(0);
+        reset(kind);
+        assert.equal(marker(materials[kind]).length,0,"the actual interior is absent in chase view");
+        engine.select_view(1);
+        for (const aspect of [1.65,.54,.45]) {
+            tick(0,0,aspect);
+            assert(marker(materials[kind]).length > 5,"the cockpit has real airframe-specific framing");
+            assert.equal(marker(materials[1-kind]).length,0,"the other cockpit geometry is absent");
+            for (const [face, marks, count] of scales) {
+                assert.equal(marker(face).length,36,"each role has an independent Wosy dial face");
+                assert.equal(marker(marks).length,count,"the live instruments carry distinct scale marks");
+            }
+            const labels = instrument(marker(plaqueInk));
+            assert(labels.every(([x,y,z]) => Math.abs(x)<.90 && y>-.57 && y<-.29 && Math.abs(z)<1),
+                "all physical labeling is visible below the main forward scene");
+            for (const [left,right,count] of [[-.53,-.25,78],[-.24,.04,54],[.05,.34,96]]) {
+                const label = marker(plaqueInk).filter(point => {
+                    const cameraX = projection(point,0) / Math.hypot(frame[0],frame[8]);
+                    return cameraX >= left && cameraX <= right;
+                });
+                const points = instrument(label);
+                const x = points.map(p => p[0]), y = points.map(p => p[1]);
+                assert.equal(label.length,count,"all three engraved words have distinct bounded strokes");
+                assert((Math.max(...x)-Math.min(...x))*.5*(720*aspect) > 30 &&
+                    (Math.max(...y)-Math.min(...y))*.5*720 > 18,"at 720 px height the word has readable size");
+            }
+            for (const color of controls) {
+                const points = marker(color);
+                assert(points.length >= 3,"each instrument emits actual mesh geometry");
+                assert(points.every(point => projection(point,3)>1.7 && projection(point,3)<2.4),"instrument has true foreground depth");
+                assert(instrument(points).every(([x,y,z]) => Math.abs(x)<.94 && y<-.4 && y>-.97 && Math.abs(z)<1),
+                    "instruments stay in view below the horizon in portrait and landscape");
+            }
+        }
+        const resting = controls.map(color => instrument(marker(color)));
+        const closed = vertical(marker(controls[3]));
+        for (let i=0;i<45;i++) tick(16,1/30,.45);
+        assert(frame[18] > 10 && frame[20] === 6,"actual ground throttle speeds up without liftoff");
+        assert.notDeepEqual(instrument(marker(controls[0])),resting[0],"ground acceleration moves the airspeed needle");
+        assert(vertical(marker(controls[3])) > closed+.035,"effective throttle moves the lever forward");
+        tick(48,1/30,.45);
+        assert(vertical(marker(controls[3])) < closed-.035,"ground braking matches the simulation's brake priority over throttle");
+        for (let i=0;i<54;i++) tick(20,1/30,.45);
+        assert(frame[19] > 2,"the plane actually climbed");
+        assert(Math.abs(instrument(marker(controls[1]))[1][0]-resting[1][1][0]) > .003,
+            "real climbing moves the altitude needle");
+        for (let i=0;i<9;i++) tick(18,1/30,.45);
+        assert(Math.abs(instrument(marker(controls[2]))[1][0]-resting[2][1][0]) > .035,
+            "an actual bank moves the slip-free bank needle, not the yaw or pitch");
+    }
+    engine.select_view(0);
+}
+
 function cueRanges() {
     let offset = 0;
     const ranges = {};
@@ -375,6 +443,7 @@ function sortie(course, mode = "normal") {
     let premature = false, canceled = false, wrongWindow = false, checkedSupply = false, confirmed = 0;
     let surveyCruise = false, surveyEast = false;
     let checkedPortraitDrop = false, checkedChaseDrop = false, checkedSupplyFrustum = false;
+    let checkedPredictedImpact = false;
     const checkedLoadVisibility = new Set();
     function step(input = 0, dt = 1/30, aspect = 1.65) {
         const gates = frame[32];
@@ -541,7 +610,28 @@ function sortie(course, mode = "normal") {
                     "the tip stays anchored to the actual mail target");
             }
             input = pilot(p,Math.atan2(109-p.x,218-p.z),mode === "high" ? 20 : 11,0,32);
+            if (!comparisonBaseline && mode === "normal" && status === 9 && !checkedPredictedImpact) {
+                const impactColor = [.44,.84,1];
+                const observedImpact = marker(impactColor);
+                assert.equal(observedImpact.length,15,"impact geometry is two brackets and one visible central face");
+                const tip = observedImpact.reduce((a,b) => a[1]<b[1] ? a : b);
+                assert((tip[0]-109)**2 + (tip[2]-218)**2 <= 90.26,
+                    "the Wosy pipper points inside the same legal impact circle while release is ready");
+                verifyCueProjection("predicted mail impact", () => marker(impactColor), .10, .015);
+                checkedPredictedImpact = true;
+            }
+            if (!comparisonBaseline && mode === "early" && status === 8) {
+                const impact = marker([.44,.84,1]);
+                assert(impact.length > 0,"a valid-height early approach previews the actual miss");
+                const tip = impact.reduce((a,b) => a[1]<b[1] ? a : b);
+                assert((tip[0]-109)**2 + (tip[2]-218)**2 > 90.24,"the early pipper stays outside the actual drop circle");
+                step(input|128);
+                assert.equal(frame[26],8,"an early input is rejected by the Wosy release gate");
+                assert.equal(frame[20],1,"early mail does not launch");
+                return {result:"early release rejected"};
+            }
             if (mode === "high" && status === 5) {
+                if (!comparisonBaseline) assert.equal(marker([.44,.84,1]).length,0,"above the drop window, do not show an actionable prediction");
                 step(input|128);
                 assert.equal(frame[26],5);
                 assert.equal(frame[20],1,"late/high mail cannot be scored in flight");
@@ -551,8 +641,11 @@ function sortie(course, mode = "normal") {
             if (status === 9) input |= 128;
         }
         if (phase === 5 || phase === 2) {
-            if (!comparisonBaseline && course === 1 && mode === "normal")
+            if (!comparisonBaseline && course === 1 && mode === "normal") {
+                assert(checkedPredictedImpact,"a completed ordinary Paris release was observed with a visible prediction");
                 assert.equal(marker([.99,.72,.29]).length, 0, "the delivery objective clears after release");
+                assert.equal(marker([.44,.84,1]).length,0,"the prediction does not linger after release");
+            }
             const final = course ? 290 : 331, endX = course ? 125 : -15;
             const bearing = p.z >= final-13 ? 0 : clamp(Math.atan2(endX-p.x,Math.max(22,final+8-p.z)),-.38,.38);
             const target = final+(course?15:10), slope = course?-.207:-.133;
@@ -587,6 +680,7 @@ assert.equal(sortie(0,"overrun").result,9,"pickup overrun remains an explicit fa
 const noCargo = sortie(0,"no cargo");
 assert(noCargo.visited.has(9) && !noCargo.visited.has(10) && !noCargo.data,"throttling without loading cargo never advances the mission");
 assert.equal(sortie(1,"high").result,"invalid release");
+if (!comparisonBaseline) assert.equal(sortie(1,"early").result,"early release rejected");
 for (const {course, visited, result, time, data, actions, gates} of [goodFarm,goodParis,cyanParis]) {
     assert.equal(result,1,"complete delivery plus final stop earns a successful sortie");
     for (const phase of [6,7,8,9,10,2,3,...(course?[0,1,5]:[11])]) assert(visited.has(phase),`sortie passed phase ${phase}`);
@@ -671,6 +765,40 @@ function visibleGhost(rejectedCandidate) {
 }
 assert.deepEqual(visibleGhost(true), visibleGhost(false),
     "rejected candidate validation never mutates a previously restored ghost's mission state");
+
+if (!comparisonBaseline) {
+    const rails = [[.67,.43,.23],[.34,.18,.12]];
+    for (const completed of [goodFarm,goodParis]) {
+        const course = completed.course;
+        reset(1-course); reset(course);
+        load(completed.data);
+        tick(0,0);
+        assert.equal(frame[23],completed.time, "the approved full replay is actually loaded");
+        engine.select_view(1);
+        const wing = course ? [.96,.96,.86] : [.98*1.12,.83*1.12,.58*1.12];
+        const ghostWing = wing.map((component,index) => component*.19+[.28,.72,.78][index]);
+        let seen = false;
+        for (let n=0;n<160;n++) {
+            tick(0,1/30,.54);
+            if (!marker(ghostWing).length) continue;
+            assert.equal(marker(ghostWing).length,6,"the actual separate replay aircraft is in the cockpit's moving mesh");
+            assert.equal(marker(wing).length,0,"only the replay's wings are drawn here");
+            assert.equal(marker(rails[course]).length,12);
+            assert.equal(marker([.99,.91,.71]).length,228,"the full ink remains with a separate replay aircraft");
+            assert.equal(marker([1,.66,.19]).length,84,"the active ring remains under real replay rendering");
+            const live = aircraft.length/6;
+            // Max independent constituents: cockpit 918, Wright ghost 720,
+            // three 84-vertex gates, 30 arrow, 18 crop strips and 84 plume.
+            // Paris cockpit/ghost are smaller; even DROP (114 + 24 impact)
+            // fits with their three gates and arrow. Mission sign phases exclude.
+            assert(live <= 2022 && live < 2048,"live artwork fits the interval mesh allocation");
+            seen = true;
+            break;
+        }
+        assert(seen,"the recorded flight genuinely moved more than 11 m from the stationary pilot");
+        engine.select_view(0);
+    }
+}
 
 // Recheck that the plane and chase camera share the same presentation pose.
 function playerWingCorner() {

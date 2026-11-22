@@ -69,6 +69,7 @@ void main() {
   point=position;
   gl_Position=projection*vec4(position,1.0);
 }`;
+const sunVector = "normalize(vec3(-.83,.36,-.27))";
 const fragment = `#version 300 es
 precision highp float;
 in vec3 rgb;
@@ -83,14 +84,16 @@ void main() {
   float alpha=1.0;
   float haze=clamp((distance(eye,point)-29.0)/94.0,0.0,1.0);
   if (pass==1) {
-    vec3 normal=normalize(cross(dFdx(point),dFdy(point)));
+    vec3 normal=normalize(cross(dFdx(point),dFdy(point))) * (gl_FrontFacing ? 1.0 : -1.0);
     vec3 view=normalize(eye-point);
     float fresnel=pow(1.0-clamp(abs(dot(normal,view)),0.0,1.0),4.0);
     float ripple=sign(normal.y)*dot(normal.xz,vec2(-0.72,0.69));
     vec3 water=vec3(0.038,0.32,0.41)+vec3(0.16,0.27,0.23)*ripple;
     vec3 reflected=reflect(-view,normal*sign(normal.y));
-    float glitter=pow(max(0.0,dot(reflected,normalize(vec3(-.83,.36,-.27)))),28.0);
+    float glitter=pow(max(0.0,dot(reflected,${sunVector})),28.0);
     water += vec3(.71,.57,.28)*glitter;
+    float crest = smoothstep(.11,.26,length(normal.xz));
+    water = mix(water,vec3(.33,.62,.64),crest*(.12+.25*fresnel));
     col=mix(water,fog,0.72*fresnel);
     alpha=mix(0.55+0.37*fresnel,1.0,haze);
   } else if (pass==0) {
@@ -100,8 +103,13 @@ void main() {
       vec3 texel=texture(terrainAtlas,rgb.xy).rgb;
       float macro=sin(point.x*.33+sin(point.z*.44))*sin(point.z*.29-point.y*.41);
       float strata=sin(point.y*28.0+sin(point.x*3.7+point.z*3.1)*.8);
-      float grain=mix(strata,macro,clamp(abs(normalize(cross(dFdx(point),dFdy(point))).y),0.0,1.0));
-      col=texel*rgb.z*(.93+.06*macro+.045*grain)+vec3(.017,.026,.035)*(1.0-rgb.z);
+      vec3 normal=normalize(cross(dFdx(point),dFdy(point))) * (gl_FrontFacing ? 1.0 : -1.0);
+      float up=max(normal.y,0.0);
+      float grain=mix(strata,macro,up);
+      float key=max(dot(normal,${sunVector}),0.0);
+      vec3 ambient=mix(vec3(.53,.65,.79),vec3(.82,.93,1.0),up);
+      vec3 daylight=ambient+vec3(.47,.32,.15)*key;
+      col=texel*daylight*(.84+.22*rgb.z+.095*macro+.065*grain)+vec3(.013,.023,.031)*(1.0-rgb.z);
     }
   }
   pixel=vec4(mix(col,fog,pow(haze,1.08)*0.94),alpha);
@@ -142,7 +150,7 @@ float noise(vec2 p) {
 void main() {
   vec3 ray = skyRay(skyProjection, uv*2.0-1.0);
   float height = max(0.0,ray.y);
-  vec3 sunDirection = normalize(vec3(-.83,.36,-.27));
+  vec3 sunDirection = ${sunVector};
   float d = length(ray-sunDirection);
   vec3 col = mix(fog,vec3(.078,.32,.57),pow(height,.55));
   float haze=exp(-8.0*height);
@@ -402,7 +410,7 @@ async function boot() {
   }
   try {
     prepareGraphics();
-    const response = await fetch(new URL("./engine.wasm?v=beacon-east-arch-v1", import.meta.url));
+    const response = await fetch(new URL("./engine.wasm?v=beacon-art-v1", import.meta.url));
     if (!response.ok) throw new Error(`Engine not found (HTTP ${response.status}).`);
     const bytes = await response.arrayBuffer();
     const api = {

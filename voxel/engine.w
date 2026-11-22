@@ -102,6 +102,10 @@ f32 vertical_speed = 0.0;
 bool third_person = false;
 f32 boom_distance = 0.0;
 bool avatar_visible = false;
+f32 edit_pose_time = 0.0;
+bool edit_pose_place = false;
+f32 avatar_edit_time = 0.0;
+bool avatar_edit_place = false;
 bool aim_was_offset = false;
 i32 avatar_position = 0;
 f32 avatar_x = 0.0;
@@ -385,14 +389,18 @@ unit(i32, i32, i32) write_texel = fn(x, y, tile) {
 		};
 		if (tile == 3) {
 			i32 seam = if ((x + y / 4) % 8 == 0 && y % 6 < 4) { -20 } else { 0 };
-			red = 131 + noise + seam;
-			green = 142 + noise + seam;
-			blue = 147 + noise + seam;
+			i32 strata = (y + x / 5 + sample_pattern(x / 5, y / 4, 127) % 2) % 7;
+			i32 band = if (strata == 0) { -19 } else { if (strata == 1) { 13 } else { 0 } };
+			red = 120 + noise + seam + band;
+			green = 134 + noise + seam + band;
+			blue = 141 + noise + seam + band;
 		};
 		if (tile == 4) {
-			red = 211 + noise / 2;
-			green = 188 + noise / 2 + mark;
-			blue = 125 + noise / 2;
+			i32 ripple = (y + x / 4 + (x * x) / 31) % 6;
+			i32 bank = if (ripple == 0) { -14 } else { if (ripple == 1) { 9 } else { 0 } };
+			red = 216 + noise / 2 + bank;
+			green = 190 + noise / 2 + bank + mark;
+			blue = 136 + noise / 2 + bank / 2;
 		};
 		if (tile == 5) {
 			i32 groove = if ((x + sample_pattern(x / 2, 0, 517) % 5) % 4 == 0) { -24 } else { 0 };
@@ -1179,6 +1187,7 @@ unit() spawn_player = fn {
 };
 
 unit() clear_controls = fn {
+	edit_pose_time = 0.0;
 	controls = 0;
 	pulse_controls = 0;
 	jump_pending = false;
@@ -1694,7 +1703,8 @@ unit(bool) publish_avatar = fn(visible) {
 		if (!avatar_visible || avatar_x != camera_pose.x || avatar_y != camera_pose.y || avatar_z != camera_pose.z || avatar_yaw != camera_pose.yaw
 			|| avatar_phase != gait_phase || avatar_gait != gait_weight || avatar_air != air_weight
 			|| avatar_flight_pitch != flight_pitch || avatar_flight_bank != flight_bank
-			|| avatar_swim != swim_weight || avatar_swim_phase != swim_phase) {
+			|| avatar_swim != swim_weight || avatar_swim_phase != swim_phase
+			|| avatar_edit_time != edit_pose_time || avatar_edit_place != edit_pose_place) {
 			avatar_x = camera_pose.x;
 			avatar_y = camera_pose.y;
 			avatar_z = camera_pose.z;
@@ -1715,6 +1725,18 @@ unit(bool) publish_avatar = fn(visible) {
 				avatar_bank_sine = if (flight_bank == 0.0) { 0.0 } else { sine(flight_bank) };
 				avatar_bank_cosine = if (flight_bank == 0.0) { 1.0 } else { cosine(flight_bank) };
 			};
+			avatar_edit_time = edit_pose_time;
+			avatar_edit_place = edit_pose_place;
+			f32 tool_pose = if (edit_pose_time > 0.0) {
+				f32 t = 1.0 - edit_pose_time / 0.34;
+				if (edit_pose_place) {
+					0.95 * clamp_f(if (t < 0.26) { t * 5.0 } else { (1.0 - t) * 1.75 }, 0.0, 1.0)
+				} else {
+					if (t < 0.25) { -t * 3.4 } else {
+						if (t < 0.48) { -0.85 + (t - 0.25) * 9.0 } else { 1.22 * (1.0 - t) / 0.52 }
+					}
+				}
+			} else { 0.0 };
 			avatar_position = 0;
 			f32 dry = 1.0 - swim_weight;
 			f32 swinging_air = air_weight * dry;
@@ -1728,7 +1750,7 @@ unit(bool) publish_avatar = fn(visible) {
 			avatar_box(-0.15,0.15, -0.76,-0.30, -0.26,-0.127, 0.26,0.40,0.29);
 			avatar_joint(-0.25, swing * 0.60 - swinging_air * 0.57 - swim_weight * 1.25 + stroke * 0.80);
 			avatar_box(-0.28,-0.202, -0.79,-0.25, -0.095,0.095, 0.63,0.42,0.26);
-			avatar_joint(-0.25, 0.0 - swing * 0.60 - swinging_air * 0.37 - swim_weight * 1.25 - stroke * 0.80);
+			avatar_joint(-0.25, 0.0 - swing * 0.60 - swinging_air * 0.37 - swim_weight * 1.25 - stroke * 0.80 - tool_pose);
 			avatar_box(0.202,0.28, -0.79,-0.25, -0.095,0.095, 0.63,0.42,0.26);
 			avatar_joint(-0.84, 0.0 - swing * 0.66 - swinging_air * 0.44 - stroke * 0.32);
 			avatar_box(-0.17,-0.021, -1.59,-0.84, -0.13,0.13, 0.22,0.32,0.45);
@@ -2003,6 +2025,7 @@ unit(f32, f32, i32) tick = fn(dt, aspect, playing) {
 				sync_terrain(false);
 				if (loose_count > 0) { collect_wood(); };
 			};
+			if (edit_pose_time > 0.0 && step > 0.0) { edit_pose_time = clamp_f(edit_pose_time - step, 0.0, 0.34); };
 			advance_edits(step);
 			if (beacon_phase == BeaconPhase::active && step > 0.0) { update_beacon(step); };
 		};
@@ -2113,7 +2136,12 @@ i32(i32) edit_view = fn(material) {
 };
 
 i32(i32) apply_edit_mode = fn(mode) {
-	if (mode == 0) { edit_view(0) } else { edit_view(selected_material) }
+	i32 result = if (mode == 0) { edit_view(0) } else { edit_view(selected_material) };
+	if (result == 1 && (edit_pose_place != (mode == 1) || edit_pose_time <= 0.13)) {
+		edit_pose_time = 0.34;
+		edit_pose_place = mode == 1;
+	};
+	result
 };
 
 i32(i32, i32) edit_control = fn(mode, state) {

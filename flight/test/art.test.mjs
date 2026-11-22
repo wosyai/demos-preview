@@ -128,9 +128,12 @@ test("Wright Flyer has thirteen striped cells and a navy canton; Paris has one B
   assert(blue[0][1] - gold[0][1] > .018, "blue disk is not coplanar with the diamond");
 });
 
-test("the Wasm cockpit changes projection and hides only the pilot aircraft", async () => {
+test("the Wasm cockpit swaps the exterior aircraft for its own near geometry without removing guides", async () => {
   const demo = await art();
-  for (const [course, aspect] of [[0, 1.65], [1, .68]]) {
+  for (const [course, aspect, exteriorWing, frameMaterial] of [
+    [0, 1.65, [.98 * 1.12, .83 * 1.12, .58 * 1.12], [.67,.43,.23]],
+    [1, .68, [.96,.96,.86], [.34,.18,.12]],
+  ]) {
     demo.sample(course);
     const outside = demo.view(0, aspect);
     const inside = demo.view(1, aspect);
@@ -138,7 +141,20 @@ test("the Wasm cockpit changes projection and hides only the pilot aircraft", as
     assert(inside.state.slice(0,16).every(Number.isFinite));
     assert.deepEqual(inside.state.slice(16), outside.state.slice(16), "camera mode cannot change flight state or instruments");
     assert.strictEqual(inside.world, outside.world, "the camera does not rebuild the static world");
-    assert(inside.plane.length > 0 && inside.plane.length < outside.plane.length, "guides remain while the pilot airframe disappears");
+    assert.equal(vertices(outside.plane, exteriorWing).length, 6, "the exact outside wing exists in chase");
+    assert.equal(vertices(inside.plane, exteriorWing).length, 0, "the exterior wing is not painted over the cockpit view");
+    assert.equal(vertices(outside.plane, frameMaterial).length, 0, "physical cockpit hardware is not visible in chase");
+    assert.equal(vertices(inside.plane, frameMaterial).length, 12, "the course-specific cockpit rails really exist");
+    const speedNeedle = [.98,.52,.28];
+    assert.equal(vertices(outside.plane, speedNeedle).length, 0);
+    assert.equal(vertices(inside.plane, speedNeedle).length, 3, "the near scene includes a real instrument needle");
+    for (const [guide, count] of [
+      [[.28,1,.89], 6], [[.035,.095,.10], 24], [[1,.66,.19], 84],
+    ]) {
+      const exteriorGuide = vertices(outside.plane, guide);
+      assert.equal(exteriorGuide.length, count, "the independent world guide exists");
+      assert.deepEqual(vertices(inside.plane, guide), exteriorGuide, "camera switch retains identical world guidance");
+    }
     const returned = demo.view(0, aspect);
     assert.deepEqual(returned.state, outside.state, "returning to chase restores the same complete frame");
     assert.deepEqual(returned.plane, outside.plane);
