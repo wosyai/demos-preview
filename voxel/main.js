@@ -467,7 +467,7 @@ function renderMission(state, flame, tide, stock, relay) {
     missionHud.hidden = state === 0;
     missionReadouts.hidden = state !== 1;
     missionResult.hidden = missionRetry.hidden = state < 2;
-    missionStart.textContent = state === 1 ? "Resume Beacon Run" : "Beacon Run";
+    missionStart.textContent = state === 1 ? "Resume Beacon Run" : "Start Beacon Run";
     if (state >= 2) {
       clearInputs();
       missionResult.textContent = state === 2 ? "Beacon lit!" : "The sea put out the flame.";
@@ -810,7 +810,7 @@ for (const button of viewButtons) button.addEventListener("click", cycleCamera);
 get("pause").addEventListener("click", () => {
   if (document.pointerLockElement === canvas) document.exitPointerLock();
   stopPlaying();
-  enter.focus({ preventScroll: true });
+  missionStart.focus({ preventScroll: true });
 });
 get("seed-form").addEventListener("submit", (e) => {
   e.preventDefault();

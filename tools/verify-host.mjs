@@ -8,7 +8,10 @@ for (const id of ['pause', 'fullscreen', 'camera-view', 'view-touch', 'jump-touc
   const label = id === 'remove' ? 'Break' : id === 'place' ? 'Place' : '';
   assert.equal(button[1].replace(/<[^>]+>/g, '').trim(), label, id + ' has the expected visible label');
 }
-assert.match(markup, /<details class="entry-guide">[\s\S]*?<p class="camera-legend">[\s\S]*?href="#glyph-view"[\s\S]*?href="#glyph-person"[\s\S]*?Switch first \/ third person/);
+assert.match(markup, /<section class="entry-guide" aria-label="Controls">[\s\S]*?<p class="camera-legend">[\s\S]*?href="#glyph-view"[\s\S]*?href="#glyph-person"[\s\S]*?Switch first \/ third person/);
+assert.match(markup, /<div class="entry-actions">\s*<button class="primary" id="mission-start"[^>]*>Start Beacon Run<\/button>\s*<\/div>/);
+assert.match(markup, /<section class="entry-guide"[^>]*>[\s\S]*?class="entry-keys"[\s\S]*?class="entry-touch"[\s\S]*?<\/section>\s*<details class="world-options">\s*<summary>Free build \(optional\)<\/summary>[\s\S]*?id="seed-form"[\s\S]*?id="enter"/);
+
 assert.match(markup, /<header class="top">[\s\S]*?id="mission-hud"[\s\S]*?class="top-actions"[\s\S]*?<\/header>/);
 assert.match(markup, /<details class="world-options">/);
 assert.match(markup, /<h1 id="title">Pocket Island<\/h1>/);
@@ -550,8 +553,8 @@ console.log('Blur reset ignored repeated key-down and accepted a fresh press.');
 const page = await readFile(new URL('../voxel/index.html', import.meta.url), 'utf8');
 assert.match(page, /<html lang="en">/);
 assert.match(page, /<title>Pocket Island • Wosy<\/title>/);
-assert.match(page, /href="\.\/style\.css\?v=beacon-bearing-v1-arcade-ui4"/);
-assert.match(page, /src="\.\/main\.js\?v=beacon-east-arch-v1-arcade-ui4"/);
+assert.match(page, /href="\.\/style\.css\?v=beacon-bearing-v1-arcade-ui4-launch1"/);
+assert.match(page, /src="\.\/main\.js\?v=beacon-east-arch-v1-arcade-ui4-launch1"/);
 assert.match(page, /id="move-stick"/);
 assert.doesNotMatch(page, /class="dpad"|data-move="Key[WASD]"/);
 assert.match(page, /title="Dirt · 2"/);
@@ -736,6 +739,7 @@ assert.equal(beacon.doc.pointerLockElement, null, 'terminal frame releases point
 assert(beacon.node('game').classes.has('playing'), 'result remains visible after lock release');
 assert.equal(beacon.node('mission-readouts').hidden, true);
 assert.equal(beacon.node('mission-retry').hidden, false);
+assert.equal(beacon.node('mission-start').textContent, 'Start Beacon Run', 'terminal state restores the primary launch label');
 assert.equal(beacon.node('mission-result').textContent, 'The sea put out the flame.');
 assert.equal(bearing.hidden, true, 'the host rejects a stale direction on terminal frames');
 delete beacon.counters.missionOverride;
