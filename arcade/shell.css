@@ -57,3 +57,224 @@
   stroke-linecap: round;
   stroke-linejoin: round;
 }
+
+.arcade-air { --arcade-accent:#f4cc97; --arcade-image:#779f97; --arcade-ink:#11282d; --arcade-base:#152d31; }
+.arcade-island { --arcade-accent:#e0f78c; --arcade-image:#88a68b; --arcade-ink:#192d23; --arcade-base:#172d28; }
+.arcade-city  { --arcade-accent:#ffc276; --arcade-image:#b17078; --arcade-ink:#342325; --arcade-base:#272330; }
+
+.arcade-stage.arcade-stage {
+  --arcade-gutter: clamp(.9rem, 4vw, 3rem);
+  box-sizing: border-box;
+  position: absolute;
+  inset: 0;
+  z-index: 4;
+  width: auto;
+  max-height: none;
+  margin: 0;
+  padding: max(.75rem, env(safe-area-inset-top)) max(var(--arcade-gutter), env(safe-area-inset-right)) max(1rem, env(safe-area-inset-bottom)) max(var(--arcade-gutter), env(safe-area-inset-left));
+  transform: none;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, .95fr);
+  grid-template-areas: "nav nav" "copy cover";
+  grid-template-rows: auto 1fr;
+  gap: clamp(1rem, 4vw, 3rem);
+  align-items: center;
+  justify-items: stretch;
+  overflow: auto;
+  overscroll-behavior: contain;
+  pointer-events: auto;
+  color: #fffaec;
+  background: radial-gradient(ellipse at 77% 45%, color-mix(in srgb, var(--arcade-base), var(--arcade-image) 18%), var(--arcade-base) 72%);
+}
+
+.arcade-stage .arcade-rail {
+  grid-area: nav;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: auto;
+  margin: 0;
+  padding-bottom: .7rem;
+  border-bottom: 1px solid #fff3;
+  position: relative;
+  z-index: 1;
+}
+
+.arcade-stage .arcade-rail .arcade-back,
+.arcade-stage .arcade-rail summary {
+  border-color: #fff4;
+  border-radius: .65rem;
+  color: #fff8e7;
+  background: var(--arcade-base);
+}
+.arcade-stage .arcade-rail .arcade-back:hover,
+.arcade-stage .arcade-rail summary:hover { border-color: var(--arcade-accent); }
+
+.arcade-stage .arcade-settings-body {
+  box-sizing: border-box;
+  position: absolute;
+  top: calc(100% + .4rem);
+  right: 0;
+  width: min(100%, 23rem);
+  max-height: min(65dvh, 30rem);
+  overflow: auto;
+  padding: 1rem;
+  border: 1px solid #fff4;
+  border-radius: .8rem;
+  background: var(--arcade-base);
+  color: #fff8e7;
+  box-shadow: 0 1rem 3rem #081410aa;
+}
+.arcade-stage .arcade-settings-body :is(p, .keys) { max-width: none; margin: .45rem 0; color: inherit; font: inherit; }
+.arcade-stage .arcade-settings-body details > summary { min-height: 44px; align-content: center; }
+.arcade-stage .arcade-settings-body .seed { flex-wrap: wrap; }
+
+.arcade-stage .arcade-copy {
+  grid-area: copy;
+  width: min(100%, 34rem);
+  min-width: 0;
+  margin: 0 0 0 auto;
+  padding: 0;
+  border: 0;
+  background: none;
+  box-shadow: none;
+}
+.arcade-stage .arcade-copy .arcade-genre {
+  width: fit-content;
+  margin: 0 0 .8rem;
+  padding: .35rem .65rem;
+  border: 1px solid currentColor;
+  border-radius: 2rem;
+  color: var(--arcade-accent);
+  font: 750 .72rem/1.2 system-ui, sans-serif;
+  letter-spacing: .12em;
+  text-transform: uppercase;
+}
+.arcade-stage .arcade-copy h1 {
+  min-width: 0;
+  margin: 0;
+  color: inherit;
+  font: 850 clamp(2.25rem, 6vw, 5.8rem)/.96 system-ui, sans-serif;
+  letter-spacing: -.065em;
+  text-shadow: none;
+}
+.arcade-air .arcade-stage .arcade-copy h1 { font-family: Georgia, serif; font-weight: 700; }
+.arcade-city .arcade-stage .arcade-copy h1 { text-transform: uppercase; }
+.arcade-stage .arcade-copy .arcade-deck {
+  margin: .7rem 0 1.25rem;
+  color: #fff4dc;
+  font: 500 clamp(.94rem, 2vw, 1.15rem)/1.45 system-ui, sans-serif;
+  max-width: 30ch;
+}
+.arcade-stage .arcade-copy :is(.entry-actions, .launch, .courses) { display: flex; flex-wrap: wrap; gap: .6rem; margin: 0; }
+.arcade-stage .arcade-copy :is(.primary, .secondary, .course, #start, #roam) {
+  width: auto;
+  min-height: 48px;
+  padding: .58rem .9rem;
+  border: 1px solid #fff5;
+  border-radius: .65rem;
+  background: #ffffff0c;
+  color: #fff8e7;
+  box-shadow: none;
+  font: 750 .95rem/1.2 system-ui, sans-serif;
+}
+.arcade-stage .arcade-copy :is(.primary, #start, .course:first-child) {
+  background: var(--arcade-accent);
+  color: var(--arcade-ink);
+  border-color: transparent;
+}
+.arcade-stage .arcade-copy .course { display: flex; align-items: center; text-align: left; gap: .65rem; }
+.arcade-stage .arcade-copy .course .race-number { padding: 0; color: inherit; background: transparent; border: 0; }
+.arcade-stage .arcade-copy .course :is(.race-title, .race-location) { color: inherit; font: inherit; }
+.arcade-stage .arcade-copy .course .race-location { margin-top: .12rem; font-size: .75rem; font-weight: 500; letter-spacing: normal; }
+.arcade-stage .arcade-copy button:disabled { opacity: .72; }
+.arcade-stage .arcade-copy button:not(:disabled):hover { outline: 1px solid var(--arcade-accent); outline-offset: 2px; }
+
+.arcade-cover {
+  box-sizing: border-box;
+  width: min(100%, 34rem);
+  overflow: hidden;
+  background: var(--arcade-image);
+  outline: 1px solid #fff4;
+  outline-offset: -1px;
+  border-radius: 1rem;
+}
+.arcade-cover svg { display: block; width: 100%; aspect-ratio: 3/2; }
+.arcade-stage .arcade-cover { grid-area: cover; box-shadow: 0 1rem 2.5rem #09171160; }
+.arcade-island .playing .arcade-stage { pointer-events:none; }
+.arcade-city .lobby.arcade-stage:not([data-intro=true]) {
+  grid-template-areas: "nav" "copy";
+  grid-template-columns: minmax(0, 1fr);
+  background: #231a26d9;
+}
+.arcade-city .lobby:not([data-intro=true]) .arcade-cover { display: none; }
+.arcade-city .lobby:not([data-intro=true]) .arcade-copy { margin-inline: auto; }
+.arcade-city .stage:has(.lobby[data-intro=true]:not([hidden])) > .deck { visibility: hidden; }
+
+@media (max-width: 640px) {
+  .arcade-stage.arcade-stage {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-areas: "nav" "cover" "copy";
+    grid-template-rows: auto auto minmax(min-content, 1fr);
+    align-items: center;
+    align-content: start;
+    gap: 1rem;
+  }
+  .arcade-stage .arcade-cover, .arcade-stage .arcade-copy { margin-inline: auto; }
+  .arcade-stage .arcade-cover svg { height: min(34dvh, 18rem); }
+}
+@media (max-height: 450px) and (min-width: 641px) {
+  .arcade-stage.arcade-stage { gap: 1rem; }
+  .arcade-stage .arcade-cover svg { height: min(60dvh, 18rem); }
+}
+@media (orientation: landscape) and (max-height: 400px) {
+  .arcade-stage.arcade-stage {
+    grid-template-columns: minmax(0, 3fr) minmax(0, 2fr);
+    grid-template-areas: "nav nav" "copy cover";
+    grid-template-rows: auto minmax(min-content, 1fr);
+    gap: .65rem clamp(.75rem, 3vw, 2rem);
+  }
+  .arcade-stage .arcade-rail { padding-bottom: .4rem; }
+  .arcade-stage .arcade-copy .arcade-genre { margin-bottom: .45rem; }
+  .arcade-stage .arcade-copy h1 { font-size: clamp(1.85rem, 5.4vw, 3.25rem); }
+  .arcade-stage .arcade-copy .arcade-deck { margin-block: .45rem .7rem; }
+  .arcade-stage .arcade-cover svg { height: min(45dvh, 14rem); }
+}
+@media (orientation: landscape) and (max-height: 400px) and (max-width: 500px),
+       (orientation: landscape) and (max-height: 280px) {
+  .arcade-stage.arcade-stage {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-areas: "nav" "copy";
+  }
+  .arcade-stage .arcade-cover { display: none; }
+}
+.arcade-air .game:has(.arcade-stage:not([hidden])) > .masthead,
+.arcade-island .shell:not(.playing) > .top { visibility: hidden; }
+
+
+.arcade-stage .arcade-copy .arcade-launch-status {
+  margin: .6rem 0 0;
+  color: inherit;
+  font: 650 .85rem/1.35 system-ui, sans-serif;
+}
+.arcade-stage .arcade-copy:has(:is(.courses, .entry-actions) button:enabled, [role=alert]:not([hidden])) .arcade-launch-status {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+.arcade-stage .arcade-settings-action {
+  min-height: 44px;
+  padding-inline: .65rem;
+  border: 1px solid currentColor;
+  border-radius: .45rem;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+.arcade-stage .arcade-settings-body > .arcade-settings-status:empty { margin: 0; }

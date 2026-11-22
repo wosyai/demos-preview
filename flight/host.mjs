@@ -304,7 +304,7 @@ export function bootFlight(win, doc) {
   const summarySettings = get("flight-dialog-settings");
   const callout = get("callout"), flightCue = get("flight-cue"), buttons = Array.from(doc.querySelectorAll("[data-course]"));
   const actionButtons = Array.from(doc.querySelectorAll("[data-action]"));
-  const stick = get("flight-stick");
+  const stick = get("flight-stick"), viewToggle = get("view-toggle");
   const instruments = ["time", "mission-phase", "speed", "altitude", "best", "gates"].map(get);
   const controls = makeControls(), replays = replayStore(() => win.localStorage);
   const field = { pointer: 0, length: 0, version: 0 }, moving = { pointer: 0, length: 0, version: 0 };
@@ -312,7 +312,7 @@ export function bootFlight(win, doc) {
   let gpu, engine, memory, framePointer = null, frameLength = 0;
   let raf = 0, previous = null, current = 0, mode = "menu", modal = null;
   let loading = true, error = false, lost = false, hudTick = 0, dirty = true;
-  let gateCount = 0, gateFeedbackUntil = 0;
+  let gateCount = 0, gateFeedbackUntil = 0, cockpit = false;
   const dropButton = actionButtons.find((button) => button.dataset.action === "drop");
   const dropKey = get("drop-key");
   let activeStick = null, analogInput = false, dropPending = false, dropAvailable = false;
@@ -351,6 +351,10 @@ export function bootFlight(win, doc) {
     get("pause").disabled = !canSelect;
     again.disabled = !canSelect;
     shell.classList.toggle("is-playing", mode !== "menu");
+    shell.classList.toggle("is-paris", current === 1);
+    shell.classList.toggle("is-cockpit", cockpit && active);
+    viewToggle.disabled = !canSelect || !active;
+    viewToggle.setAttribute("aria-pressed", String(cockpit));
     menu.hidden = mode !== "menu";
     hud.hidden = mode === "menu";
     keys.hidden = touch.hidden = !active;
@@ -362,6 +366,11 @@ export function bootFlight(win, doc) {
     if (!active) { callout.hidden = true; setText(flightCue, ""); }
     hud.inert = Boolean(modal);
   }
+  function setEngineStatus(message) {
+    setText(status, message);
+    const launchStatus = get("launch-engine");
+    if (launchStatus) setText(launchStatus, message);
+  }
   function failure(message) {
     error = true;
     clearInput();
@@ -370,7 +379,7 @@ export function bootFlight(win, doc) {
     summary.hidden = true;
     setText(problem, message);
     problem.hidden = false;
-    setText(status, "Engine unavailable");
+    setEngineStatus("Engine unavailable");
     capability();
   }
   function provide(buffer) {
@@ -504,6 +513,7 @@ export function bootFlight(win, doc) {
       gateFeedbackUntil = 0;
       clearInput();
       engine.reset(course);
+      engine.select_view(playing && cockpit ? 1 : 0);
       const replay = replays.load(course);
       if (replay) {
         engine.ghost_begin();
@@ -595,6 +605,12 @@ export function bootFlight(win, doc) {
     if (modal === "pause") { finishModal(); shell.focus({ preventScroll: true }); }
     else if (!modal) showSummary("pause");
   }
+  function toggleView() {
+    if (mode !== "playing" || modal || loading || error || lost || !engine) return;
+    cockpit = !cockpit;
+    engine.select_view(cockpit ? 1 : 0);
+    capability();
+  }
   function press(event, down) {
     if (event.altKey || event.ctrlKey || event.metaKey) {
       if (!down && controls.keys.delete(event.code)) syncButtons();
@@ -614,6 +630,11 @@ export function bootFlight(win, doc) {
       return;
     }
     if (down && !event.repeat && event.code === "Escape") { togglePause(); return; }
+    if (down && !event.repeat && event.code === "KeyV" && mode === "playing" && !modal && !lost && !loading && !error) {
+      event.preventDefault();
+      toggleView();
+      return;
+    }
     if (down && !event.repeat && event.code === "KeyR" && mode === "playing" && !lost && modal !== "pause") {
       event.preventDefault();
       reset(current, true);
@@ -691,6 +712,7 @@ export function bootFlight(win, doc) {
   buttons.forEach((button) => button.addEventListener("click", () => reset(Number(button.dataset.course), true)));
   get("restart").addEventListener("click", () => reset(current, true));
   get("pause").addEventListener("click", togglePause);
+  viewToggle.addEventListener("click", toggleView);
   again.addEventListener("click", () => { if (modal === "pause") togglePause(); else reset(current, true); });
   choose.addEventListener("click", () => reset(current, false));
   win.addEventListener("keydown", (event) => press(event, true));
@@ -713,7 +735,7 @@ export function bootFlight(win, doc) {
     clearInput();
     if (raf) win.cancelAnimationFrame(raf);
     raf = 0;
-    setText(status, "Restoring graphics");
+    setEngineStatus("Restoring graphics");
     capability();
   });
   canvas.addEventListener("webglcontextrestored", () => {
@@ -724,7 +746,7 @@ export function bootFlight(win, doc) {
       dirty = true;
       if (engine && !loading && framePointer === null) reset(current, mode === "playing");
       if (error) return;
-      setText(status, loading ? "Loading flight engine" : "Wosy engine ready");
+      setEngineStatus(loading ? "Loading flight engine" : "Wosy engine ready");
       capability();
       resumeLoop();
     } catch { failure("Your browser could not restore WebGL. Reload to try again."); }
@@ -734,19 +756,19 @@ export function bootFlight(win, doc) {
     if (!gl) { failure("This game needs WebGL 2. Try a current browser with hardware acceleration enabled."); return; }
     try {
       gpu = graphics(gl);
-      const wasm = await win.fetch(new URL("./flight.wasm?v=county-reservoir-flight-v7", import.meta.url));
+      const wasm = await win.fetch(new URL("./flight.wasm?v=cockpit-flight-v7", import.meta.url));
       if (!wasm.ok) throw new Error("The flight engine could not be downloaded.");
       const { instance } = await win.WebAssembly.instantiate(await wasm.arrayBuffer(), imports);
       engine = instance.exports;
       memory = engine.memory;
-      for (const name of ["_start", "reset", "tick", "cancel_drop", "ghost_begin", "ghost_byte", "ghost_end"])
+      for (const name of ["_start", "reset", "tick", "select_view", "cancel_drop", "ghost_begin", "ghost_byte", "ghost_end"])
         if (typeof engine[name] !== "function") throw new Error("The flight engine is incomplete.");
       engine._start();
       analogInput = engine.input_version?.() === 1;
       loading = false;
       if (!lost) reset(0, false);
       if (error) return;
-      setText(status, lost ? "Restoring graphics" : "Wosy engine ready");
+      setEngineStatus(lost ? "Restoring graphics" : "Wosy engine ready");
       capability();
       resumeLoop();
     } catch {

@@ -76,6 +76,7 @@ f32[7] empty_mail = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0];
 f32[7][3] mail = [empty_mail, empty_mail, empty_mail];
 
 i32 course = 0;
+bool cockpit_view = false;
 i32 vertex_count = 0;
 bool world_ready = false;
 bool drawing_world = false;
@@ -1653,7 +1654,7 @@ unit(f32) draw_aircraft = fn(alpha) {
 		f32 dz = presented_pose[1].z-presented_pose[0].z;
 		if (dx*dx+dy*dy+dz*dz > 121.0) { draw_plane(1,true); };
 	};
-	draw_plane(0,false);
+	if (!cockpit_view) { draw_plane(0,false); };
 	i32 count = vertex_count*6;
 	unsafe { host.aircraft(core.pointer_cast<*?u8>(&?moving_mesh[0][0][0][0]),count); };
 };
@@ -1682,10 +1683,14 @@ f32(MissionPhase) phase_code = fn(stage) {
 	}
 };
 
+unit(i32) select_view = fn(view) {
+	cockpit_view = view == 1;
+};
+
 unit() frame = fn {
 	f32 hx = sin_small(presented_pose[0].heading);
 	f32 hz = cos_small(presented_pose[0].heading);
-	f32 pitch = -0.20 + presented_pose[0].pitch*0.62;
+	f32 pitch = if (cockpit_view) { presented_pose[0].pitch } else { -0.20 + presented_pose[0].pitch*0.62 };
 	f32 ps = sin_small(pitch);
 	f32 pc = cos_small(pitch);
 	f32 vx = hx*pc;
@@ -1694,26 +1699,35 @@ unit() frame = fn {
 	f32 ux = -hx*ps;
 	f32 uy = pc;
 	f32 uz = -hz*ps;
-	f32 ex = presented_pose[0].x-hx*17.5;
-	f32 ey = presented_pose[0].y+5.3;
-	f32 ez = presented_pose[0].z-hz*17.5;
+	f32 ex = if (cockpit_view) { presented_pose[0].x+hx*0.75 } else { presented_pose[0].x-hx*17.5 };
+	f32 ey = if (cockpit_view) { presented_pose[0].y+0.82 } else { presented_pose[0].y+5.3 };
+	f32 ez = if (cockpit_view) { presented_pose[0].z+hz*0.75 } else { presented_pose[0].z-hz*17.5 };
+	f32 roll = presented_pose[0].roll;
+	f32 rs = if (cockpit_view) { sin_small(-roll) } else { 0.0 };
+	f32 rc = if (cockpit_view) { cos_small(roll) } else { 1.0 };
+	f32 rx = if (cockpit_view) { hz*rc+ux*rs } else { hz };
+	f32 ry = if (cockpit_view) { uy*rs } else { 0.0 };
+	f32 rz = if (cockpit_view) { -hx*rc+uz*rs } else { -hx };
+	f32 upx = if (cockpit_view) { ux*rc-hz*rs } else { ux };
+	f32 upy = if (cockpit_view) { uy*rc } else { uy };
+	f32 upz = if (cockpit_view) { uz*rc+hx*rs } else { uz };
 	f32 scale_y = if (viewport < 0.86) { 1.30 } else { 1.61 };
 	f32 scale_x = scale_y/viewport;
 	f32 near_far = 1.0015052;
-	display[0] = hz*scale_x;
-	display[1] = ux*scale_y;
+	display[0] = rx*scale_x;
+	display[1] = upx*scale_y;
 	display[2] = vx*near_far;
 	display[3] = vx;
-	display[4] = 0.0;
-	display[5] = uy*scale_y;
+	display[4] = if (cockpit_view) { ry*scale_x } else { 0.0 };
+	display[5] = upy*scale_y;
 	display[6] = vy*near_far;
 	display[7] = vy;
-	display[8] = -hx*scale_x;
-	display[9] = uz*scale_y;
+	display[8] = rz*scale_x;
+	display[9] = upz*scale_y;
 	display[10] = vz*near_far;
 	display[11] = vz;
-	display[12] = -(hz*ex-hx*ez)*scale_x;
-	display[13] = -(ux*ex+uy*ey+uz*ez)*scale_y;
+	display[12] = if (cockpit_view) { -(rx*ex+ry*ey+rz*ez)*scale_x } else { -(hz*ex-hx*ez)*scale_x };
+	display[13] = -(upx*ex+upy*ey+upz*ez)*scale_y;
 	f32 offset = -(vx*ex+vy*ey+vz*ez);
 	display[14] = offset*near_far-1.401053;
 	display[15] = offset;

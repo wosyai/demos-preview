@@ -231,6 +231,7 @@ export async function boot(env=globalThis,createGraphics=graphics) {
   const canvas=get("view"), wheel=get("wheel"), thumb=get("thumb"), pause=get("pause"), cameraView=get("camera-view");
   const panel=get("panel"), start=get("start"), roam=get("roam"), power=get("power"), brake=get("brake"), action=get("action");
   const objective=get("objective"), stats=get("status"), clock=get("clock"), hint=get("hint"), summary=get("summary"), announce=get("announce");
+  const actionCaption=get("action-caption"), playHud=get("play-hud");
   const touch=get("touch"), trip=get("trip"), departure=get("departure"), brakeIcon=get("brake-icon"), actionIcon=get("action-icon");
   const input=inputState(), meshes=new Map();
   const map=get("city-map"), chart=get("city-chart").getContext?.("2d");
@@ -269,6 +270,7 @@ export async function boot(env=globalThis,createGraphics=graphics) {
     start.disabled=!available; roam.disabled=!available;
     pause.disabled=!available||!playing;
     cameraView.disabled=pause.disabled;
+    playHud.hidden=pause.disabled;
     map.hidden=pause.disabled||!chart;
     label(summary,lost&&!failed ? "Graphics interrupted. Waiting for the browser to restore the scene." : menuText);
   }
@@ -295,6 +297,7 @@ export async function boot(env=globalThis,createGraphics=graphics) {
     if(previousState!==state||previousCue!==cue) {
       action.hidden=!ACTIONS[cue];
       action.setAttribute("aria-label",ACTIONS[cue]||"Interact");
+      label(actionCaption,ACTIONS[cue]||"Interact");
       if(ACTION_ICONS[cue]) actionIcon.setAttribute("href",`#icon-${ACTION_ICONS[cue]}`);
     }
     const brakeMode=foot?"Sprint":"Brake";

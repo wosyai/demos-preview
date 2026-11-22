@@ -6,10 +6,10 @@ const executable = process.env.FLIGHT_WASM || new URL("../flight.wasm", import.m
 const close = (a, b, tolerance = .0002) => Math.abs(a - b) <= tolerance;
 
 async function art() {
-  let engine, world, plane;
+  let engine, world, plane, state;
   const readMesh = (pointer, length) => {
     assert(Number.isInteger(pointer) && pointer >= 0 && pointer % 4 === 0);
-    assert(Number.isInteger(length) && length > 0 && length % 18 === 0);
+    assert(Number.isInteger(length) && length >= 0 && length % 18 === 0);
     return new Float32Array(engine.memory.buffer, pointer, length).slice();
   };
   const module = new WebAssembly.Module(await readFile(executable));
@@ -17,14 +17,19 @@ async function art() {
     flight: {
       world(pointer, length) { world = readMesh(pointer, length); },
       aircraft(pointer, length) { plane = readMesh(pointer, length); },
-      frame() {},
+      frame(pointer, length) {
+        assert.equal(length, 35);
+        state = new Float32Array(engine.memory.buffer, pointer, length).slice();
+      },
       record() {},
     },
     wasi_snapshot_preview1: { proc_exit(code) { assert.fail("Wosy art exited: " + code); } },
   }).exports;
   engine._start();
   return {
-    sample(course) { engine.reset(course); engine.tick(0, 0, 1.4); return { world, plane }; },
+    sample(course) { engine.reset(course); engine.tick(0, 0, 1.4); return { world, plane, state }; },
+    view(mode, aspect) { engine.select_view(mode); engine.tick(0, 0, aspect); return { world, plane, state }; },
+    step(input, aspect) { engine.tick(1 / 30, input, aspect); return { world, plane, state }; },
   };
 }
 
@@ -121,4 +126,50 @@ test("Wright Flyer has thirteen striped cells and a navy canton; Paris has one B
   assert.equal(vertices(paris, [.98, .96, .83]).length, 3 * 6);
   assert(gold[0][1] - green[0][1] > .018, "gold marking is not coplanar with the base");
   assert(blue[0][1] - gold[0][1] > .018, "blue disk is not coplanar with the diamond");
+});
+
+test("the Wasm cockpit changes projection and hides only the pilot aircraft", async () => {
+  const demo = await art();
+  for (const [course, aspect] of [[0, 1.65], [1, .68]]) {
+    demo.sample(course);
+    const outside = demo.view(0, aspect);
+    const inside = demo.view(1, aspect);
+    assert.notDeepEqual(inside.state.slice(0,16), outside.state.slice(0,16));
+    assert(inside.state.slice(0,16).every(Number.isFinite));
+    assert.deepEqual(inside.state.slice(16), outside.state.slice(16), "camera mode cannot change flight state or instruments");
+    assert.strictEqual(inside.world, outside.world, "the camera does not rebuild the static world");
+    assert(inside.plane.length > 0 && inside.plane.length < outside.plane.length, "guides remain while the pilot airframe disappears");
+    const returned = demo.view(0, aspect);
+    assert.deepEqual(returned.state, outside.state, "returning to chase restores the same complete frame");
+    assert.deepEqual(returned.plane, outside.plane);
+  }
+});
+
+test("banked cockpit horizon follows the actual left and right exterior wings", async () => {
+  const demo = await art();
+  for (const [course, aspect, wing] of [
+    [0, 1.65, [.98 * 1.12, .83 * 1.12, .58 * 1.12]],
+    [1, .68, [.96, .96, .86]],
+  ]) {
+    for (const [control, sign] of [[1, 1], [2, -1]]) {
+      demo.view(0, aspect);
+      demo.sample(course);
+      for (let n = 0; n < 59; n++) demo.step(20, aspect);
+      for (let n = 0; n < 21; n++) demo.step(control | 4, aspect);
+      const outside = demo.view(0, aspect);
+      assert.equal(outside.state[20], 7, "ordinary takeoff and bank stay in supply approach");
+      assert.equal(outside.state[22], 0);
+      assert(outside.state[19] > 2);
+      const [left, right] = vertices(outside.plane, wing);
+      const span = right.map((coordinate, axis) => coordinate - left[axis]);
+      assert(sign * span[1] > 1, "commanded bank visibly raises the correct exterior wing");
+      const inside = demo.view(1, aspect);
+      assert.equal(Math.sign(inside.state[4]), sign, "the cockpit right basis follows the exterior wing");
+      const vertical = span[0] * inside.state[1] + span[1] * inside.state[5] + span[2] * inside.state[9];
+      const horizontal = span[0] * inside.state[0] + span[1] * inside.state[4] + span[2] * inside.state[8];
+      assert(Math.abs(vertical) < .08 && horizontal > 6, "the banked wings are level in their own cockpit basis");
+      assert.deepEqual(inside.state.slice(16), outside.state.slice(16));
+      assert.deepEqual(demo.view(0, aspect).state, outside.state);
+    }
+  }
 });

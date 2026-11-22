@@ -22,6 +22,25 @@ button:focus-visible, a:focus-visible { outline: 3px solid #ffe0a2; outline-offs
 .view { display: block; background: linear-gradient(155deg, #91b8b4 0%, #397479 63%, #24414a 100%); }
 .shade { background: linear-gradient(90deg,#102a31f2 0%,#102a31d6 27%,#102a312e 64%,transparent 100%); pointer-events: none; transition: opacity .28s; }
 .is-playing .shade { opacity: .20; }
+.cockpit-frame { display: none; position: absolute; inset: 0; pointer-events: none; }
+.is-playing.is-cockpit .cockpit-frame { display: block; }
+.cockpit-frame::before, .cockpit-frame::after {
+  content: ""; position: absolute; inset: 0;
+  background: linear-gradient(102deg, #341f17, #975f39 28%, #593923 68%, #241915);
+}
+.cockpit-frame::before {
+  clip-path: polygon(0 0, 2.6% 0, 7.4% 91%, 34% 96%, 66% 96%, 92.6% 91%, 97.4% 0, 100% 0, 100% 100%, 0 100%);
+}
+.cockpit-frame::after {
+  background: #f3cb8c99;
+  clip-path: polygon(0 95%, 27% 98%, 73% 98%, 100% 95%, 100% 95.6%, 73% 98.7%, 27% 98.7%, 0 95.6%);
+}
+.is-playing.is-cockpit.is-paris .cockpit-frame::before {
+  background: linear-gradient(100deg, #30271f, #8c7651 28%, #645439 67%, #261f1a);
+  clip-path: polygon(0 0, 2.2% 0, 12% 93%, 35% 96%, 65% 96%, 88% 93%, 97.8% 0, 100% 0, 100% 100%, 0 100%);
+}
+#view-toggle[aria-pressed="true"] { background: #e4bd7a; color: #1f2926; }
+
 .masthead { position: absolute; z-index: 2; top: max(1rem, env(safe-area-inset-top)); left: max(1.25rem, env(safe-area-inset-left)); right: max(1.25rem, env(safe-area-inset-right)); display: flex; justify-content: space-between; align-items: center; gap: 1rem; pointer-events: none; }
 .brand, .engine { margin: 0; color: var(--ivory); text-decoration: none; font-size: .84rem; font-weight: 800; letter-spacing: .15em; line-height: 1.25; }
 .brand { pointer-events: auto; }
@@ -142,4 +161,9 @@ kbd { background: #374d4e; padding: .06rem .22rem; border: 1px solid #ffffff47; 
     gap: .27rem .5rem;
     padding: .42rem .68rem;
   }
+}
+
+@media (max-width: 430px) {
+  .hud-actions { gap: .22rem; }
+  .hud-actions button { padding-inline: .48rem; }
 }

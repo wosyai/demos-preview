@@ -95,3 +95,28 @@ h1 span{color:var(--rust)}
   .city-map:not([hidden])~.hint[data-notice=true]{left:max(12px,env(safe-area-inset-left));transform:none;max-width:44vw;text-align:left}
   .city-map[open]{max-height:max(50px,calc(100dvh - var(--route-top) - max(18px,env(safe-area-inset-bottom)) - 108px));overflow:auto}
 }
+
+.play-hud{position:absolute;z-index:3;top:max(11px,env(safe-area-inset-top));left:max(12px,env(safe-area-inset-left));right:max(12px,env(safe-area-inset-right));display:grid;justify-items:end;gap:5px;pointer-events:none}
+.play-hud>.deck{position:static;width:max-content;max-width:100%;margin:0;pointer-events:auto}
+.play-hud .hint{position:static;transform:none;grid-column:1/-1;grid-row:3;box-sizing:border-box;width:auto;max-width:100%;padding:4px 6px;text-align:left;overflow-wrap:anywhere}
+.play-hud>.city-map{position:static;max-width:min(242px,46vw);pointer-events:auto}
+#action{display:flex;align-items:center;justify-content:center;gap:5px;padding:3px 5px}
+#action-caption{font-size:.7rem;line-height:1.1;overflow-wrap:anywhere}
+@media(max-width:440px){.play-hud>.deck{width:100%}}
+@media(pointer:coarse),(any-pointer:coarse){
+  .play-hud>.city-map[open]{max-height:clamp(50px,calc(100dvh - 260px - env(safe-area-inset-top) - env(safe-area-inset-bottom)),166px);overflow:auto}
+  .touch .wheel{max-width:calc(50% - 24px - env(safe-area-inset-left))}
+  .touch .pedals{max-width:calc(50% - 24px - env(safe-area-inset-right))}
+}
+
+@media(pointer:coarse),(any-pointer:coarse){
+  .play-hud{bottom:0;align-content:start}
+  .play-hud>.deck{grid-template-columns:minmax(0,1fr) auto;grid-template-areas:"timer actions"}
+  .play-hud .departure{grid-area:timer;justify-self:start}
+  .play-hud .deck-actions{grid-area:actions}
+  .play-hud .hint{grid-area:auto;grid-column:1/-1}
+  .play-hud .trip{position:absolute;bottom:calc(176px + env(safe-area-inset-bottom));left:50%;transform:translateX(-50%);width:max-content;max-width:100%;padding:5px 8px;justify-content:center;text-align:center;background:#102525ed;border:1px solid var(--edge);border-radius:8px;pointer-events:none}
+}
+@media(max-height:440px) and (pointer:coarse),(max-height:440px) and (any-pointer:coarse){
+  .play-hud .trip{bottom:calc(139px + env(safe-area-inset-bottom));max-width:100%}
+}

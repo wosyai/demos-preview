@@ -5,12 +5,13 @@ const markup = await readFile(new URL('../voxel/index.html', import.meta.url), '
 for (const id of ['pause', 'fullscreen', 'camera-view', 'view-touch', 'jump-touch', 'descend-touch', 'flight-touch', 'remove', 'place']) {
   const button = markup.match(new RegExp(`<button[^>]+id="${id}"[^>]*>([\\s\\S]*?)</button>`));
   assert(button && /aria-label="[^"]+"/.test(button[0]) && /<svg /.test(button[1]), id + ' is an accessible icon button');
-  assert.equal(button[1].replace(/<[^>]+>/g, '').trim(), '', id + ' has no persistent text label');
+  const label = id === 'remove' ? 'Break' : id === 'place' ? 'Place' : '';
+  assert.equal(button[1].replace(/<[^>]+>/g, '').trim(), label, id + ' has the expected visible label');
 }
 assert.match(markup, /<details class="entry-guide">[\s\S]*?<p class="camera-legend">[\s\S]*?href="#glyph-view"[\s\S]*?href="#glyph-person"[\s\S]*?Switch first \/ third person/);
 assert.match(markup, /<header class="top">[\s\S]*?id="mission-hud"[\s\S]*?class="top-actions"[\s\S]*?<\/header>/);
 assert.match(markup, /<details class="world-options">/);
-assert.match(markup, /<h1 id="title">Pocket<br>Island/);
+assert.match(markup, /<h1 id="title">Pocket Island<\/h1>/);
 
 function deferred() {
   let resolve;
@@ -57,7 +58,7 @@ class Element {
   }
 }
 
-async function loadHost(caseId, startsLost = false, stored = null, mobile = false, modernOrientation = false, seedStore = null) {
+async function loadHost(caseId, startsLost = false, stored = null, mobile = false, modernOrientation = false) {
   const nodes = new Map();
   const node = (id) => {
     if (!nodes.has(id)) nodes.set(id, new Element());
@@ -143,17 +144,11 @@ async function loadHost(caseId, startsLost = false, stored = null, mobile = fals
     window: win,
     HTMLInputElement: class extends Element {},
     matchMedia: () => ({ matches: mobile }),
-    localStorage: {
-      getItem(key) { return seedStore ? (seedStore.get(key) ?? null) : stored; },
-      setItem(key, seed) {
-        counters.stored.push([key, seed]);
-        if (seedStore) seedStore.set(key, seed);
-      },
-    },
+    localStorage: { getItem() { return stored; }, setItem(key, seed) { counters.stored.push([key, seed]); } },
     devicePixelRatio: 1,
     fetch(url) {
       assert(url.pathname.endsWith('/voxel/engine.wasm'));
-      assert.equal(url.search, '?v=beacon-mode-sea-v1');
+      assert.equal(url.search, '?v=beacon-wood-guide-v1');
       return fetchResponse.promise;
     },
     requestAnimationFrame(fn) { frames.set(++frameId, fn); return frameId; },
@@ -185,7 +180,6 @@ async function loadHost(caseId, startsLost = false, stored = null, mobile = fals
         const call = counters.parser.at(-1);
         call.complete = true;
         const text = String.fromCharCode(...call.units);
-        if (seedStore && /^(37|53)$/.test(text)) return BigInt(text);
         return text === '  -2147483648 ' && call.trim === 1
           ? -2147483648n : text === '7' && call.trim === 0 ? 7n : 2147483648n;
       },
@@ -465,26 +459,7 @@ await fallback.resolveFetch();
 assert.equal(fallback.counters.defaults,1);
 assert.deepEqual(fallback.counters.seeds,[471]);
 assert.deepEqual(fallback.counters.parser,[{trim:0,units:[32,56,32],complete:true}]);
-assert.deepEqual(fallback.counters.stored,[['wosy-voxel-seed-preview','471']]);
-const liveSeedKey = 'wosy-voxel-seed';
-const previewSeedKey = 'wosy-voxel-seed-preview';
-const liveOnlyStore = new Map([[liveSeedKey, '7']]);
-const firstPreview = await loadHost('preview-ignores-live-seed', false, null, false, false, liveOnlyStore);
-await firstPreview.resolveFetch();
-assert.deepEqual(firstPreview.counters.seeds, [471]);
-assert.deepEqual([...liveOnlyStore], [[liveSeedKey, '7'], [previewSeedKey, '471']]);
-const sameOriginStore = new Map([[liveSeedKey, '7'], [previewSeedKey, '37']]);
-const separateSeeds = await loadHost('preview-seed-isolation', false, null, false, false, sameOriginStore);
-await separateSeeds.resolveFetch();
-assert.deepEqual(separateSeeds.counters.seeds, [37]);
-separateSeeds.node('seed').value = '53';
-separateSeeds.node('seed-form').dispatch('submit');
-assert.deepEqual(separateSeeds.counters.seeds, [37, 53]);
-assert.deepEqual([...sameOriginStore], [[liveSeedKey, '7'], [previewSeedKey, '53']]);
-const reloadPreview = await loadHost('preview-seed-isolation-reload', false, null, false, false, sameOriginStore);
-await reloadPreview.resolveFetch();
-assert.deepEqual(reloadPreview.counters.seeds, [53]);
-assert.equal(sameOriginStore.get(liveSeedKey), '7');
+assert.deepEqual(fallback.counters.stored,[['wosy-voxel-seed','471']]);
 console.log('Seed host smoke passed: literal UTF-16 code units, Wosy defaults/trim/range sentinel, canonical persistence.');
 
 const edits = await loadHost('batched-editor');
@@ -574,8 +549,8 @@ console.log('Blur reset ignored repeated key-down and accepted a fresh press.');
 const page = await readFile(new URL('../voxel/index.html', import.meta.url), 'utf8');
 assert.match(page, /<html lang="en">/);
 assert.match(page, /<title>Pocket Island • Wosy<\/title>/);
-assert.match(page, /href="\.\/style\.css\?v=beacon-5"/);
-assert.match(page, /src="\.\/main\.js\?v=typed-state-v1"/);
+assert.match(page, /href="\.\/style\.css\?v=beacon-6-arcade-ui4"/);
+assert.match(page, /src="\.\/main\.js\?v=beacon-wood-guide-v1-arcade-ui4"/);
 assert.match(page, /id="move-stick"/);
 assert.doesNotMatch(page, /class="dpad"|data-move="Key[WASD]"/);
 assert.match(page, /title="Dirt · 2"/);

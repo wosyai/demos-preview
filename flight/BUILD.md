@@ -74,3 +74,8 @@ The Wright course's western county has a terraced reservoir and gravel service
 track. All new scenery within flyable airspace remains below landing height;
 the raised water tower visibly marks the county boundary beyond it. This visual
 change leaves replay v7 and the route physics unchanged.
+
+Press V or tap Cockpit to switch the aircraft-mounted view and the exterior
+chase view. Speed and altitude use the same Wosy instrument data in either.
+The WebAssembly export `select_view(1)` selects cockpit; zero selects chase.
+It changes presentation only: camera preference is not part of a v7 replay.

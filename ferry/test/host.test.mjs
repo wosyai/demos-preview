@@ -29,8 +29,12 @@ test("pedals and one-shot action coexist with analog steering; keyboard axis pre
 
 test("loader agrees with shell version, WebAssembly triangle shape, and 30-float engine frame",async()=>{
   const html=await readFile(new URL("../index.html",import.meta.url),"utf8");
-  const version=ENGINE_PATH.split("?v=")[1];
-  assert(html.includes(`host.mjs?v=${version}`)&&html.includes(`style.css?v=${version}`));
+  const version=html.match(/host\.mjs\?v=([^"]+)/)?.[1];
+  assert.equal(version,"ferry-mobile-hud-v5-arcade-ui4");
+  assert(html.includes(`style.css?v=${version}`));
+  assert.equal(ENGINE_PATH,"./ferry.wasm?v=annex-ferry-v4","a host-only UI update keeps the verified annex asset token");
+  assert.match(html,/<div id="play-hud" class="play-hud" hidden>[\s\S]*?<header[^>]*>[\s\S]*?id="camera-view"[\s\S]*?id="hint"[\s\S]*?<\/header>[\s\S]*?id="city-map"/);
+  assert.match(html,/id="action-icon"[\s\S]*?<span id="action-caption">Interact<\/span>/);
   assert(html.includes('lang="en"')&&html.includes('id="roam"'));
   const memory=new WebAssembly.Memory({initial:1});
   assert.equal(frameData(memory,4,30,"frame").length,30);
@@ -317,4 +321,22 @@ test("map paints canonical roads and active markers only when expanded and playi
   app.get("pause").emit("click");
   assert.equal(map.hidden,true);
   map.emit("toggle"); app.advance(); assert.equal(app.mapPaint.length,7);
+});
+
+test("touch action caption follows the same Wosy cue as its accessible name",async()=>{
+  const app=shell({cue:6}); await app.started;
+  const action=app.get("action"), caption=app.get("action-caption");
+  const hud=app.get("play-hud");
+  assert.equal(hud.hidden,true);
+  app.get("start").emit("click"); app.advance();
+  assert.equal(hud.hidden,false);
+  assert.equal(caption.textContent,"Answer phone");
+  assert.equal(action.attributes.get("aria-label"),caption.textContent);
+  app.mission({cue:3}); app.advance();
+  assert.equal(caption.textContent,"Collect tape");
+  assert.equal(action.attributes.get("aria-label"),caption.textContent);
+  app.mission({cue:0}); app.advance();
+  assert.equal(action.hidden,true);
+  app.get("pause").emit("click");
+  assert.equal(hud.hidden,true);
 });

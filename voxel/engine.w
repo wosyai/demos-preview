@@ -72,10 +72,11 @@ u8[4][16][8][16] block_atlas = [
 	blank_atlas_line, blank_atlas_line, blank_atlas_line, blank_atlas_line, blank_atlas_line, blank_atlas_line, blank_atlas_line, blank_atlas_line
 ];
 bool atlas_ready = false;
-f32[30] frame_values = [
+f32[35] frame_values = [
 	0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
 	0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
-	0.0, 1.0, 0.0, 0.0, 0.0
+	0.0, 1.0, 0.0, 0.0, 0.0,
+	0.0, 0.0, 0.0, 0.0, 0.0
 ];
 i32 write_position = 0;
 i32 wire_position = 0;
@@ -159,6 +160,8 @@ i32[48] loose_wood = [
 	0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0
 ];
 i32 loose_count = 0;
+i32 beacon_guide = 0;
+i32 guide_drop_slot = -1;
 i32 terrain_chunk_x = -1;
 i32 terrain_chunk_z = -1;
 i32 relay_stage = 0;
@@ -824,7 +827,19 @@ u8(i32, i32, i32) harbor_structure = fn(x, y, z) {
 	}
 };
 
+i32() guide_timber = fn { packed_cell(23, 5, 40) };
+
+i32() guide_crossing = fn { packed_cell(24, 4, 28) };
+
+bool(i32, i32, i32) crossing_plank = fn(x, y, z) {
+	x >= 22 && x <= 26 && y == 4 && z >= 18 && z <= 29
+};
+
 u8(i32, i32, i32, i32) beacon_tile = fn(x, y, z, ground) {
+	if (y == 5 && packed_cell(x, y, z) == guide_timber()) { 5 } else { beacon_features(x, y, z, ground) }
+};
+
+u8(i32, i32, i32, i32) beacon_features = fn(x, y, z, ground) {
 	bool tower = x >= 21 && x <= 27 && z >= 3 && z <= 6;
 	bool on_coast_trail = z == 9 && x >= 8 && x <= 24;
 	bool harbor_steps = (x == 24 && z >= 32 && z <= 45) || (z == 33 && x >= 8 && x <= 38);
@@ -917,6 +932,8 @@ i32() start_beacon = fn {
 	tide_progress = 0.0;
 	bridge_blocks = 12;
 	loose_count = 0;
+	beacon_guide = 1;
+	guide_drop_slot = -1;
 	relay_stage = 0;
 	sea_level = sea_low;
 	sea_phase = 0.0;
@@ -1534,6 +1551,7 @@ unit(f32, f32, f32, f32, f32, f32, f32, f32, i32) publish_frame = fn(x, y, z, sy
 	frame_values[27] = tide_progress;
 	frame_values[28] = core.sint_to_float<f32>(bridge_blocks);
 	frame_values[29] = core.sint_to_float<f32>(relay_stage);
+	publish_beacon_guide(hit);
 	unsafe { host.frame(core.pointer_cast<*?u8>(&?frame_values[0]), hit); };
 };
 
@@ -1808,6 +1826,8 @@ unit(f32) update_beacon = fn(dt) {
 	bool at_second = safe_ground && camera_pose.x >= 8.0 && camera_pose.x < 11.0 && camera_pose.z >= 7.0 && camera_pose.z < 10.0;
 	if (relay_stage == 0 && at_first) {
 		relay_stage = 1;
+		beacon_guide = 0;
+		guide_drop_slot = -1;
 		world[6][15][22] = 8;
 		refresh_visible_terrain(chunk_at(22, 15));
 	} else {
@@ -1888,6 +1908,11 @@ unit() collect_wood = fn {
 		u64 index = index_of(at);
 		i32 key = loose_wood[index];
 		loose_count = loose_count - 1;
+		if (beacon_guide == 2) {
+			if (at == guide_drop_slot) { beacon_guide = 3; guide_drop_slot = -1; } else {
+				if (loose_count == guide_drop_slot) { guide_drop_slot = at; };
+			};
+		};
 		loose_wood[index] = loose_wood[index_of(loose_count)];
 		bridge_blocks = bridge_blocks + 1;
 		refresh_visible_terrain(chunk_at(packed_x(key), packed_z(key)));
@@ -1927,7 +1952,7 @@ unit(f32, f32, i32) tick = fn(dt, aspect, playing) {
 	};
 };
 
-i32(i32, i32, i32, i32) edit_beacon = fn(x, y, z, material) {
+i32(i32, i32, i32, i32) beacon_edit_status = fn(x, y, z, material) {
 	if (beacon_phase != BeaconPhase::active || harbor_hut(x, y, z)) { -4 } else {
 		u8 present = cell(x, y, z);
 		bool loosen = material == 0 && present == 5 && !mission_fixed_wood(x, y, z);
@@ -1935,42 +1960,82 @@ i32(i32, i32, i32, i32) edit_beacon = fn(x, y, z, material) {
 		bool place = material == 5 && present == 0 && bridge_blocks > 0;
 		if (!(loosen || open_tunnel || place)) { -4 } else {
 			if (loosen && loose_count >= 48) { -6 } else {
-				if (place && has_loose_wood(0, packed_cell(x, y, z))) { -5 } else {
-					i32 changed = write_cell(x, y, z, material);
-					if (changed == 1) {
-						if (place) { bridge_blocks = bridge_blocks - 1; } else {
-							if (loose_count > 0) { settle_wood(0, x, y, z); };
-							if (loosen) {
-								loose_wood[index_of(loose_count)] = packed_cell(x, loose_floor(x, y, z), z);
-								loose_count = loose_count + 1;
-							};
-						};
-						rebuild_near(x, z);
-					};
-					changed
-				}
+				if (place && has_loose_wood(0, packed_cell(x, y, z))) { -5 } else { 1 }
 			}
 		}
 	}
+};
+
+i32(i32, i32, i32, i32) edit_beacon = fn(x, y, z, material) {
+	i32 status = beacon_edit_status(x, y, z, material);
+	if (status != 1) { status } else {
+		bool loosen = material == 0 && cell(x, y, z) == 5;
+		i32 changed = write_cell(x, y, z, material);
+		if (changed == 1) {
+			if (material == 5) {
+				bridge_blocks = bridge_blocks - 1;
+				if (crossing_plank(x, y, z)) { beacon_guide = 0; guide_drop_slot = -1; };
+			} else {
+				if (loose_count > 0) { settle_wood(0, x, y, z); };
+				if (loosen) {
+					if (beacon_guide == 1) { beacon_guide = 2; guide_drop_slot = loose_count; };
+					loose_wood[index_of(loose_count)] = packed_cell(x, loose_floor(x, y, z), z);
+					loose_count = loose_count + 1;
+				};
+			};
+			rebuild_near(x, z);
+		};
+		changed
+	}
+};
+
+i32(i32) adjacent_cell = fn(hit) {
+	i32 side = hit_face(hit);
+	i32 x = packed_x(hit) + (if (side == 0) { -1 } else { if (side == 1) { 1 } else { 0 } });
+	i32 y = packed_y(hit) + (if (side == 2) { -1 } else { if (side == 3) { 1 } else { 0 } });
+	i32 z = packed_z(hit) + (if (side == 4) { -1 } else { if (side == 5) { 1 } else { 0 } });
+	if (inside(x, y, z)) { packed_cell(x, y, z) } else { -1 }
+};
+
+unit(i32) publish_beacon_guide = fn(hit) {
+	i32 stage = if (beacon_phase == BeaconPhase::active) { beacon_guide } else { 0 };
+	frame_values[30] = core.sint_to_float<f32>(stage);
+	if (stage != 0) {
+		i32 key = if (stage == 1) { guide_timber() } else {
+			if (stage == 2) { loose_wood[index_of(guide_drop_slot)] } else { guide_crossing() }
+		};
+		i32 x = packed_x(key);
+		i32 y = packed_y(key);
+		i32 z = packed_z(key);
+		bool ready = if (hit < 0) { false } else {
+			if (stage == 1) {
+				hit_cell(hit) == key && beacon_edit_status(x, y, z, 0) == 1
+			} else {
+				stage == 3 && adjacent_cell(hit) == key && !overlaps_player(x, y, z)
+					&& beacon_edit_status(x, y, z, 5) == 1
+			}
+		};
+		frame_values[31] = core.sint_to_float<f32>(x) + 0.50;
+		frame_values[32] = core.sint_to_float<f32>(y) + (if (stage == 2) { 0.14 } else { 0.70 });
+		frame_values[33] = core.sint_to_float<f32>(z) + 0.50;
+		frame_values[34] = if (ready) { 1.0 } else { 0.0 };
+	} else {
+		frame_values[31] = 0.0;
+		frame_values[32] = 0.0;
+		frame_values[33] = 0.0;
+		frame_values[34] = 0.0;
+	};
 };
 
 i32(i32) edit_view = fn(material) {
 	update_orientation();
 	i32 hit = current_view_target();
 	if (hit < 0) { -1 } else {
-		i32 side = hit_face(hit);
-		i32 x = packed_x(hit);
-		i32 y = packed_y(hit);
-		i32 z = packed_z(hit);
-		if (material > 0) {
-			if (side == 0) { x = x - 1; };
-			if (side == 1) { x = x + 1; };
-			if (side == 2) { y = y - 1; };
-			if (side == 3) { y = y + 1; };
-			if (side == 4) { z = z - 1; };
-			if (side == 5) { z = z + 1; };
-		};
-		if (inside(x, y, z)) {
+		i32 key = if (material > 0) { adjacent_cell(hit) } else { hit_cell(hit) };
+		if (key < 0) { -2 } else {
+			i32 x = packed_x(key);
+			i32 y = packed_y(key);
+			i32 z = packed_z(key);
 			if (material > 0 && overlaps_player(x, y, z)) { -3 } else {
 				if (beacon_phase == BeaconPhase::sandbox) {
 					i32 changed = write_cell(x, y, z, material);
@@ -1978,7 +2043,7 @@ i32(i32) edit_view = fn(material) {
 					changed
 				} else { edit_beacon(x, y, z, material) }
 			}
-		} else { -2 }
+		}
 	}
 };
 

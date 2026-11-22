@@ -36,7 +36,7 @@ function graphicsFixture() {
 
 function mock({ noGraphics = false, badMesh = false, initialLost = false, exitAtStart = false, inputVersion = null, orientationAPI = false, frameLength = 35 } = {}) {
   const doc = new Hub(), win = new Hub(), nodes = new Map(), raf = new Map(), data = new Map();
-  const g = graphicsFixture(), called = { reset: [], tick: [], replay: [], requests: [], begin: 0, cancel: 0 };
+  const g = graphicsFixture(), called = { reset: [], tick: [], replay: [], requests: [], views: [], begin: 0, cancel: 0 };
   const wasmExports = new WebAssembly.Memory({initial: 1});
   let index = 0, shouldComplete = false, current = 0, imported, distance = 122, phase = 2, dropStatus = 0, route = 0, eventCode = 0;
   let guidance = [0, 4, 0, 0];
@@ -61,7 +61,7 @@ function mock({ noGraphics = false, badMesh = false, initialLost = false, exitAt
   }
   const courses = [element("farm", {course: "0"}), element("paris", {course: "1"})];
   const controls = ["power", "brake", "drop"].map((value) => element(value, {action: value}));
-  for (const name of "game view menu hud engine problem keys touch flight-stick summary summary-title summary-detail summary-kicker again choose flight-dialog-settings flight-controls arcade-back callout flight-cue time mission-phase speed altitude best gates restart pause track drop-key".split(" ")) element(name);
+  for (const name of "game view menu hud engine problem keys touch flight-stick summary summary-title summary-detail summary-kicker again choose flight-dialog-settings flight-controls arcade-back callout flight-cue time mission-phase speed altitude best gates restart pause view-toggle track drop-key".split(" ")) element(name);
   const dialog = nodes.get("summary"), settings = nodes.get("flight-dialog-settings");
   const dialogNodes = ["again", "choose", "flight-dialog-settings", "flight-controls", "arcade-back"].map((name) => nodes.get(name));
   settings.open = false;
@@ -96,6 +96,7 @@ function mock({ noGraphics = false, badMesh = false, initialLost = false, exitAt
           called.reset.push(course);
           imported.world(0, badMesh ? 16 : 18);
         },
+        select_view(view) { called.views.push(view); },
         cancel_drop() { called.cancel++; },
         ghost_begin() { called.begin++; },
         ghost_byte(byte) { called.replay.push(byte); },
@@ -386,10 +387,35 @@ test("the Flight pause host has its own release token with matching v7 assets", 
   const sim = mock();
   await sim.ready;
   const html = await readFile(new URL("../index.html", import.meta.url), "utf8");
-  assert.match(html, /href="\.\/style\.css\?v=county-reservoir-flight-v7"/);
-  assert.match(html, /src="\.\/host\.mjs\?v=county-reservoir-flight-v7-arcade-pause-1"/);
+  assert.match(html, /href="\.\/style\.css\?v=cockpit-flight-v7-arcade-ui4"/);
+  assert.match(html, /src="\.\/host\.mjs\?v=cockpit-flight-v7-arcade-ui4"/);
   assert.deepEqual(sim.called.requests.map((url) => [url.pathname.split("/").at(-1), url.search]),
-    [["flight.wasm", "?v=county-reservoir-flight-v7"]]);
+    [["flight.wasm", "?v=cockpit-flight-v7"]]);
+});
+
+test("view button and V toggle the engine camera without resetting a route", async () => {
+  const sim = mock({ inputVersion: 1 });
+  await sim.ready;
+  const button = sim.nodes.get("view-toggle");
+  assert.equal(button.disabled, true);
+  sim.courses[1].events("click");
+  assert.equal(button.disabled, false);
+  assert.equal(button.getAttribute("aria-pressed"), "false");
+  const resets = sim.called.reset.slice();
+  const tickCount = sim.called.tick.length;
+  button.events("click");
+  assert.equal(sim.called.views.at(-1), 1);
+  assert.equal(sim.nodes.get("game").classes.has("is-cockpit"), true);
+  assert.equal(sim.nodes.get("game").classes.has("is-paris"), true);
+  assert.equal(button.getAttribute("aria-pressed"), "true");
+  assert.deepEqual(sim.called.reset, resets);
+  assert.equal(sim.called.tick.length, tickCount);
+  assert.equal(sim.win.events("keydown", {code:"KeyV", repeat:true}).prevented, false);
+  assert.equal(sim.win.events("keydown", {code:"KeyV"}).prevented, true);
+  assert.equal(sim.called.views.at(-1), 0);
+  assert.equal(button.getAttribute("aria-pressed"), "false");
+  assert.equal(sim.nodes.get("game").classes.has("is-cockpit"), false);
+  assert.deepEqual(sim.called.reset, resets);
 });
 
 test("phone rotation releases the old touch and accepts a fresh steer in the new aspect", async () => {
