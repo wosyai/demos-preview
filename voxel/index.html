@@ -6,8 +6,8 @@
 <meta name="theme-color" content="#152a24">
 <meta name="description" content="Explore and reshape a small block island built in Wosy and rendered in your browser.">
 <title>Pocket Island • Wosy</title>
-<link rel="stylesheet" href="./style.css?v=beacon-bearing-v1-arcade-ui4-launch1">
-<script type="module" src="./main.js?v=beacon-east-arch-v1-arcade-ui4-launch1-preview-seed1"></script>
+<link rel="stylesheet" href="./style.css?v=beacon-bearing-v1-arcade-ui4-single1">
+<script type="module" src="./main.js?v=beacon-east-arch-v1-arcade-ui4-single1-preview-seed1"></script>
   <link rel="stylesheet" href="../arcade/shell.css?v=4">
 </head>
 <body class="arcade-island">
@@ -77,17 +77,6 @@
         <p class="entry-touch">Left stick: move. Drag on the right to look. Tap Jump or hold to swim up. Hold Break or Place to edit. Tap a block to select it.</p>
         <p class="camera-legend"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="#glyph-view"/></svg><svg viewBox="0 0 24 24" aria-hidden="true"><use href="#glyph-person"/></svg><span>Switch first / third person <kbd>V</kbd></span></p>
       </section>
-      <details class="world-options">
-        <summary>Free build (optional)</summary>
-        <p>Explore and build without a mission or a rising tide.</p>
-        <form class="seed" id="seed-form">
-          <label for="seed">SEED</label>
-          <input id="seed" name="seed" type="text" inputmode="numeric" autocomplete="off">
-          <button type="submit" id="apply-seed" disabled>Generate</button>
-          <button type="button" class="random" id="random-seed" title="New random seed" aria-label="New random seed" disabled><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M3 7h3c4 0 6 10 10 10h5m-3-3 3 3-3 3M3 17h3c1.3 0 2.4-1 3.4-2.5M14 8.9C14.7 7.7 15.3 7 16 7h5m-3-3 3 3-3 3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
-        </form>
-        <button class="secondary" id="enter" type="button" disabled>Start Free Build</button>
-      </details>
       <p id="engine-status" class="arcade-launch-status" role="status">Loading engine</p>
       <p class="error" id="error" role="alert" hidden></p>
     </div>

@@ -322,9 +322,16 @@ function setStatus(text) {
   if (status.textContent !== text) status.textContent = text;
 }
 
+function setLaunchDisabled(disabled) {
+  missionStart.disabled = missionRetry.disabled = disabled;
+  if (enter) enter.disabled = disabled;
+  if (applySeed) applySeed.disabled = disabled;
+  if (randomSeed) randomSeed.disabled = disabled;
+}
+
 function refreshAvailability() {
   const ready = !failed && loaded && !contextLost && Boolean(gpu);
-  enter.disabled = missionStart.disabled = missionRetry.disabled = applySeed.disabled = randomSeed.disabled = !ready;
+  setLaunchDisabled(!ready);
   if (failed) return;
   if (contextLost) setStatus("Restoring graphics");
   else if (!ready) setStatus("Loading engine");
@@ -365,7 +372,7 @@ function fail(message, detail) {
   loaded = false;
   stopPlaying();
   if (document.pointerLockElement === canvas) document.exitPointerLock();
-  enter.disabled = missionStart.disabled = missionRetry.disabled = applySeed.disabled = randomSeed.disabled = true;
+  setLaunchDisabled(true);
   setStatus("Engine unavailable");
   error.textContent = message;
   error.hidden = false;
@@ -385,7 +392,7 @@ function generate(seed) {
     throw new Error("The engine did not return geometry for the new island.");
   }
   try { localStorage.setItem("wosy-voxel-seed-preview", String(seed)); } catch {}
-  seedInput.value = String(seed);
+  if (seedInput) seedInput.value = String(seed);
 }
 
 async function boot() {
@@ -803,7 +810,7 @@ function playBeacon(restart) {
   } catch (e) { fail("The engine could not start Beacon Run.", e); }
 }
 
-enter.addEventListener("click", playSandbox);
+enter?.addEventListener("click", playSandbox);
 missionStart.addEventListener("click", () => playBeacon(false));
 missionRetry.addEventListener("click", () => playBeacon(true));
 for (const button of viewButtons) button.addEventListener("click", cycleCamera);
@@ -812,13 +819,13 @@ get("pause").addEventListener("click", () => {
   stopPlaying();
   missionStart.focus({ preventScroll: true });
 });
-get("seed-form").addEventListener("submit", (e) => {
+get("seed-form")?.addEventListener("submit", (e) => {
   e.preventDefault();
   if (!loaded || contextLost) return;
   try { changeSeed(readSeed(seedInput.value, true)); }
   catch (e) { fail("The engine could not read the seed.", e); }
 });
-randomSeed.addEventListener("click", () => changeSeed(crypto.getRandomValues(new Int32Array(1))[0]));
+randomSeed?.addEventListener("click", () => changeSeed(crypto.getRandomValues(new Int32Array(1))[0]));
 const menuFullscreen = get("menu-fullscreen");
 async function toggleFullscreen(event) {
   const menu = event.currentTarget === menuFullscreen;

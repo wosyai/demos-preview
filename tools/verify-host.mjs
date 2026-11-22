@@ -10,10 +10,11 @@ for (const id of ['pause', 'fullscreen', 'camera-view', 'view-touch', 'jump-touc
 }
 assert.match(markup, /<section class="entry-guide" aria-label="Controls">[\s\S]*?<p class="camera-legend">[\s\S]*?href="#glyph-view"[\s\S]*?href="#glyph-person"[\s\S]*?Switch first \/ third person/);
 assert.match(markup, /<div class="entry-actions">\s*<button class="primary" id="mission-start"[^>]*>Start Beacon Run<\/button>\s*<\/div>/);
-assert.match(markup, /<section class="entry-guide"[^>]*>[\s\S]*?class="entry-keys"[\s\S]*?class="entry-touch"[\s\S]*?<\/section>\s*<details class="world-options">\s*<summary>Free build \(optional\)<\/summary>[\s\S]*?id="seed-form"[\s\S]*?id="enter"/);
 
+const legacyControlIds = ['enter', 'seed', 'seed-form', 'apply-seed', 'random-seed'];
+for (const id of legacyControlIds) assert(!markup.includes(`id="${id}"`), id + ' is not a public control');
+assert.match(markup, /class="entry-keys"[\s\S]*?class="entry-touch"/);
 assert.match(markup, /<header class="top">[\s\S]*?id="mission-hud"[\s\S]*?class="top-actions"[\s\S]*?<\/header>/);
-assert.match(markup, /<details class="world-options">/);
 assert.match(markup, /<h1 id="title">Pocket Island<\/h1>/);
 
 function deferred() {
@@ -131,7 +132,7 @@ async function loadHost(caseId, startsLost = false, stored = null, mobile = fals
   status.textContent = 'Loading engine';
   node('error').hidden = true;
   Object.assign(doc, {
-    getElementById: node,
+    getElementById: (id) => caseId === "public-single-mode" && legacyControlIds.includes(id) ? null : node(id),
     querySelector: node,
     querySelectorAll: (selector) => selector === "[data-material]" ? swatches : selector === "[data-move]" ? touch : [],
     createElement: node,
@@ -553,8 +554,8 @@ console.log('Blur reset ignored repeated key-down and accepted a fresh press.');
 const page = await readFile(new URL('../voxel/index.html', import.meta.url), 'utf8');
 assert.match(page, /<html lang="en">/);
 assert.match(page, /<title>Pocket Island • Wosy<\/title>/);
-assert.match(page, /href="\.\/style\.css\?v=beacon-bearing-v1-arcade-ui4-launch1"/);
-assert.match(page, /src="\.\/main\.js\?v=beacon-east-arch-v1-arcade-ui4-launch1"/);
+assert.match(page, /href="\.\/style\.css\?v=beacon-bearing-v1-arcade-ui4-single1"/);
+assert.match(page, /src="\.\/main\.js\?v=beacon-east-arch-v1-arcade-ui4-single1"/);
 assert.match(page, /id="move-stick"/);
 assert.doesNotMatch(page, /class="dpad"|data-move="Key[WASD]"/);
 assert.match(page, /title="Dirt · 2"/);
@@ -692,6 +693,17 @@ assert.equal(ocean.counters.generations, 1, 'water restoration must not reset wa
 assert(ocean.counters.uploads.slice(staticUploads).some((upload) => upload.length === 36 &&
   upload.every((component, index) => component === latestWave[index])), 'restore must upload the newest water bytes even after memory growth');
 console.log('Verified water buffer reuse, coherent transparency order and restoration of the latest wave.');
+
+const single = await loadHost('public-single-mode', false, '7');
+await single.resolveFetch();
+assert.deepEqual(single.counters.seeds, [7], 'public launcher retains the stored seed without editing controls');
+assert.equal(single.node('mission-start').disabled, false);
+single.node('mission-start').dispatch('click');
+single.grantLock();
+single.frame();
+assert.equal(single.counters.missionStarts, 1);
+single.node('pause').dispatch('click');
+assert.equal(single.node('mission-start').textContent, 'Resume Beacon Run');
 
 const beacon = await loadHost('beacon-run');
 await beacon.resolveFetch();

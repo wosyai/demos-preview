@@ -33,18 +33,9 @@ button:focus-visible,input:focus-visible,summary:focus-visible{outline:2px solid
 .icon:hover,.random:hover{background:#365140}
 .icon svg,.random svg{width:100%;height:100%}
 .intro{position:absolute;inset-inline-start:clamp(1.15rem,6.75vw,7rem);top:46%;transform:translateY(-46%);width:min(33rem,90vw);transition:opacity .24s,transform .24s;pointer-events:none}
-.intro button,.world-options,.entry-guide{pointer-events:auto}
+.intro button,.entry-guide{pointer-events:auto}
 .glyph-source{position:absolute}
 .sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip-path:inset(50%);white-space:nowrap;border:0}
-.world-options{width:min(100%,22rem);margin-top:.45rem}
-.world-options summary{width:max-content;max-width:100%;min-height:44px;align-content:center;padding:0 .08rem;cursor:pointer;color:#e0ead8;font-size:.84rem;font-weight:650}
-.world-options summary:hover{color:var(--lime)}
-.world-options summary:focus-visible{outline:2px solid var(--lime);outline-offset:3px}
-.world-options .seed{width:max-content;max-width:100%;margin-top:.4rem}
-.intro .world-options p{margin:0;color:#dbe8d9;font-size:.83rem}
-.world-options button.secondary{margin-top:.45rem}
-.world-options .seed{flex-wrap:wrap}
-.world-options .seed input{min-width:0}
 h1{margin:.6rem 0 .95rem;font-size:clamp(3.45rem,7vw,7.4rem);font-weight:855;letter-spacing:-.083em;line-height:.85}
 h1 span{color:var(--lime)}
 .intro p{max-width:23rem;margin:0 0 1.45rem;color:#edf3e4;font-size:clamp(1rem,1.4vw,1.22rem)}
@@ -58,12 +49,6 @@ button.primary{display:inline-flex;align-items:center;justify-content:center;gap
 .camera-legend svg + svg{margin-right:.16rem}
 .intro .entry-guide p{max-width:19.5rem;margin:0;color:#dbe8d9;font-size:.83rem;line-height:1.45}
 kbd{display:inline-block;border:1px solid #ffffff4a;border-radius:.27rem;margin-right:.17rem;padding:.14rem .26rem;color:#f6f8ed;background:#182d28a8;font:650 .71rem ui-monospace,monospace}
-.seed{display:flex;align-items:center;gap:.35rem;padding:.36rem;border:1px solid var(--outline);border-radius:.78rem;background:#132a24eb;white-space:nowrap}
-.seed label{padding:.3rem .4rem;color:var(--muted);font:750 .72rem ui-monospace,monospace;letter-spacing:.08em}
-.seed input{background:#223c32;color:var(--paper);border:1px solid #f1ffdd2b;border-radius:.45rem;width:6.7rem;padding:.4rem .45rem;font:650 .87rem ui-monospace,monospace}
-.seed button{border:0;border-radius:.42rem;color:var(--lime);background:#2a4734;padding:.34rem .65rem;font-size:.86rem;font-weight:680}
-.seed button:hover:enabled{background:#3e6348}
-.seed .random{display:grid;place-items:center;width:2rem;height:2rem;padding:.4rem}
 .touch,.reticle,.notice:empty,.entry-touch{display:none}
 .reticle{position:absolute;left:var(--aim-x,50%);top:var(--aim-y,50%);transform:translate(-50%,-50%);height:13px;width:13px;pointer-events:none;filter:drop-shadow(0 1px 0 #111a1a)}
 .reticle:before,.reticle:after{content:"";background:#f7faf3;position:absolute}
@@ -81,7 +66,7 @@ kbd{display:inline-block;border:1px solid #ffffff4a;border-radius:.27rem;margin-
 .playing .intro{opacity:0;visibility:hidden;transform:translateY(-42%);pointer-events:none}
 .playing .intro button{pointer-events:none}
 .playing .reticle{display:block}
-@media(max-width:690px){.brand-line{display:none}.top{inset-inline:.87rem}.seed input{width:5.4rem}.notice{bottom:5.1rem}}
+@media(max-width:690px){.brand-line{display:none}.top{inset-inline:.87rem}.notice{bottom:5.1rem}}
 @media(max-width:470px){.status{font-size:.7rem;padding:.52rem .6rem}.mark{width:2rem;height:2rem}.brand-name{font-size:1.01rem}.top-actions{gap:.35rem}.icon{width:2.2rem;height:2.2rem}.intro{top:50%;width:calc(100% - 2.3rem)}.intro p{max-width:18rem}}
 @media(max-width:360px){.top{gap:.4rem}.top .status{max-width:7.5rem;white-space:normal;padding:.36rem .45rem}.brand-name{font-size:.94rem}}
 @media(max-height:550px){.intro{top:48%}.intro h1{font-size:clamp(2.6rem,10vh,5.7rem);margin:.35rem 0 .65rem}.intro p{margin-bottom:.65rem;font-size:.9rem}.intro .primary{padding:.55rem .75rem}.intro .error{margin-top:.4rem}}
@@ -199,7 +184,6 @@ kbd{display:inline-block;border:1px solid #ffffff4a;border-radius:.27rem;margin-
 }
 @media(max-height:430px){
   .intro .mission-intro{margin:.52rem 0 0;font-size:.82rem}
-  .intro .world-options{margin-top:.25rem}
 }
 
 .guide-hint:not([hidden]){display:flex;align-items:center;gap:.42rem;margin:0;font-size:.8rem;line-height:1.25;color:#edffbe}
