@@ -637,6 +637,12 @@ export function bootFlight(win, doc) {
       reset(current, true);
       return;
     }
+    if (event.code === "Space" && mode === "playing" && !modal && !lost && !loading && !error &&
+        (event.target === viewToggle || event.target?.closest?.("button") === viewToggle)) {
+      event.preventDefault();
+      if (down && !event.repeat && dropAvailable) dropPending = true;
+      return;
+    }
     if (!down) {
       if (controls.keys.delete(event.code)) { event.preventDefault(); syncButtons(); }
       return;

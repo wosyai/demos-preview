@@ -389,7 +389,7 @@ test("the Flight pause host has its own release token with matching v7 assets", 
   await sim.ready;
   const html = await readFile(new URL("../index.html", import.meta.url), "utf8");
   assert.match(html, /href="\.\/style\.css\?v=load-waypoint-flight-v7-arcade-ui4"/);
-  assert.match(html, /src="\.\/host\.mjs\?v=load-waypoint-flight-v7-arcade-ui4"/);
+  assert.match(html, /src="\.\/host\.mjs\?v=load-waypoint-flight-v7-arcade-ui4-space1"/);
   assert.deepEqual(sim.called.requests.map((url) => [url.pathname.split("/").at(-1), url.search]),
     [["flight.wasm", "?v=load-waypoint-flight-v7"]]);
 });
@@ -417,6 +417,36 @@ test("view button and V toggle the engine camera without resetting a route", asy
   assert.equal(button.getAttribute("aria-pressed"), "false");
   assert.equal(sim.nodes.get("game").classes.has("is-cockpit"), false);
   assert.deepEqual(sim.called.reset, resets);
+});
+
+test("Space dispatches the Paris mission action even when the camera button has focus", async () => {
+  const sim = mock({ inputVersion: 1 });
+  await sim.ready;
+  sim.courses[1].events("click");
+  const camera = sim.nodes.get("view-toggle");
+  camera.focus();
+  camera.events("click");
+  const views = sim.called.views.slice();
+  const press = (type, props = {}) => sim.win.events(type, {code: "Space", target: camera, ...props});
+  sim.cue({phase: 2});
+  sim.frame(20);
+  assert.equal(press("keydown").prevented, true);
+  assert.equal(press("keyup").prevented, true);
+  sim.frame(32);
+  assert.equal(sim.called.tick.at(-1)[1] & 128, 0, "an unavailable release stays blocked");
+  sim.cue({phase: 1, dropStatus: 9});
+  sim.frame(120);
+  assert.equal(press("keydown").prevented, true);
+  assert.equal(press("keyup").prevented, true);
+  sim.frame(138);
+  assert.equal(sim.called.tick.at(-1)[1] & 128, 128);
+  assert.equal(press("keydown", {repeat: true}).prevented, true);
+  sim.frame(155);
+  assert.equal(sim.called.tick.at(-1)[1] & 128, 0);
+  assert.deepEqual(sim.called.views, views);
+  assert.equal(sim.win.events("keydown", {code: "Enter", target: camera}).prevented, false);
+  camera.events("click", {detail: 0});
+  assert.equal(sim.called.views.at(-1), 0, "the native keyboard activation still changes the camera");
 });
 
 test("phone rotation releases the old touch and accepts a fresh steer in the new aspect", async () => {
