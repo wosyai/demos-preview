@@ -1602,6 +1602,42 @@ unit() supply_beacon = fn {
 	ground_patch(x+4.38,z-5.38,0.62,10.76,0.39,0.14,0.72,0.67);
 };
 
+unit(f32,f32,f32,f32,f32,f32,f32,f32) load_ink = fn(x,z,rx,rz,left,bottom,width,height) {
+	f32 ax = x+rx*left;
+	f32 az = z+rz*left;
+	f32 bx = ax+rx*width;
+	f32 bz = az+rz*width;
+	quad(ax,bottom,az,bx,bottom,bz,bx,bottom+height,bz,ax,bottom+height,az,0.42,0.97,0.84);
+};
+
+unit(f32,f32,f32,f32,f32) load_waypoint = fn(x,y,z,hx,hz) {
+	f32 rx = hz;
+	f32 rz = -hx;
+	f32 b = if (cockpit_view) { y+0.94 } else { y+3.0 };
+	f32 t = b+1.75;
+	f32 l = -2.65;
+	f32 r = 2.65;
+	quad(x+rx*l,b,z+rz*l,x+rx*r,b,z+rz*r,x+rx*r,t,z+rz*r,x+rx*l,t,z+rz*l,0.045,0.17,0.16);
+	if (!cockpit_view) { tri(x-rx*0.42,b,z-rz*0.42,x+rx*0.42,b,z+rz*0.42,x,y+2.18,z,0.42,0.97,0.84); };
+	f32 load_ink_origin_x = x-hx*0.028;
+	f32 load_ink_origin_z = z-hz*0.028;
+	f32 load_ink_origin_y = b+0.37;
+	load_ink(load_ink_origin_x,load_ink_origin_z,rx,rz,-2.2,load_ink_origin_y,0.16,1.0);
+	load_ink(load_ink_origin_x,load_ink_origin_z,rx,rz,-2.04,load_ink_origin_y,0.74,0.16);
+	load_ink(load_ink_origin_x,load_ink_origin_z,rx,rz,-1.05,load_ink_origin_y,0.16,1.0);
+	load_ink(load_ink_origin_x,load_ink_origin_z,rx,rz,-0.89,load_ink_origin_y,0.58,0.16);
+	load_ink(load_ink_origin_x,load_ink_origin_z,rx,rz,-0.89,load_ink_origin_y+0.84,0.58,0.16);
+	load_ink(load_ink_origin_x,load_ink_origin_z,rx,rz,-0.31,load_ink_origin_y,0.16,1.0);
+	load_ink(load_ink_origin_x,load_ink_origin_z,rx,rz,0.10,load_ink_origin_y,0.16,1.0);
+	load_ink(load_ink_origin_x,load_ink_origin_z,rx,rz,0.26,load_ink_origin_y+0.46,0.58,0.16);
+	load_ink(load_ink_origin_x,load_ink_origin_z,rx,rz,0.26,load_ink_origin_y+0.84,0.58,0.16);
+	load_ink(load_ink_origin_x,load_ink_origin_z,rx,rz,0.84,load_ink_origin_y,0.16,1.0);
+	load_ink(load_ink_origin_x,load_ink_origin_z,rx,rz,1.25,load_ink_origin_y,0.16,1.0);
+	load_ink(load_ink_origin_x,load_ink_origin_z,rx,rz,1.41,load_ink_origin_y,0.58,0.16);
+	load_ink(load_ink_origin_x,load_ink_origin_z,rx,rz,1.41,load_ink_origin_y+0.84,0.58,0.16);
+	load_ink(load_ink_origin_x,load_ink_origin_z,rx,rz,1.99,load_ink_origin_y+0.12,0.16,0.76);
+};
+
 unit(f32,f32,f32,f32,f32,f32,f32,f32) drop_ink = fn(x,z,rx,rz,left,bottom,width,height) {
 	f32 ax = x+rx*left;
 	f32 az = z+rz*left;
@@ -1669,7 +1705,8 @@ unit() flight_guides = fn {
 		f32 tx = objective_x(stage,x,z);
 		f32 tz = objective_z(stage,x,z);
 		if (stage == MissionPhase::cargo_pickup) {
-			diamond(x,y+4.0,z,1.75,-2.25,0.28,1.0,0.89);
+			f32 load_board_offset = if (cockpit_view) { 12.0 } else { 0.0 };
+			load_waypoint(poses[0].x+hx*load_board_offset,poses[0].y,poses[0].z+hz*load_board_offset,hx,hz);
 		} else {
 			bool final_strip = stage == MissionPhase::landing_approach || stage == MissionPhase::final_rollout || stage == MissionPhase::mail_in_flight;
 			f32 run_z = if (final_strip) { strip_z() } else { pickup_z() };

@@ -148,7 +148,7 @@ async function loadHost(caseId, startsLost = false, stored = null, mobile = fals
     devicePixelRatio: 1,
     fetch(url) {
       assert(url.pathname.endsWith('/voxel/engine.wasm'));
-      assert.equal(url.search, '?v=beacon-swim-v1');
+      assert.equal(url.search, '?v=beacon-bearing-v1');
       return fetchResponse.promise;
     },
     requestAnimationFrame(fn) { frames.set(++frameId, fn); return frameId; },
@@ -220,8 +220,9 @@ async function loadHost(caseId, startsLost = false, stored = null, mobile = fals
           showcase.outline(1024, 2);
         }
         if (mission && counters.missionOverride !== undefined) mission = counters.missionOverride;
-        new Float32Array(memory.buffer, 512, 30).set([
-          +counters.flying, +counters.grounded, counters.picked, mission, mission === 3 ? 0 : .75, .50, 5, counters.relay ?? 0
+        new Float32Array(memory.buffer, 512, 37).set([
+          +counters.flying, +counters.grounded, counters.picked, mission, mission === 3 ? 0 : .75, .50, 5, counters.relay ?? 0,
+          counters.guide ?? 0, 0, 0, 0, 0, ...(counters.bearing ?? [0, 0])
         ], 22);
         showcase.frame(512, caseId === 'water-life' && active ? 1 : -1);
       },
@@ -388,7 +389,7 @@ creative.node('flight-touch').dispatch('click');
 creative.frame();
 assert.equal(creative.node('flight-touch')['aria-pressed'], 'false', 'physical F suppresses a concurrent touch toggle');
 creative.doc.dispatch('keyup', { code: 'KeyF' });
-console.log('Creative host smoke passed: 30-float HUD, Wosy material authority, keyboard/wheel/touch inputs, and selected placement.');
+console.log('Creative host smoke passed: 37-float HUD, Wosy material authority, keyboard/wheel/touch inputs, and selected placement.');
 
 const accessible = await loadHost('accessible');
 await accessible.resolveFetch();
@@ -549,8 +550,8 @@ console.log('Blur reset ignored repeated key-down and accepted a fresh press.');
 const page = await readFile(new URL('../voxel/index.html', import.meta.url), 'utf8');
 assert.match(page, /<html lang="en">/);
 assert.match(page, /<title>Pocket Island • Wosy<\/title>/);
-assert.match(page, /href="\.\/style\.css\?v=beacon-6-arcade-ui4"/);
-assert.match(page, /src="\.\/main\.js\?v=beacon-swim-v1-arcade-ui4"/);
+assert.match(page, /href="\.\/style\.css\?v=beacon-bearing-v1-arcade-ui4"/);
+assert.match(page, /src="\.\/main\.js\?v=beacon-bearing-v1-arcade-ui4"/);
 assert.match(page, /id="move-stick"/);
 assert.doesNotMatch(page, /class="dpad"|data-move="Key[WASD]"/);
 assert.match(page, /title="Dirt · 2"/);
@@ -702,9 +703,25 @@ assert.equal(beacon.node('flame').value, .75);
 assert.equal(beacon.node('tide-level').textContent, 'Rising tide');
 assert.equal(beacon.node('bridge-stock').textContent, '5');
 assert.equal(beacon.node('relay-goal').textContent, 'Cross to the north watchfire');
+const bearing = beacon.node('objective-bearing');
+beacon.counters.bearing = [1, 0];
+beacon.frame();
+assert.equal(bearing.hidden, false);
+assert.equal(bearing.style.transform, 'rotate(90deg)');
+beacon.counters.bearing = [-1, 0];
+beacon.frame();
+assert.equal(bearing.style.transform, 'rotate(270deg)');
+beacon.counters.guide = 1;
+beacon.counters.bearing = [0, 0];
+beacon.frame();
+assert.equal(bearing.hidden, true, 'Wosy suppresses the bearing while its edit cue is active');
+beacon.counters.guide = 0;
+beacon.counters.bearing = [0, 1];
 beacon.counters.relay = 1;
 beacon.frame();
 assert.equal(beacon.node('relay-goal').textContent, 'Light the west watchfire');
+assert.equal(bearing.hidden, false);
+assert.equal(bearing.style.transform, 'rotate(0deg)');
 beacon.counters.relay = 2;
 beacon.frame();
 assert.equal(beacon.node('relay-goal').textContent, 'Climb to the lighthouse');
@@ -720,6 +737,7 @@ assert(beacon.node('game').classes.has('playing'), 'result remains visible after
 assert.equal(beacon.node('mission-readouts').hidden, true);
 assert.equal(beacon.node('mission-retry').hidden, false);
 assert.equal(beacon.node('mission-result').textContent, 'The sea put out the flame.');
+assert.equal(bearing.hidden, true, 'the host rejects a stale direction on terminal frames');
 delete beacon.counters.missionOverride;
 beacon.node('mission-retry').dispatch('click');
 beacon.grantLock();
@@ -739,5 +757,6 @@ assert.equal(beacon.doc.pointerLockElement, beacon.node('scene'), 'sandbox trans
 beacon.frame();
 assert.equal(beacon.counters.missionLeaves, 1, 'switch back restores through the engine, never regenerates terrain');
 assert.equal(beacon.counters.generations, 1);
+assert.equal(bearing.hidden, true, 'no objective bearing leaks into Creative');
 assert.equal(beacon.node('mission-hud').hidden, true);
 console.log('Verified Beacon Run entry, authoritative HUD, terminal pointer lock, retry, and sandbox switch.');

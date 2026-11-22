@@ -19,7 +19,7 @@ for (const aspect of [.56, 1.67]) {
         hashes.set(chunk, createHash('sha256').update(bytes).digest('hex'));
       },
       frame(pointer, hit) {
-        hud = Array.from(new Float32Array(engine.memory.buffer, pointer, 30));
+        hud = Array.from(new Float32Array(engine.memory.buffer, pointer, 37));
         target = hit;
       },
     },
@@ -36,6 +36,7 @@ for (const aspect of [.56, 1.67]) {
   ];
   tick();
   assert.deepEqual(hud.slice(25, 30), [1, 1, 0, 12, 0]);
+  assert.deepEqual(hud.slice(35, 37), [0, 0], 'the optional timber cue takes visual priority');
   const aimNorthAt = (y, z) => {
     const pitch = Math.atan2(y - hud[17], hud[18] - z);
     engine.look(0, (hud[19] - pitch) / .0034);
@@ -97,6 +98,12 @@ for (const aspect of [.56, 1.67]) {
   }
   forwardTo(16.48);
   assert.equal(hud[29], 1, 'light the first watchfire by reaching its shore');
+  assert(hud[35] < -10 && hud[36] > 5, 'the next objective is the actual west watchfire, left and ahead');
+  engine.look(Math.PI / 2 / .0034, 0);
+  tick();
+  assert(hud[35] < -5 && hud[36] < -10, 'after turning east, the west watchfire is now behind');
+  engine.look(-Math.PI / 2 / .0034, 0);
+  tick();
   const dx = 22.5 - hud[16], dz = hud[18] - 15.5;
   const yaw = Math.atan2(dx, dz);
   const pitch = Math.atan2(5.5 - hud[17], Math.hypot(dx, dz));
@@ -214,4 +221,8 @@ for (const aspect of [.56, 1.67]) {
   assert.equal(water[farSample], 76);
   assert.equal(water[farSample + 2], 76);
   assert(water[farSample + 1] > 2 && water[farSample + 1] < 5, 'the physical sea grid covers the far islands');
+  engine.leave_beacon();
+  tick();
+  assert.equal(hud[25], 0);
+  assert.deepEqual(hud.slice(35, 37), [0, 0], 'the last bearing cannot leak when leaving Beacon Run');
 }

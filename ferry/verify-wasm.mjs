@@ -80,7 +80,18 @@ function answerPhone() {
 }
 function pickup() {
   answerPhone();
-  for(const p of [[3.8,-4.6],[3.8,28.9],[-82,28.9],[-82,36.6]]) walkTo(...p);
+  const points=[[3.8,-4.6],[3.8,28.9],[-82,28.9],[-82,36.6]];
+  const first=guidePoints();
+  assert.equal(first.length,4,"walking after the phone suggests the tested street corridor");
+  first.forEach((point,i)=>closePoint(point,points[i]));
+  for(let i=0;i<points.length;i++) {
+    walkTo(...points[i]);
+    const remaining=guidePoints();
+    const start=Math.min(i,points.length-2);
+    assert.equal(remaining.length,points.length-start);
+    remaining.forEach((point,j)=>closePoint(point,points[start+j]));
+    assert.equal(frame[18],90,"map guidance does not start the tape timer");
+  }
   assert.equal(frame[20],3);
   tick(0,0,2);
   assert.equal(frame[17],1);

@@ -282,6 +282,7 @@ f32[2][4] avenue_foot = [[-9.5,30.2],[3.9,30.2],[3.9,70.7],[8.10,73.55]];
 i32 avenue_leg = -1;
 i32 avenue_walk_leg = -1;
 f32 tape_z = 36.6;
+f32[2][3] pickup_foot = [[3.80,-4.6],[3.80,28.9],[-82.0,28.9]];
 f32 dock_x = 11.0;
 f32 dock_z = 83.0;
 f32 harbor_traffic_end = 69.9;
@@ -1291,9 +1292,31 @@ f32() pier_guide_z = fn {
     } } }
 };
 
-i32() route_selection = fn {
-    if (stage==MissionStage::pickup_tape && follows_backstreet()) { 16+pickup_leg }
+i32() pickup_foot_leg = fn {
+    f32 edge=0.85;
+    if (abs_f(foot_x-pickup_foot[2][0])<=edge &&
+        foot_z>=pickup_foot[2][1]-edge && foot_z<=tape_z+edge) { 3 }
     else {
+        if (abs_f(foot_z-pickup_foot[1][1])<=edge &&
+            foot_x>=pickup_foot[2][0]-edge && foot_x<=pickup_foot[1][0]+edge) { 2 }
+        else {
+            if (abs_f(foot_x-pickup_foot[0][0])<=edge &&
+                foot_z>=pickup_foot[0][1]-edge && foot_z<=pickup_foot[1][1]+edge) { 1 } else { 0 }
+        }
+    }
+};
+
+i32() route_selection = fn {
+    if (stage==MissionStage::pickup_tape) {
+        if (follows_backstreet()) { 16+pickup_leg }
+        else {
+            if (in_car) { 0 }
+            else {
+                i32 foot_leg=pickup_foot_leg();
+                if (foot_leg>0) { 112+foot_leg } else { 0 }
+            }
+        }
+    } else {
         if (stage!=MissionStage::reach_pier) { 0 }
         else {
             if (avenue_leg>=0 && in_car) { 32+avenue_leg }
@@ -1323,7 +1346,7 @@ f32(i32,i32,i32) route_value = fn(key,row,column) {
     else { if (route==2) { 10 }
     else { if (route==3) { 5 }
     else { if (route==4) { 4 }
-    else { if (route==5) { 7 } else { if (route==6) { 4 } else { 0 } } } } } };
+    else { if (route==5) { 7 } else { if (route==6 || route==7) { 4 } else { 0 } } } } } };
     if (key<=0 || leg>=route_count) { 0.0 }
     else {
         if (row==-1 && column==0) { float_i(route_count-start) }
@@ -1332,14 +1355,18 @@ f32(i32,i32,i32) route_value = fn(key,row,column) {
             else {
                 i32 point=start+row;
                 u64 n=ix(point); u64 c=ix(column);
-                if ((route==3 || route==4 || route==6) && point==route_count-1) {
-                    if (column==0) { dock_x } else { dock_z }
+                if (route==7) {
+                    if (point<3) { pickup_foot[n][c] } else { if (column==0) { tape_x } else { tape_z } }
                 } else {
-                    if (route==1) { pickup_route[n][c] }
-                    else { if (route==2) { avenue_route[n][c] }
-                    else { if (route==3) { avenue_foot[n][c] }
-                    else { if (route==4) { waterfront_route[n][c] }
-                    else { if (route==5) { return_route[n][c] } else { harbor_walk_point(point,column) } } } } }
+                    if ((route==3 || route==4 || route==6) && point==route_count-1) {
+                        if (column==0) { dock_x } else { dock_z }
+                    } else {
+                        if (route==1) { pickup_route[n][c] }
+                        else { if (route==2) { avenue_route[n][c] }
+                        else { if (route==3) { avenue_foot[n][c] }
+                        else { if (route==4) { waterfront_route[n][c] }
+                        else { if (route==5) { return_route[n][c] } else { harbor_walk_point(point,column) } } } } }
+                    }
                 }
             }
         }

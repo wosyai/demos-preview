@@ -448,7 +448,7 @@ export function bootFlight(win, doc) {
       cue = `Brake to load cargo · ${meters} left to stop`;
     } else if (phase === 9) {
       label = current === 1 ? "Pick up the mail pouch" : "Pick up the spray";
-      cue = "Press Space or tap Load to collect cargo";
+      cue = "Stopped on the strip · press Space or tap Load";
     } else if (phase === 11) {
       label = `Spray the marked rows · ${frame[31]}/3`;
       const sprayCues = {5:"Descend toward the row", 6:"Climb above the row", 7:"Level the wings and center on the row", 8:"Approach the next marked row", 9:"Spray now"};
@@ -753,7 +753,7 @@ export function bootFlight(win, doc) {
     if (!gl) { failure("This game needs WebGL 2. Try a current browser with hardware acceleration enabled."); return; }
     try {
       gpu = graphics(gl);
-      const wasm = await win.fetch(new URL("./flight.wasm?v=ring-feedback-flight-v7", import.meta.url));
+      const wasm = await win.fetch(new URL("./flight.wasm?v=load-waypoint-flight-v7", import.meta.url));
       if (!wasm.ok) throw new Error("The flight engine could not be downloaded.");
       const { instance } = await win.WebAssembly.instantiate(await wasm.arrayBuffer(), imports);
       engine = instance.exports;

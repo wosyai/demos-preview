@@ -6,8 +6,8 @@
 <meta name="theme-color" content="#152a24">
 <meta name="description" content="Explore and reshape a small block island built in Wosy and rendered in your browser.">
 <title>Pocket Island • Wosy</title>
-<link rel="stylesheet" href="./style.css?v=beacon-6-arcade-ui4">
-<script type="module" src="./main.js?v=beacon-swim-v1-arcade-ui4-preview-seed1"></script>
+<link rel="stylesheet" href="./style.css?v=beacon-bearing-v1-arcade-ui4">
+<script type="module" src="./main.js?v=beacon-bearing-v1-arcade-ui4-preview-seed1"></script>
   <link rel="stylesheet" href="../arcade/shell.css?v=4">
 </head>
 <body class="arcade-island">
@@ -38,7 +38,7 @@
     <section class="mission-hud" id="mission-hud" aria-label="Beacon Run" hidden>
       <p id="mission-result" aria-live="polite" hidden></p>
       <div class="mission-readouts" id="mission-readouts">
-        <div class="objective"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="#glyph-goal"/></svg><strong id="relay-goal" aria-live="polite">Cross to the north watchfire</strong></div>
+        <div class="objective"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="#glyph-goal"/></svg><strong id="relay-goal" aria-live="polite">Cross to the north watchfire</strong><span id="objective-bearing" class="objective-bearing" aria-hidden="true" hidden><svg viewBox="0 0 24 24"><path d="M12 3 21 20 12 16 3 20Z" fill="currentColor"/></svg></span></div>
         <p class="guide-hint" id="guide-hint" aria-live="polite" hidden><svg viewBox="0 0 24 24" aria-hidden="true"><use id="guide-hint-icon" href="#glyph-break"/></svg><span id="guide-hint-text"></span></p>
         <div class="supplies">
           <label class="metric"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="#glyph-flame"/></svg><span class="sr-only">Flame</span><meter id="flame" min="0" max="1" value="1"></meter></label>

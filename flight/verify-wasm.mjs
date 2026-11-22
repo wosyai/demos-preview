@@ -218,6 +218,32 @@ function marker(color, minY = -Infinity) {
     }
     return result;
 }
+function verifyCueProjection(label, cue, minimumWidth, minimumHeight) {
+    const before = frame.slice();
+    for (const view of [0, 1]) for (const aspect of [1.65, .45]) {
+        engine.select_view(view);
+        tick(0, 0, aspect);
+        assert.deepEqual(frame.subarray(16), before.subarray(16), label + " camera inspection must not advance play");
+        const points = cue(view);
+        assert(points.length > 0, label + " emits actual geometry");
+        const ndc = points.map(([x,y,z]) => {
+            const c = (i) => frame[i]*x+frame[i+4]*y+frame[i+8]*z+frame[i+12];
+            const w = c(3);
+            assert(w > 0, label + " is in front of the eye");
+            const projected = [c(0)/w, c(1)/w, c(2)/w];
+            assert(projected.every(value => Math.abs(value) < 1),
+                label + " fits the true frustum in view " + view + " at aspect " + aspect);
+            return projected;
+        });
+        for (const [axis, minimum] of [[0, minimumWidth], [1, minimumHeight]]) {
+            const values = ndc.map(point => point[axis]);
+            assert(Math.max(...values)-Math.min(...values) > minimum, label + " is legible on screen");
+        }
+    }
+    engine.select_view(0);
+    tick(0, 0, 1.65);
+    assert.deepEqual(frame, before, label + " restores the ordinary chase replay frame");
+}
 if (!comparisonBaseline) {
     for (const course of [0,1]) {
         reset(course);
@@ -254,10 +280,12 @@ function cueRanges() {
     if (archivedCount) group("previously-cleared",archivedCount,[archived]);
     if (rim.every((value,c) => Math.abs(aircraft[offset+3+c]-value)<.001))
         group("arrow",comparisonBaseline ? 12 : 30,[cyan,rim]);
-    if ([7,8,9].includes(frame[20]))
+    if ([7,8].includes(frame[20]) || (comparisonBaseline && frame[20] === 9))
         group("pickup",12,[1,.89,.77,.95].map(scale => cyan.map(value => value*scale)));
     if (!comparisonBaseline && [7,8].includes(frame[20]))
         group("pickup-footprint",24,[[.14,.72,.67]]);
+    if (!comparisonBaseline && frame[20] === 9)
+        group("pickup",93,[[.045,.17,.16],[.42,.97,.84]]);
     return ranges;
 }
 
@@ -346,7 +374,8 @@ function sortie(course, mode = "normal") {
     const observer = observeMarkers(course, mode);
     let premature = false, canceled = false, wrongWindow = false, checkedSupply = false, confirmed = 0;
     let surveyCruise = false, surveyEast = false;
-    let checkedPortraitDrop = false, checkedChaseDrop = false;
+    let checkedPortraitDrop = false, checkedChaseDrop = false, checkedSupplyFrustum = false;
+    const checkedLoadVisibility = new Set();
     function step(input = 0, dt = 1/30, aspect = 1.65) {
         const gates = frame[32];
         tick(input,dt,aspect);
@@ -380,6 +409,14 @@ function sortie(course, mode = "normal") {
                 assert(bounded(xs, cx-5, cx+5) && bounded(zs, cz-6, cz+6), "the outline is anchored at the same runway position as the floating beacon");
                 checkedSupply = true;
             }
+            if (!comparisonBaseline && !checkedSupplyFrustum && mode === "normal"
+                && p.z >= supply-32 && p.z < supply-30 && p.y > 1.5) {
+                verifyCueProjection("airborne supply beacon", () => marker([.28,1,.89])
+                    .concat(...[.89,.77,.95].map(scale => marker([.28,1,.89].map(c => c*scale))))
+                    .filter(([x,,z]) => Math.abs(x-(course ? -111 : -15)) < 2.6 && Math.abs(z-supply-34) < 2.6),
+                    .04, .035);
+                checkedSupplyFrustum = true;
+            }
             const distance = supply+12-p.z;
             const height = Math.min(6.5,1+distance*.064);
             input = pilot(p,0,height,distance>80 ? 0 : -.064,p.z>supply-43 ? 32 : 0);
@@ -391,10 +428,34 @@ function sortie(course, mode = "normal") {
                 continue;
             }
         }
+        if (!comparisonBaseline && [7,8,10].includes(phase) && !checkedLoadVisibility.has(phase)) {
+            assert.equal(marker([.42,.97,.84]).length,0,"no load sign before stationary admission or after loading");
+            checkedLoadVisibility.add(phase);
+        }
         if (phase === 8) input = mode === "overrun" ? 16 : 32;
         if (phase === 3) input = 32;
         if (phase === 9) {
-            assert(marker([.28, 1, .89]).length >= 3, "stopped cargo pickup has a world-space marker");
+            if (comparisonBaseline) {
+                assert(marker([.28, 1, .89]).length >= 3, "stopped cargo pickup has a world-space marker");
+            } else if (!checkedLoadVisibility.has(phase)) {
+                if (mode === "normal") {
+                    assert(checkedSupplyFrustum, "this ordinary flight checked the airborne supply cue during descent");
+                    verifyCueProjection("stopped load sign", (view) => {
+                        const label = marker([.42,.97,.84]);
+                        assert.equal(label.length,view ? 84 : 87,"only chase view points to the stopped plane");
+                        return label.concat(marker([.045,.17,.16]));
+                    }, .20, .09);
+                }
+                const ink = marker([.42,.97,.84]);
+                assert.equal(ink.length,87,"the phase-owned sign pays only for a pointer and fourteen strokes");
+                const tip = ink.reduce((a,b) => a[1]<b[1] ? a : b);
+                const chaseScale = Math.hypot(frame[0],frame[8]);
+                const across = (frame[0]*tip[0]+frame[8]*tip[2]+frame[12])/chaseScale;
+                const along = Math.sin(p.angle)*(tip[0]-p.x)+Math.cos(p.angle)*(tip[2]-p.z);
+                assert(Math.abs(across)<.01 && Math.abs(along)<.01,
+                    "the sign points to the actual stopped aircraft, not a fixed runway spot");
+                checkedLoadVisibility.add(phase);
+            }
             if (!canceled) {
                 assert.equal(p.speed, 0);
                 step(128,0);

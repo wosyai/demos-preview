@@ -1,4 +1,3 @@
-const SEED_STORAGE_KEY = "wosy-voxel-seed-preview";
 const get = (id) => document.getElementById(id);
 const shell = get("game");
 const canvas = get("scene");
@@ -12,6 +11,8 @@ const guideMarker = get("guide-marker"), guideMarkerIcon = get("guide-marker-ico
 const breakTouch = get("remove"), placeTouch = get("place");
 const guideLabels = ["", "Break marked timber for wood", "Walk to the dropped wood", "Place wood to bridge the channel"];
 const guideGlyphs = ["", "#glyph-break", "#glyph-collect", "#glyph-build"];
+const objectiveBearing = get("objective-bearing");
+let shownBearing = null;
 let shownGuide = 0, shownGuideReady = false;
 const seedInput = get("seed");
 const applySeed = get("apply-seed");
@@ -383,7 +384,7 @@ function generate(seed) {
   if (!atlas.data || previousMesh === terrainVersion || previousWater === layers.water.version) {
     throw new Error("The engine did not return geometry for the new island.");
   }
-  try { localStorage.setItem(SEED_STORAGE_KEY, String(seed)); } catch {}
+  try { localStorage.setItem("wosy-voxel-seed-preview", String(seed)); } catch {}
   seedInput.value = String(seed);
 }
 
@@ -394,7 +395,7 @@ async function boot() {
   }
   try {
     prepareGraphics();
-    const response = await fetch(new URL("./engine.wasm?v=beacon-swim-v1", import.meta.url));
+    const response = await fetch(new URL("./engine.wasm?v=beacon-bearing-v1", import.meta.url));
     if (!response.ok) throw new Error(`Engine not found (HTTP ${response.status}).`);
     const bytes = await response.arrayBuffer();
     const api = {
@@ -426,7 +427,7 @@ async function boot() {
     if (gl.isContextLost()) loseGraphics();
     engine._start();
     let stored = null;
-    try { stored = localStorage.getItem(SEED_STORAGE_KEY); } catch {}
+    try { stored = localStorage.getItem("wosy-voxel-seed-preview"); } catch {}
     generate(readSeed(stored, false) ?? engine.default_seed());
     loaded = true;
     if (gl.isContextLost()) loseGraphics();
@@ -528,11 +529,23 @@ function renderBeaconGuide(frame) {
   }
 }
 
+function renderObjectiveBearing(frame) {
+  const right = frame[35], forward = frame[36];
+  const heading = playing && frame[25] === 1 && (right || forward)
+    ? (Math.round(Math.atan2(right, forward) * 90 / Math.PI) * 2 + 360) % 360
+    : null;
+  if (heading === shownBearing) return;
+  shownBearing = heading;
+  objectiveBearing.hidden = heading === null;
+  if (heading !== null) objectiveBearing.style.transform = `rotate(${heading}deg)`;
+}
+
 function present(pointer, hit) {
   if (!gpu || contextLost || document.hidden) return;
-  const data = memoryFloats(pointer, 35);
+  const data = memoryFloats(pointer, 37);
   renderMission(data[25], data[26], data[27], data[28], data[29]);
   renderBeaconGuide(data);
+  renderObjectiveBearing(data);
   if (playing) renderControls(data[22] === 1, data[23] === 1, data[24]);
   reticle.classList.toggle("target", hit >= 0);
 

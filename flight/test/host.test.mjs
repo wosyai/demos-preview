@@ -388,10 +388,10 @@ test("the Flight pause host has its own release token with matching v7 assets", 
   const sim = mock();
   await sim.ready;
   const html = await readFile(new URL("../index.html", import.meta.url), "utf8");
-  assert.match(html, /href="\.\/style\.css\?v=ring-feedback-flight-v7-arcade-ui4"/);
-  assert.match(html, /src="\.\/host\.mjs\?v=ring-feedback-flight-v7-arcade-ui4"/);
+  assert.match(html, /href="\.\/style\.css\?v=load-waypoint-flight-v7-arcade-ui4"/);
+  assert.match(html, /src="\.\/host\.mjs\?v=load-waypoint-flight-v7-arcade-ui4"/);
   assert.deepEqual(sim.called.requests.map((url) => [url.pathname.split("/").at(-1), url.search]),
-    [["flight.wasm", "?v=ring-feedback-flight-v7"]]);
+    [["flight.wasm", "?v=load-waypoint-flight-v7"]]);
 });
 
 test("view button and V toggle the engine camera without resetting a route", async () => {

@@ -72,11 +72,11 @@ u8[4][16][8][16] block_atlas = [
 	blank_atlas_line, blank_atlas_line, blank_atlas_line, blank_atlas_line, blank_atlas_line, blank_atlas_line, blank_atlas_line, blank_atlas_line
 ];
 bool atlas_ready = false;
-f32[35] frame_values = [
+f32[37] frame_values = [
 	0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
 	0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
 	0.0, 1.0, 0.0, 0.0, 0.0,
-	0.0, 0.0, 0.0, 0.0, 0.0
+	0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0
 ];
 i32 write_position = 0;
 i32 wire_position = 0;
@@ -1577,6 +1577,18 @@ unit(f32, f32, f32, f32, f32, f32, f32, f32, i32) publish_frame = fn(x, y, z, sy
 	frame_values[28] = core.sint_to_float<f32>(bridge_blocks);
 	frame_values[29] = core.sint_to_float<f32>(relay_stage);
 	publish_beacon_guide(hit);
+	frame_values[35] = 0.0;
+	frame_values[36] = 0.0;
+	if (beacon_phase == BeaconPhase::active && frame_values[30] == 0.0) {
+		f32 goal_x = if (relay_stage == 1) { 9.5 } else { 24.5 };
+		f32 goal_z = if (relay_stage == 0) { 15.5 } else { if (relay_stage == 1) { 8.5 } else { 5.0 } };
+		f32 dx = goal_x - camera_pose.x;
+		f32 dz = goal_z - camera_pose.z;
+		if (dx * dx + dz * dz >= 0.25) {
+			frame_values[35] = dx * cy + dz * sy;
+			frame_values[36] = dx * sy - dz * cy;
+		};
+	};
 	unsafe { host.frame(core.pointer_cast<*?u8>(&?frame_values[0]), hit); };
 };
 
