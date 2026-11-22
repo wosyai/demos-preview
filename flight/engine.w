@@ -71,7 +71,7 @@ RenderPose empty_presentation = {
 };
 RenderPose[2] previous_pose = [empty_presentation, empty_presentation];
 RenderPose[2] presented_pose = [empty_presentation, empty_presentation];
-f32[35] display = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0];
+f32[36] display = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0];
 f32[7] empty_mail = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0];
 f32[7][3] mail = [empty_mail, empty_mail, empty_mail];
 
@@ -88,6 +88,7 @@ i32[3] spray_count = [0, 0, 0];
 i32 spray_tick = -50;
 i32[3] next_gate = [0, 0, 0];
 i32[3] ring_score = [0, 0, 0];
+i32 earned_gates = 0;
 i32 gate_flash = -1;
 i32 gate_flash_until = 0;
 i32[3] event_code = [0, 0, 0];
@@ -545,20 +546,20 @@ unit(i32) crop_markers = fn(n) {
 	};
 };
 
-unit(f32,f32,f32,i32,bool) gate_arch = fn(x,y,z,n,cleared) {
+unit(f32,f32,f32,i32,i32) gate_arch = fn(x,y,z,n,status) {
 	if (n < 14) {
 		f32 start = float_i(n)*0.44879895-3.14159265;
-		f32 low = if (cleared) { start } else { start+0.044 };
-		f32 high = if (cleared) { wrap(start+0.44879895) } else { wrap(start+0.44879895-0.044) };
+		f32 low = if (status != 0) { start } else { start+0.044 };
+		f32 high = if (status != 0) { wrap(start+0.44879895) } else { wrap(start+0.44879895-0.044) };
 		f32 ss = sin_small(low);
 		f32 cs = cos_small(low);
 		f32 es = sin_small(high);
 		f32 ec = cos_small(high);
-		f32 r = if (cleared) { 0.22 } else { 1.0 };
-		f32 g = if (cleared) { 1.0 } else { 0.66 };
-		f32 b = if (cleared) { 0.43 } else { 0.19 };
+		f32 r = if (status == 0) { 1.0 } else { if (status == 1) { 0.22 } else { 0.23 } };
+		f32 g = if (status == 0) { 0.66 } else { if (status == 1) { 1.0 } else { 0.58 } };
+		f32 b = if (status == 0) { 0.19 } else { 0.43 };
 		quad(x+ss*9.5,y+cs*5.3,z,x+es*9.5,y+ec*5.3,z,x+es*9.1,y+ec*4.93,z,x+ss*9.1,y+cs*4.93,z,r,g,b);
-		gate_arch(x,y,z,n+1,cleared);
+		gate_arch(x,y,z,n+1,status);
 	};
 };
 
@@ -1281,7 +1282,11 @@ unit(u64,u64,f32,f32,f32) score_gate = fn(plane,race,x0,y0,z0) {
 			if (dx*dx+dy*dy <= 1.0) {
 				ring_score[race] = ring_score[race]+1;
 				next_gate[race] = n+1;
-				if (race == 0) { gate_flash = n; gate_flash_until = stage_tick[0]+43; };
+				if (race == 0) {
+					earned_gates = earned_gates | (1 << n);
+					gate_flash = n;
+					gate_flash_until = stage_tick[0]+43;
+				};
 			};
 		};
 	};
@@ -1636,12 +1641,23 @@ unit(f32,f32) drop_waypoint = fn(hx,hz) {
 	drop_ink(ix0,iz0,rx,rz,2.68,7.32,1.08,0.28);
 };
 
+bool() ring_celebrating = fn { gate_flash >= 0 && stage_tick[0] < gate_flash_until };
+
+unit(i32,bool) passed_guides = fn(n,celebrating) {
+	if (n < 3) {
+		if ((earned_gates & (1 << n)) != 0 && (!celebrating || n != gate_flash)) {
+			gate_arch(gate_x(n),gate_y(n),gate_z(n),0,2);
+		};
+		passed_guides(n+1,celebrating);
+	};
+};
+
 unit() flight_guides = fn {
 	i32 next = next_gate[0];
-	if (next < 3) { gate_arch(gate_x(next),gate_y(next),gate_z(next),0,false); };
-	if (gate_flash >= 0 && stage_tick[0] < gate_flash_until) {
-		gate_arch(gate_x(gate_flash),gate_y(gate_flash),gate_z(gate_flash),0,true);
-	};
+	if (next < 3) { gate_arch(gate_x(next),gate_y(next),gate_z(next),0,0); };
+	bool celebrating = ring_celebrating();
+	if (celebrating) { gate_arch(gate_x(gate_flash),gate_y(gate_flash),gate_z(gate_flash),0,1); };
+	if (earned_gates != 0) { passed_guides(0,celebrating); };
 	if (result[0] == 0) {
 		MissionPhase stage = phase[0];
 		f32 x = presented_pose[0].x;
@@ -1813,7 +1829,8 @@ unit() frame = fn {
 	i32 gate = next_gate[0];
 	display[33] = float_i(gate);
 	display[34] = if (gate < 3) { clamp(float_i(gate_deadline(gate)-stage_tick[0])/30.0,0.0,31.0) } else { 0.0 };
-	unsafe { host.frame(core.pointer_cast<*?u8>(&?display[0]),35); };
+	display[35] = if (ring_celebrating()) { 1.0 } else { 0.0 };
+	unsafe { host.frame(core.pointer_cast<*?u8>(&?display[0]),36); };
 };
 
 unit(i32) reset = fn(requested) {
@@ -1826,6 +1843,7 @@ unit(i32) reset = fn(requested) {
 	course = next;
 	cancel_drop();
 	spray_tick = -50;
+	earned_gates = 0;
 	gate_flash = -1;
 	gate_flash_until = 0;
 	reset_mission(0);

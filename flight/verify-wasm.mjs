@@ -42,8 +42,10 @@ engine = new WebAssembly.Instance(module, { flight: {
         aircraft = readFloats(pointer, length, 18, 12288);
     },
     frame(pointer, length) {
-        frame = readFloats(pointer, length, 1, 35);
-        assert.equal(frame.length, 35);
+        const expected = comparisonBaseline ? 35 : 36;
+        frame = readFloats(pointer, length, 1, expected);
+        assert.equal(frame.length, expected);
+        if (!comparisonBaseline) assert(frame[35] === 0 || frame[35] === 1);
         assert(frame[28] >= -1 && frame[28] <= 1, "turn cue is bounded");
         assert([0, 1, 2, 3, 4].includes(frame[29]), "landing enum is recognized");
         assert(frame[30] === 0 || frame[30] === 1, "shortcut availability is Boolean");
@@ -247,6 +249,9 @@ function cueRanges() {
     const rim = comparisonBaseline ? [.05,.30,.28] : [.035,.095,.10];
     if (frame[33] < 3) group("amber",84,[amber]);
     if (marker(green).length === 84) group("green",84,[green]);
+    const archived = [.23,.58,.43];
+    const archivedCount = comparisonBaseline ? 0 : marker(archived).length;
+    if (archivedCount) group("previously-cleared",archivedCount,[archived]);
     if (rim.every((value,c) => Math.abs(aircraft[offset+3+c]-value)<.001))
         group("arrow",comparisonBaseline ? 12 : 30,[cyan,rim]);
     if ([7,8,9].includes(frame[20]))
@@ -348,6 +353,10 @@ function sortie(course, mode = "normal") {
         observer?.step(gates,input,dt,aspect);
         if (frame[32] > gates) {
             assert(marker([.22,1,.43]).length === 84, "an earned ring immediately turns green");
+            if (!comparisonBaseline) {
+                assert.equal(frame[35], 1, "the actual ring award asserts the flash signal");
+                assert.equal(marker([1,.66,.19]).length, frame[33] < 3 ? 84 : 0, "only the next ring remains amber");
+            }
             confirmed++;
         }
     }
@@ -492,6 +501,11 @@ function sortie(course, mode = "normal") {
         step(input);
     }
     assert.equal(confirmed, frame[32], "for each scored gate, the mesh confirms the score");
+    if (!comparisonBaseline && frame[22] === 1) {
+        assert.equal(frame[35], 0, "the actual Wosy ring flash has expired by landing");
+        assert.equal(marker([.22,1,.43]).length, 0);
+        assert.equal(marker([.23,.58,.43]).length, frame[32]*84, "earned rings remain marked after the flash");
+    }
     observer?.finish();
     if (mode === "riverside" || mode === "county") return {result: frame[22], phase:frame[20], position: aircraftPose(), surveyCruise, surveyEast};
     return {result:frame[22], course, visited, time:frame[17], data:packet, actions:frame[31], gates:frame[32], route:frame[25]};
@@ -559,6 +573,10 @@ for (const course of [0, 1]) {
             }
         }
         assert.equal(marker([.22,1,.43]).length,0,"missing a ring never plays success coloring");
+        if (!comparisonBaseline) {
+            assert.equal(frame[35],0);
+            assert.equal(marker([.23,.58,.43]).length,0,"an expired ring is not recorded as earned");
+        }
     }
 }
 function visibleGhost(rejectedCandidate) {

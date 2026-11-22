@@ -18,7 +18,7 @@ async function art() {
       world(pointer, length) { world = readMesh(pointer, length); },
       aircraft(pointer, length) { plane = readMesh(pointer, length); },
       frame(pointer, length) {
-        assert.equal(length, 35);
+        assert.equal(length, 36);
         state = new Float32Array(engine.memory.buffer, pointer, length).slice();
       },
       record() {},

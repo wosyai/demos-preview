@@ -8,7 +8,7 @@ const KEYS = new Map([
 ]);
 const COURSES = ["Crop Patrol", "Paris Air Mail"];
 const STORAGE_KEY = "wosy-flying-low/missions-v7/";
-const MISSION_FRAME_FLOATS = 35;
+const MISSION_FRAME_FLOATS = 36;
 const LANDING_CUES = [
   "Land in the marked strip", "Level wings and align with the strip", "Brake to slow down",
   "Ease your descent", "Aligned · ease onto the strip",
@@ -312,7 +312,7 @@ export function bootFlight(win, doc) {
   let gpu, engine, memory, framePointer = null, frameLength = 0;
   let raf = 0, previous = null, current = 0, mode = "menu", modal = null;
   let loading = true, error = false, lost = false, hudTick = 0, dirty = true;
-  let gateCount = 0, gateFeedbackUntil = 0, cockpit = false;
+  let cockpit = false;
   const dropButton = actionButtons.find((button) => button.dataset.action === "drop");
   const dropKey = get("drop-key");
   let activeStick = null, analogInput = false, dropPending = false, dropAvailable = false;
@@ -419,9 +419,8 @@ export function bootFlight(win, doc) {
     setText(instruments[0], clockText(frame[17]));
     setText(instruments[2], roundText(frame[18], "m/s"));
     setText(instruments[3], roundText(frame[19], "m"));
-    if (frame[32] > gateCount) gateFeedbackUntil = frame[17] + 1.4;
-    gateCount = frame[32];
-    const gateFeedback = frame[17] < gateFeedbackUntil;
+    const gateCount = frame[32];
+    const gateFeedback = frame[35] === 1;
     setText(instruments[5], gateFeedback ? `${gateCount}/3 · +80`
       : frame[33] < 3 && frame[34] > 0 ? `${gateCount}/3 · ${Math.ceil(frame[34])}s` : `${gateCount}/3`);
     setText(instruments[4], frame[23] > 0 ? clockText(frame[23]) : "—");
@@ -473,9 +472,9 @@ export function bootFlight(win, doc) {
     }
     setText(instruments[1], label);
     const routeLabel = route === 1 ? "Low route." : route === 2 ? "Wide route." : "";
-    setText(callout, gateFeedback ? `Gate cleared · +80 · ${cue}` : phase === 1 && dropStatus !== 9 ? `${cue} · ${meters}` : cue);
+    setText(callout, gateFeedback ? `Ring cleared · +80 · ${cue}` : phase === 1 && dropStatus !== 9 ? `${cue} · ${meters}` : cue);
     callout.hidden = false;
-    setText(flightCue, `${gateFeedback ? "Gate cleared. " : ""}${label}. ${phase === 3 ? "Steer gently and hold Brake to stop" : phase === 2 ? LANDING_CUES[frame[29]] ?? LANDING_CUES[0] : cue}. ${routeLabel}`.trim());
+    setText(flightCue, `${gateFeedback ? "Ring cleared. " : ""}${label}. ${phase === 3 ? "Steer gently and hold Brake to stop" : phase === 2 ? LANDING_CUES[frame[29]] ?? LANDING_CUES[0] : cue}. ${routeLabel}`.trim());
   }
   function showSummary(type, frame) {
     modal = type;
@@ -509,8 +508,6 @@ export function bootFlight(win, doc) {
     if (loading || error || lost || !engine || !Number.isInteger(course) || course < 0 || course >= COURSES.length) return;
     try {
       current = course;
-      gateCount = 0;
-      gateFeedbackUntil = 0;
       clearInput();
       engine.reset(course);
       engine.select_view(playing && cockpit ? 1 : 0);
@@ -756,7 +753,7 @@ export function bootFlight(win, doc) {
     if (!gl) { failure("This game needs WebGL 2. Try a current browser with hardware acceleration enabled."); return; }
     try {
       gpu = graphics(gl);
-      const wasm = await win.fetch(new URL("./flight.wasm?v=drop-marker-flight-v7", import.meta.url));
+      const wasm = await win.fetch(new URL("./flight.wasm?v=ring-feedback-flight-v7", import.meta.url));
       if (!wasm.ok) throw new Error("The flight engine could not be downloaded.");
       const { instance } = await win.WebAssembly.instantiate(await wasm.arrayBuffer(), imports);
       engine = instance.exports;

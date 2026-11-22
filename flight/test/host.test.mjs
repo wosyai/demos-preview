@@ -34,12 +34,12 @@ function graphicsFixture() {
   return { gl, draws, uploads, matrices };
 }
 
-function mock({ noGraphics = false, badMesh = false, initialLost = false, exitAtStart = false, inputVersion = null, orientationAPI = false, frameLength = 35 } = {}) {
+function mock({ noGraphics = false, badMesh = false, initialLost = false, exitAtStart = false, inputVersion = null, orientationAPI = false, frameLength = 36 } = {}) {
   const doc = new Hub(), win = new Hub(), nodes = new Map(), raf = new Map(), data = new Map();
   const g = graphicsFixture(), called = { reset: [], tick: [], replay: [], requests: [], views: [], begin: 0, cancel: 0 };
   const wasmExports = new WebAssembly.Memory({initial: 1});
   let index = 0, shouldComplete = false, current = 0, imported, distance = 122, phase = 2, dropStatus = 0, route = 0, eventCode = 0;
-  let guidance = [0, 4, 0, 0];
+  let guidance = [0, 4, 0, 0], ringState = [0, 0, 0, 0];
   function element(name, dataset = {}) {
     const node = new Hub();
     const captures = new Set(), classes = new Set(), properties = new Map();
@@ -106,7 +106,7 @@ function mock({ noGraphics = false, badMesh = false, initialLost = false, exitAt
           imported.aircraft(128, 18);
           const frame = new Float32Array(wasmExports.buffer, 256, frameLength);
           frame.set([aspect,0,0,0,0,1,0,0,0,0,1,0,0,0,0,1, current,12.125,31,22,phase,dropStatus,shouldComplete ? 1 : 0,12.125,250,route,eventCode,distance]);
-          if (frameLength === 35) frame.set(guidance, 28);
+          if (frameLength === 36) { frame.set(guidance, 28); frame.set(ringState, 32); }
           imported.frame(256, frameLength);
           if (shouldComplete) {
             new Uint8Array(wasmExports.buffer, 512, 3).set([3,4,255]);
@@ -124,6 +124,7 @@ function mock({ noGraphics = false, badMesh = false, initialLost = false, exitAt
     cue(next) {
       ({distance = 122, phase = 2, dropStatus = 0, route = 0, eventCode = 0} = next);
     },
+    rings(count, next, seconds, flash) { ringState = [count, next, seconds, flash]; },
     guidance(turn, instruction, climb = false, delivered = false) {
       guidance = [turn, instruction, Number(climb), Number(delivered)];
     },
@@ -387,10 +388,10 @@ test("the Flight pause host has its own release token with matching v7 assets", 
   const sim = mock();
   await sim.ready;
   const html = await readFile(new URL("../index.html", import.meta.url), "utf8");
-  assert.match(html, /href="\.\/style\.css\?v=drop-marker-flight-v7-arcade-ui4"/);
-  assert.match(html, /src="\.\/host\.mjs\?v=drop-marker-flight-v7-arcade-ui4"/);
+  assert.match(html, /href="\.\/style\.css\?v=ring-feedback-flight-v7-arcade-ui4"/);
+  assert.match(html, /src="\.\/host\.mjs\?v=ring-feedback-flight-v7-arcade-ui4"/);
   assert.deepEqual(sim.called.requests.map((url) => [url.pathname.split("/").at(-1), url.search]),
-    [["flight.wasm", "?v=drop-marker-flight-v7"]]);
+    [["flight.wasm", "?v=ring-feedback-flight-v7"]]);
 });
 
 test("view button and V toggle the engine camera without resetting a route", async () => {
@@ -548,8 +549,26 @@ test("rough touchdown announces survivable rollout and keeps cargo unloaded", as
   assert.match(sim.nodes.get("callout").textContent, /Steer gently and brake/);
 });
 
+test("ring feedback uses the engine flash, not a host timer or a count delta", async () => {
+  const sim = mock({inputVersion: 1});
+  await sim.ready;
+  sim.courses[0].events("click");
+  sim.rings(1, 1, 4, 0);
+  sim.frame(110);
+  assert.equal(sim.nodes.get("gates").textContent, "1/3 · 4s");
+  assert.doesNotMatch(sim.nodes.get("flight-cue").textContent, /Ring cleared/);
+  sim.rings(1, 1, 4, 1);
+  sim.frame(220);
+  assert.equal(sim.nodes.get("gates").textContent, "1/3 · +80");
+  assert.match(sim.nodes.get("flight-cue").textContent, /Ring cleared/);
+  sim.rings(1, 1, 3, 0);
+  sim.frame(330);
+  assert.equal(sim.nodes.get("gates").textContent, "1/3 · 3s");
+  assert.doesNotMatch(sim.nodes.get("flight-cue").textContent, /Ring cleared/);
+});
+
 test("only the exact mission frame ABI is accepted", async () => {
-  for (const frameLength of [28, 30, 32, 34, 36]) {
+  for (const frameLength of [28, 30, 32, 34, 35, 37]) {
     const unknown = mock({frameLength});
     await unknown.ready;
     assert.equal(unknown.courses[0].disabled, true);

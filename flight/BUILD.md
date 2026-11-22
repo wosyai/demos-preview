@@ -18,7 +18,7 @@ physics, scenery, camera, cargo pickup, mail trajectory, farm spray, landings, a
 ## Host ABI
 
 The WebAssembly host imports module `flight`: `world` and `aircraft` receive
-packed XYZRGB triangles, `frame` receives a 35-float projection/HUD buffer,
+packed XYZRGB triangles, `frame` receives a 36-float projection/HUD buffer,
 and `record` receives an opaque binary replay. The host supplies elapsed real
 time, an input bitmask, and viewport aspect. Pointers are byte offsets into
 exported memory; reacquire typed views after growth. `world` is stable until a
@@ -38,6 +38,7 @@ and score in [24]. Mission-specific fields are:
 | 27–28 | Distance to target (or rollout remaining) and signed normalized turn cue |
 | 29–31 | Landing instruction (1 align, 2 slow down, 3 ease descent, 4 ready), climb warning, delivered pouch or completed crop rows |
 | 32–34 | Gates earned, current gate index, and seconds remaining for the current gate |
+| 35 | Wosy ring-award flash: 1 during the short confirmation, or 0 |
 
 Input uses bits 0–5 for left, right, climb, dive, power, brake. For proportional
 controls, set bit 6 and put signed bank and pitch bytes at bits 8–15 and 16–23.
@@ -83,3 +84,6 @@ It changes presentation only: camera preference is not part of a v7 replay.
 In Paris, follow the amber DROP sign anchored above the mail target. The sign
 persists through approach, and the HUD says “Drop here” only when the real
 flight engine permits release. The cue is visual and leaves v7 replays valid.
+
+The next ring is dashed amber. A scored ring flashes bright green, then remains
+muted green. An expired unscored ring disappears. Replay v7 is unchanged.

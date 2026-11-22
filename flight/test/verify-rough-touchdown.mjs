@@ -16,7 +16,7 @@ engine = new WebAssembly.Instance(wasm, {flight: {
     aircraft() {},
     record() { records++; },
     frame(pointer, length) {
-        assert.equal(length, 35);
+        assert.equal(length, 36);
         frame = new Float32Array(engine.memory.buffer, pointer, length).slice();
     },
 }}).exports;
