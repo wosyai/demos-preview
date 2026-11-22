@@ -444,6 +444,8 @@ function sortie(course, mode = "normal") {
     let surveyCruise = false, surveyEast = false;
     let checkedPortraitDrop = false, checkedChaseDrop = false, checkedSupplyFrustum = false;
     let checkedPredictedImpact = false;
+    let craftStartX;
+    let movingSeine = false;
     const checkedLoadVisibility = new Set();
     function step(input = 0, dt = 1/30, aspect = 1.65) {
         const gates = frame[32];
@@ -463,6 +465,26 @@ function sortie(course, mode = "normal") {
         visited.add(phase);
         observer?.before(p, phase);
         let input = 0;
+        if (!comparisonBaseline && course === 1 && (mode === "normal" || mode === "cyan")) {
+            const craft = marker([.32,.16,.11]);
+            const wake = marker([.62,.77,.72]);
+            assert.equal(aircraft.length % 18,0,"the route activity stays in triangular mesh units");
+            assert(aircraft.length/6 < 2048,"active Paris route including the market craft fits the moving arena");
+            if (phase !== 0 && phase !== 1) assert.equal(craft.length,0,"the distant craft is not submitted outside the river/mail leg");
+            if (craft.length) {
+                assert.equal(craft.length,9,"the craft has a complete deck and tapered prow");
+                assert(craft.every(([x,y,z]) => y<1 && z>-117+(x+450)*.49+25 &&
+                    z<-117+(x+450)*.49+60),"the hull is fully inside the route river and below the flight floor");
+                if (wake.length) {
+                    assert.equal(wake.length,6,"travel adds a paired wake");
+                    assert(wake.every(([x,y,z]) => Math.abs(y-.052)<.001 && z> -117+(x+450)*.49+25),
+                        "the painted wake remains on the river");
+                    const leadingX = Math.max(...craft.map(([x]) => x));
+                    if (craftStartX === undefined) craftStartX = leadingX;
+                    if (leadingX > craftStartX+2) movingSeine = true;
+                }
+            }
+        }
         if (phase === 6 || phase === 10) input = 20;
         if (phase === 7) {
             assert(marker([.28, 1, .89]).some(([x,y,z]) => Math.abs(x - (course ? -111 : -15)) < .001
@@ -661,6 +683,8 @@ function sortie(course, mode = "normal") {
         assert.equal(marker([.23,.58,.43]).length, frame[32]*84, "earned rings remain marked after the flash");
     }
     observer?.finish();
+    if (!comparisonBaseline && course === 1 && (mode === "normal" || mode === "cyan"))
+        assert(movingSeine,"ordinary Paris controls observe a real moving market boat and wake");
     if (mode === "riverside" || mode === "county") return {result: frame[22], phase:frame[20], position: aircraftPose(), surveyCruise, surveyEast};
     return {result:frame[22], course, visited, time:frame[17], data:packet, actions:frame[31], gates:frame[32], route:frame[25]};
 }

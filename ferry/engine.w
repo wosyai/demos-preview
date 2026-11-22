@@ -9,7 +9,9 @@ f32[6] empty_vertex = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0];
 f32[6][16] mesh_chunk_0 = [empty_vertex, empty_vertex, empty_vertex, empty_vertex, empty_vertex, empty_vertex, empty_vertex, empty_vertex, empty_vertex, empty_vertex, empty_vertex, empty_vertex, empty_vertex, empty_vertex, empty_vertex, empty_vertex];
 f32[6][16][16] mesh_chunk_1 = [mesh_chunk_0, mesh_chunk_0, mesh_chunk_0, mesh_chunk_0, mesh_chunk_0, mesh_chunk_0, mesh_chunk_0, mesh_chunk_0, mesh_chunk_0, mesh_chunk_0, mesh_chunk_0, mesh_chunk_0, mesh_chunk_0, mesh_chunk_0, mesh_chunk_0, mesh_chunk_0];
 f32[6][16][16][16] mesh_chunk_2 = [mesh_chunk_1, mesh_chunk_1, mesh_chunk_1, mesh_chunk_1, mesh_chunk_1, mesh_chunk_1, mesh_chunk_1, mesh_chunk_1, mesh_chunk_1, mesh_chunk_1, mesh_chunk_1, mesh_chunk_1, mesh_chunk_1, mesh_chunk_1, mesh_chunk_1, mesh_chunk_1];
-f32[6][16][16][16][8] scenery = [mesh_chunk_2, mesh_chunk_2, mesh_chunk_2, mesh_chunk_2, mesh_chunk_2, mesh_chunk_2, mesh_chunk_2, mesh_chunk_2];
+f32[6][16][16][16][9] scenery = [mesh_chunk_2, mesh_chunk_2, mesh_chunk_2, mesh_chunk_2, mesh_chunk_2, mesh_chunk_2, mesh_chunk_2, mesh_chunk_2, mesh_chunk_2];
+i32 scenery_capacity = 9*4096;
+i32 moving_capacity = 24*256;
 f32[6][16][16][24] moving_mesh = [mesh_chunk_1, mesh_chunk_1, mesh_chunk_1, mesh_chunk_1, mesh_chunk_1, mesh_chunk_1, mesh_chunk_1, mesh_chunk_1, mesh_chunk_1, mesh_chunk_1, mesh_chunk_1, mesh_chunk_1, mesh_chunk_1, mesh_chunk_1, mesh_chunk_1, mesh_chunk_1, mesh_chunk_1, mesh_chunk_1, mesh_chunk_1, mesh_chunk_1, mesh_chunk_1, mesh_chunk_1, mesh_chunk_1, mesh_chunk_1];
 
 f32[30] display = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0];
@@ -18,6 +20,12 @@ bool drawing_world = false;
 bool world_ready = false;
 bool model_local = false;
 bool shadow_pass = false;
+i32 surface_paint = 0;
+i32 paint_asphalt = 1;
+i32 paint_masonry = 2;
+i32 paint_canal = 3;
+i32 paint_light_pool = 4;
+i32 paint_lamp = 5;
 f32 model_x = 0.0;
 f32 model_y = 0.0;
 f32 model_z = 0.0;
@@ -52,33 +60,35 @@ f32(i32) float_i = fn(a) { core.sint_to_float<f32>(a) };
 unit(f32, f32, f32, f32, f32, f32) put = fn(x, y, z, r, g, b) {
 	i32 i = vertex_count;
 	vertex_count = i + 1;
-	u64 high = ix(i / 4096);
-	u64 layer = ix(i / 256 % 16);
-	u64 row = ix(i / 16 % 16);
-	u64 cell = ix(i % 16);
-	f32 ux = if (model_local) { x * model_rc - y * model_rs } else { x };
-	f32 uy = if (model_local) { x * model_rs + y * model_rc } else { y };
-	f32 px = if (model_local) { model_x + ux*model_hc + z*model_hs } else { x };
-	f32 py = if (model_local) { model_y + uy } else { y };
-	f32 pz = if (model_local) { model_z - ux*model_hs + z*model_hc } else { z };
-	f32 pr = clamp(r,0.0,1.0);
-	f32 pg = clamp(g,0.0,1.0);
-	f32 pb = if (shadow_pass) { b } else { clamp(b,0.0,1.0) };
-	if (drawing_world) {
-		scenery[high][layer][row][cell][0] = px;
-		scenery[high][layer][row][cell][1] = py;
-		scenery[high][layer][row][cell][2] = pz;
-		scenery[high][layer][row][cell][3] = pr;
-		scenery[high][layer][row][cell][4] = pg;
-		scenery[high][layer][row][cell][5] = pb;
-	} else {
-		u64 moving_layer = ix(i / 256);
-		moving_mesh[moving_layer][row][cell][0] = px;
-		moving_mesh[moving_layer][row][cell][1] = py;
-		moving_mesh[moving_layer][row][cell][2] = pz;
-		moving_mesh[moving_layer][row][cell][3] = pr;
-		moving_mesh[moving_layer][row][cell][4] = pg;
-		moving_mesh[moving_layer][row][cell][5] = pb;
+	if (i < (if (drawing_world) { scenery_capacity } else { moving_capacity })) {
+		u64 high = ix(i / 4096);
+		u64 layer = ix(i / 256 % 16);
+		u64 row = ix(i / 16 % 16);
+		u64 cell = ix(i % 16);
+		f32 ux = if (model_local) { x * model_rc - y * model_rs } else { x };
+		f32 uy = if (model_local) { x * model_rs + y * model_rc } else { y };
+		f32 px = if (model_local) { model_x + ux*model_hc + z*model_hs } else { x };
+		f32 py = if (model_local) { model_y + uy } else { y };
+		f32 pz = if (model_local) { model_z - ux*model_hs + z*model_hc } else { z };
+		f32 pr = clamp(r,0.0,1.0)+2.0*float_i(surface_paint);
+		f32 pg = clamp(g,0.0,1.0);
+		f32 pb = if (shadow_pass) { b } else { clamp(b,0.0,1.0) };
+		if (drawing_world) {
+			scenery[high][layer][row][cell][0] = px;
+			scenery[high][layer][row][cell][1] = py;
+			scenery[high][layer][row][cell][2] = pz;
+			scenery[high][layer][row][cell][3] = pr;
+			scenery[high][layer][row][cell][4] = pg;
+			scenery[high][layer][row][cell][5] = pb;
+		} else {
+			u64 moving_layer = ix(i / 256);
+			moving_mesh[moving_layer][row][cell][0] = px;
+			moving_mesh[moving_layer][row][cell][1] = py;
+			moving_mesh[moving_layer][row][cell][2] = pz;
+			moving_mesh[moving_layer][row][cell][3] = pr;
+			moving_mesh[moving_layer][row][cell][4] = pg;
+			moving_mesh[moving_layer][row][cell][5] = pb;
+		};
 	};
 };
 
@@ -211,6 +221,8 @@ f32 camera_yaw = 0.0;
 f32 old_x = 0.0;
 f32 old_z = -5.0;
 f32 old_yaw = 0.0;
+f32 wheel_phase = 0.0;
+f32 previous_wheel_phase = 0.0;
 f32 old_foot_x = 2.1;
 f32 old_foot_z = -4.6;
 f32 old_foot_yaw = 0.0;
@@ -473,6 +485,11 @@ unit(f32,f32) draw_shop = fn(x,z) {
     ground(x+0.36,z-2.16,13.34,0.48,0.028,0.53,0.40,0.48);
 };
 
+f32 pier_marquee_x = 6.94;
+f32 pier_marquee_z = 75.10;
+f32 pier_marquee_floor = 3.69;
+f32 pier_marquee_width = 8.19;
+
 unit() draw_landmarks = fn {
     box(7.04,2.77,1.4,0.76,1.50,7.3,0.28,0.22,0.38);
     box(6.99,4.27,1.35,0.94,0.12,7.41,0.89,0.46,0.62);
@@ -481,8 +498,8 @@ unit() draw_landmarks = fn {
     box(7.18,0.02,75.25,0.21,4.04,0.21,0.34,0.28,0.37);
     box(14.64,0.02,75.25,0.21,4.04,0.21,0.34,0.28,0.37);
     box(7.02,3.72,75.13,8.03,1.40,0.45,0.40,0.30,0.45);
-    box(6.94,5.14,75.10,8.19,0.10,0.51,0.48,0.83,0.83);
-    box(6.94,3.69,75.10,8.19,0.10,0.51,0.90,0.46,0.62);
+    box(pier_marquee_x,5.14,pier_marquee_z,pier_marquee_width,0.10,0.51,0.48,0.83,0.83);
+    box(pier_marquee_x,pier_marquee_floor,pier_marquee_z,pier_marquee_width,0.10,0.51,0.90,0.46,0.62);
     neon_words(2,0,8.26,3.94,75.08,0.234,false,0.98,0.83,0.53);
 };
 
@@ -520,7 +537,9 @@ f32(i32,i32) map_value = fn(row,column) {
 
 unit(i32,f32,f32,f32,f32) road_ground = fn(row,h,r,g,b) {
     u64 index=ix(row);
+    surface_paint=paint_asphalt;
     ground(map_roads[index][0],road_z(row),map_roads[index][2],map_roads[index][3],h,r,g,b);
+    surface_paint=0;
 };
 
 unit(i32) district = fn(i) {
@@ -617,11 +636,35 @@ unit(i32) draw_annex_buildings = fn(i) {
         u64 n=ix(i);
         f32 x=buildings[n][0]; f32 z=buildings[n][1]; f32 w=buildings[n][2]; f32 d=buildings[n][3]; f32 h=buildings[n][4];
         f32 r=if (i%2==0) { 0.57 } else { 0.69 };
+        surface_paint=paint_masonry;
         box(x,0.0,z,w,h,d,r,0.51,0.49);
+        surface_paint=0;
         box(x,h,z,w,0.18,d,0.88,0.77,0.62);
         facade(0,0,x,z,w,d,h,r,0.51);
         draw_annex_buildings(i+1);
     };
+};
+
+unit(i32,f32,f32) lamp_pool_fan = fn(i,x,z) {
+    if (i<8) {
+        f32 a=wrap(float_i(i)*0.78539816);
+        f32 b=wrap(float_i(i+1)*0.78539816);
+        put(x,0.029,z,1.0,0.27,0.0);
+        put(x+3.2*cos_small(a),0.029,z+4.2*sin_small(a),1.0,0.0,0.0);
+        put(x+3.2*cos_small(b),0.029,z+4.2*sin_small(b),1.0,0.0,0.0);
+        lamp_pool_fan(i+1,x,z);
+    };
+};
+
+unit(f32,f32,f32) dusk_lamp = fn(x,z,reach) {
+    f32 lantern=x+reach;
+    box(x-0.051,0.016,z-0.051,0.102,3.56,0.102,0.24,0.25,0.39);
+    box(min_f(x,lantern)-0.051,3.43,z-0.052,abs_f(reach)+0.103,0.09,0.104,0.28,0.26,0.41);
+    surface_paint=paint_lamp;
+    box(lantern-0.15,3.32,z-0.12,0.30,0.13,0.24,1.0,0.71,0.40);
+    surface_paint=paint_light_pool;
+    lamp_pool_fan(0,lantern,z);
+    surface_paint=0;
 };
 
 unit() render_world = fn {
@@ -629,7 +672,9 @@ unit() render_world = fn {
     model_local=false;
     drawing_world=true;
     ground(-117.0,-21.0,152.0,96.0,-0.035,0.43,0.37,0.43);
+    surface_paint=paint_canal;
     ground(-289.0,75.0,527.0,237.0,-0.035,0.12,0.26,0.36);
+    surface_paint=0;
     district(0);
     draw_landmarks();
     draw_shop(-88.8,40.9);
@@ -745,6 +790,12 @@ unit() render_world = fn {
     draw_annex_roads(11);
     draw_annex_buildings(30);
     road_ground(annex_middle_road,0.020,0.26,0.30,0.37);
+    dusk_lamp(-4.60,6.4,1.10);
+    dusk_lamp(4.60,16.8,-1.10);
+    dusk_lamp(-4.60,37.2,1.10);
+    dusk_lamp(-4.60,64.5,1.10);
+    dusk_lamp(-124.0,39.3,0.78);
+    dusk_lamp(-139.0,46.1,-0.82);
     unsafe { host.world(core.pointer_cast<*?u8>(&?scenery[0][0][0][0][0]),vertex_count*6); };
     world_ready=true;
 };
@@ -1473,8 +1524,18 @@ unit() camera_step = fn {
     camera_z=sz-dist*hz;
     f32 camera_deck=if (stage==MissionStage::crossing || stage==MissionStage::docked || stage==MissionStage::disembarking || stage==MissionStage::delivered) { board_height } else { 0.0 };
     f32 camera_base=if (dist<3.8) { 2.35 } else { if (wide_camera) { 6.1 } else { if (in_car) { 4.2 } else { 3.9 } } };
-    camera_y=blend(camera_y,camera_deck+camera_base,0.38);
-    camera_pitch=blend(camera_pitch,if (dist<3.8) { -0.48 } else { if (wide_camera) { -0.35 } else { if (in_car) { -0.29 } else { -0.25 } } },0.22);
+    f32 aim_pitch=if (dist<3.8) { -0.48 } else { if (wide_camera) { -0.35 } else { if (in_car) { -0.29 } else { -0.25 } } };
+    f32 eye_y=camera_deck+camera_base;
+    if (!in_car && sx>pier_marquee_x && sx<pier_marquee_x+pier_marquee_width &&
+        sz>pier_marquee_z-1.45 && camera_z<pier_marquee_z+1.15) {
+        f32 enters=clamp((sz-(pier_marquee_z-1.45))/0.85,0.0,1.0);
+        f32 clears=clamp(((pier_marquee_z+1.15)-camera_z)/0.62,0.0,1.0);
+        f32 underpass=min_f(enters,clears);
+        eye_y=blend(eye_y,min_f(eye_y,pier_marquee_floor-0.64),underpass);
+        if (wide_camera && dist>=3.8) { aim_pitch=blend(aim_pitch,-0.18,underpass); };
+    };
+    camera_y=blend(camera_y,eye_y,0.38);
+    camera_pitch=blend(camera_pitch,aim_pitch,0.22);
 };
 
 unit(i32) snapshot_traffic = fn(i) {
@@ -1489,6 +1550,7 @@ unit() snapshot = fn {
     snapshot_traffic(0);
     old_ferry_z=ferry_z; old_board_height=board_height;
     old_x=car_x; old_z=car_z; old_yaw=car_yaw;
+    previous_wheel_phase=wheel_phase;
     old_foot_x=foot_x; old_foot_z=foot_z; old_foot_yaw=foot_yaw;
     old_camera_x=camera_x; old_camera_y=camera_y; old_camera_z=camera_z; old_camera_yaw=camera_yaw;
 };
@@ -1504,6 +1566,8 @@ unit(f32,f32,i32) step = fn(steer,drive,flags) {
         if (in_car) { move_vehicle(steer,drive,sin_small(car_yaw),cos_small(car_yaw),flags & 1); };
         move_traffic(0);
         if (in_car) { move_vehicle(steer,drive,sin_small(car_yaw),cos_small(car_yaw),flags & 1); };
+        f32 traveled=(car_x-old_x)*sin_small(car_yaw)+(car_z-old_z)*cos_small(car_yaw);
+        wheel_phase=wrap(wheel_phase+traveled/0.32);
         move_peds(0);
         animate_mail(0);
         advance_car_route();
@@ -1555,17 +1619,27 @@ unit(f32,f32,f32,f32,f32) set_model = fn(x,y,z,yaw,roll) {
     model_rs=sin_small(roll); model_rc=cos_small(roll);
 };
 
-unit(f32,f32) tire = fn(x,z) {
+unit(f32,f32,f32,f32,bool) tire = fn(x,z,spin_s,spin_c,animated) {
     box(x-0.15,0.031,z-0.33,0.30,0.62,0.66,0.14,0.15,0.21);
     f32 e=if (x<0.0) { x-0.157 } else { x+0.157 };
-    quad(e,0.18,z-0.15,e,0.18,z+0.15,e,0.45,z+0.15,e,0.45,z-0.15,0.45,0.49,0.56);
+    if (animated) {
+        f32 dy=0.17*spin_c; f32 dz=0.17*spin_s;
+        f32 py=0.073*spin_s; f32 pz=0.073*spin_c;
+        quad(e,0.341-dy+py,z-dz-pz,e,0.341-dy-py,z-dz+pz,
+             e,0.341+dy-py,z+dz+pz,e,0.341+dy+py,z+dz-pz,0.70,0.77,0.83);
+    } else {
+        quad(e,0.18,z-0.15,e,0.18,z+0.15,e,0.45,z+0.15,e,0.45,z-0.15,0.45,0.49,0.56);
+    };
 };
 unit(f32,f32,f32,f32,f32,f32,f32) light = fn(x,y,z,w,h,r,g) {
     quad(x,y,z,x+w,y,z,x+w,y+h,z,x,y+h,z,r,g,0.19);
 };
 
-unit(f32,f32,f32,bool) body = fn(r,g,b,brake) {
-    tire(-0.91,-1.19); tire(0.91,-1.19); tire(-0.91,1.19); tire(0.91,1.19);
+unit(f32,f32,f32,bool,f32,bool) body = fn(r,g,b,brake,spin,animated) {
+    f32 spin_s=if (animated) { sin_small(spin) } else { 0.0 };
+    f32 spin_c=if (animated) { cos_small(spin) } else { 1.0 };
+    tire(-0.91,-1.19,spin_s,spin_c,animated); tire(0.91,-1.19,spin_s,spin_c,animated);
+    tire(-0.91,1.19,spin_s,spin_c,animated); tire(0.91,1.19,spin_s,spin_c,animated);
     box(-0.92,0.32,-1.93,1.84,0.47,3.86,r,g,b);
     box(-0.88,0.79,-1.91,1.76,0.16,1.02,r*1.06,g*1.06,b*1.04);
     box(-0.85,0.79,0.59,1.70,0.16,1.31,r*1.10,g*1.10,b*1.08);
@@ -1594,8 +1668,8 @@ unit(i32,f32) draw_traffic = fn(i,alpha) {
         f32 z=traffic[n].z;
         f32 tz=if (abs_f(previous_traffic[n][1]-z)>2.0) { z } else { blend(previous_traffic[n][1],z,alpha) };
         set_model(tx,0.01,tz,yaw,0.0);
-        if (i%2==0) { body(0.24,0.65,0.66,traffic[n].speed<4.0); }
-        else { body(0.71,0.54,0.29,traffic[n].speed<4.0); };
+        if (i%2==0) { body(0.24,0.65,0.66,traffic[n].speed<4.0,0.0,false); }
+        else { body(0.71,0.54,0.29,traffic[n].speed<4.0,0.0,false); };
         draw_traffic(i+1,alpha);
     };
 };
@@ -1703,7 +1777,8 @@ unit(f32) render_moving = fn(alpha) {
     vertex_count=0; drawing_world=false;
     f32 vis_yaw=wrap(old_yaw+alpha*wrap(car_yaw-old_yaw));
     set_model(blend(old_x,car_x,alpha),0.01,blend(old_z,car_z,alpha),vis_yaw,car_roll);
-    body(0.86,0.26,0.45,brake_mark>0.0);
+    f32 spin=wrap(previous_wheel_phase+alpha*wrap(wheel_phase-previous_wheel_phase));
+    body(0.86,0.26,0.45,brake_mark>0.0,spin,true);
     if (!in_car) {
         f32 view_foot=wrap(old_foot_yaw+alpha*wrap(foot_yaw-old_foot_yaw));
         bool aboard=stage==MissionStage::crossing || stage==MissionStage::docked || stage==MissionStage::disembarking || stage==MissionStage::delivered;
@@ -1801,7 +1876,7 @@ unit(i32) reset = fn(mode) {
     collision_wait=0.0; collision_kind=0; collision_seq=0;
     car_x=0.0; car_z=if (mode==1) { -5.0 } else { -7.0 };
     car_yaw=if (mode==1) { 0.0 } else { 3.14159265 };
-    vx=0.0; vz=0.0; brake_mark=0.0; car_roll=0.0;
+    vx=0.0; vz=0.0; brake_mark=0.0; car_roll=0.0; wheel_phase=0.0;
     foot_x=2.1; foot_z=-4.6; foot_speed=0.0; foot_yaw=0.0;
     camera_x=2.1; camera_z=-11.6; camera_y=3.9; camera_yaw=0.0; camera_pitch=-0.25; wide_camera=false;
     ferry_z=88.0; board_time=0.0; board_height=0.01;

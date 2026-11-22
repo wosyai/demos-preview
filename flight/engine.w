@@ -637,6 +637,37 @@ unit(f32,f32,f32) bridge = fn(x,z,w) {
 	bridge_stones(x,z,w,0);
 };
 
+unit(i32) bridge_masonry = fn(course_stone) {
+	if (course_stone < 14) {
+		f32 left_joint = 174.8+float_i(course_stone)*8.10;
+		f32 right_joint = left_joint+7.74;
+		f32 warm = if (course_stone % 3 == 0) { 0.72 } else { 0.65 };
+		quad(53.985,5.60,left_joint,53.985,5.60,right_joint,53.985,7.11,right_joint-0.39,53.985,7.11,left_joint+0.39,warm,warm*0.88,warm*0.74);
+		quad(64.015,5.60,left_joint,64.015,5.60,right_joint,64.015,7.11,right_joint-0.39,64.015,7.11,left_joint+0.39,warm,warm*0.88,warm*0.74);
+		if (course_stone < 13) {
+			f32 cap_start = left_joint+4.05;
+			quad(53.982,7.29,cap_start,53.982,7.29,cap_start+7.76,53.982,8.60,cap_start+7.76,53.982,8.60,cap_start,0.76,0.67,0.54);
+			quad(64.018,7.29,cap_start,64.018,7.29,cap_start+7.76,64.018,8.60,cap_start+7.76,64.018,8.60,cap_start,0.71,0.61,0.48);
+		};
+		bridge_masonry(course_stone+1);
+	};
+};
+
+f32(f32) upstream_bank = fn(px) { -117.0+(px+450.0)*0.49 };
+
+unit(i32) quay_steps = fn(station) {
+	if (station < 8) {
+		f32 quay_x = 78.0+float_i(station)*9.0;
+		f32 lip_z = upstream_bank(quay_x)-1.2;
+		f32 sand_end = upstream_bank(quay_x+8.65)-1.2;
+		quad(quay_x,0.086,lip_z,quay_x+8.65,0.086,sand_end,quay_x+8.65,0.086,sand_end-1.55,quay_x,0.086,lip_z-1.55,0.84,0.75,0.60);
+		quad(quay_x,0.135,lip_z-1.55,quay_x+8.65,0.135,sand_end-1.55,quay_x+8.65,0.135,sand_end-2.9,quay_x,0.135,lip_z-2.9,0.68,0.61,0.52);
+		quad(quay_x,0.084,lip_z-1.55,quay_x+8.65,0.084,sand_end-1.55,quay_x+8.65,0.135,sand_end-1.55,quay_x,0.135,lip_z-1.55,0.47,0.43,0.39);
+		if (station % 2 == 0) { box(quay_x+1.0,0.13,lip_z-3.3,0.49,0.61,0.46,0.29,0.31,0.29); };
+		quay_steps(station+1);
+	};
+};
+
 f32(i32,i32) ridge_height = fn(layer,point) {
 	f32 key = float_i(point);
 	f32 wave = sin_small(wrap((key-10.0)*0.36))*0.69 + sin_small(wrap((key-8.0)*0.65))*0.31;
@@ -809,6 +840,8 @@ unit() render_land = fn {
 		box(54.0,9.00,172.0,0.65,0.35,119.0,0.80,0.70,0.58);
 		box(63.35,9.00,172.0,0.65,0.35,119.0,0.80,0.70,0.58);
 		bridge(158.0,221.0,12.0);
+		bridge_masonry(0);
+		quay_steps(0);
 		city(0);
 		tower();
 		mail_landmarks();
@@ -1926,6 +1959,29 @@ unit() cockpit_model = fn {
 	model_local = false;
 };
 
+unit(f32) seine_market_craft = fn(alpha) {
+	f32 seconds = (float_i(stage_tick[0])+alpha)/30.0;
+	f32 travel = (seconds-16.0)*2.1;
+	f32 hull_x = 82.0+clamp(travel,0.0,54.0);
+	f32 hull_z = upstream_bank(hull_x)+39.0;
+	if (abs_f(hull_x-presented_pose[0].x)<145.0 && abs_f(hull_z-presented_pose[0].z)<132.0) {
+		quad(hull_x-6.0,0.52,hull_z-3.9,hull_x+3.2,0.52,hull_z+0.61,hull_x+3.2,0.52,hull_z+3.45,hull_x-6.0,0.52,hull_z-1.06,0.32,0.16,0.11);
+		tri(hull_x+3.2,0.52,hull_z+0.61,hull_x+3.2,0.52,hull_z+3.45,hull_x+6.0,0.52,hull_z+3.40,0.32,0.16,0.11);
+		quad(hull_x-6.0,0.085,hull_z-1.06,hull_x+3.2,0.085,hull_z+3.45,hull_x+3.2,0.52,hull_z+3.45,hull_x-6.0,0.52,hull_z-1.06,0.52,0.26,0.18);
+		quad(hull_x+3.2,0.085,hull_z+3.45,hull_x+6.0,0.085,hull_z+3.40,hull_x+6.0,0.52,hull_z+3.40,hull_x+3.2,0.52,hull_z+3.45,0.57,0.30,0.19);
+		quad(hull_x-6.0,0.085,hull_z-3.9,hull_x+3.2,0.085,hull_z+0.61,hull_x+3.2,0.52,hull_z+0.61,hull_x-6.0,0.52,hull_z-3.9,0.39,0.20,0.14);
+		quad(hull_x+3.2,0.085,hull_z+0.61,hull_x+6.0,0.085,hull_z+3.40,hull_x+6.0,0.52,hull_z+3.40,hull_x+3.2,0.52,hull_z+0.61,0.43,0.22,0.16);
+		box(hull_x-4.75,0.53,hull_z-2.44,2.45,0.31,0.98,0.73,0.60,0.39);
+		quad(hull_x-0.7,0.84,hull_z-0.24,hull_x+2.4,0.84,hull_z+1.28,hull_x+2.4,0.84,hull_z+2.35,hull_x-0.7,0.84,hull_z+0.83,0.68,0.34,0.21);
+		quad(hull_x-0.7,0.84,hull_z+0.83,hull_x+2.4,0.84,hull_z+2.35,hull_x+2.4,0.58,hull_z+2.43,hull_x-0.7,0.58,hull_z+0.91,0.86,0.68,0.38);
+		if (travel > 0.0 && travel < 54.0) {
+			f32 wake_length = clamp(travel*0.6,0.05,9.7);
+			tri(hull_x-5.95,0.052,hull_z-3.64,hull_x-6.75,0.052,hull_z-3.65,hull_x-6.75-wake_length,0.052,hull_z-5.0-wake_length*0.72,0.62,0.77,0.72);
+			tri(hull_x-5.95,0.052,hull_z-1.23,hull_x-6.75,0.052,hull_z-1.62,hull_x-6.75-wake_length,0.052,hull_z-0.18-wake_length*0.25,0.62,0.77,0.72);
+		};
+	};
+};
+
 unit(f32,i32,f32,f32) draw_aircraft = fn(alpha,mail_status,impact_x,impact_z) {
 	vertex_count = 0;
 	drawing_world = false;
@@ -1934,6 +1990,8 @@ unit(f32,i32,f32,f32) draw_aircraft = fn(alpha,mail_status,impact_x,impact_z) {
 		paint_crops(0);
 		i32 age = stage_tick[0]-spray_tick;
 		if (age < 36) { spray_mist(0,age); };
+	} else {
+		if (phase[0] == MissionPhase::seine_crossing || phase[0] == MissionPhase::mail_approach) { seine_market_craft(alpha); };
 	};
 	if (phase[0] == MissionPhase::mail_in_flight) {
 		box(mail[0][0]-0.30,mail[0][1],mail[0][2]-0.30,0.60,0.54,0.60,0.92,0.50,0.18);

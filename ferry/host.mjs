@@ -1,4 +1,4 @@
-export const ENGINE_PATH = "./ferry.wasm?v=ferry-annex-middle-v1";
+export const ENGINE_PATH = "./ferry.wasm?v=ferry-pier-camera-v1";
 const INPUTS = new Map([
   ["KeyA","left"],["ArrowLeft","left"],["KeyD","right"],["ArrowRight","right"],
   ["KeyW","up"],["ArrowUp","up"],["KeyS","down"],["ArrowDown","down"],["Space","brake"],
@@ -90,9 +90,11 @@ function drawRouteMap(ctx,roads,bounds,frame,route) {
   dot(frame[26],frame[27],3,"#fff5e1");
 }
 
+const meshLimits = {world:9*4096*6,moving:24*256*6};
+
 export function frameData(memory,pointer,length,kind) {
-  if (!Number.isSafeInteger(pointer)||pointer<0||pointer%4||!Number.isSafeInteger(length)||length<0||
-      (kind==="frame" ? length!==30 : length%18!==0)||pointer+length*4>memory.buffer.byteLength) {
+  if (!Number.isSafeInteger(pointer)||pointer<0||pointer%4||!Number.isSafeInteger(length)||length<=0||
+      (kind==="frame" ? length!==30 : length%18!==0||length>(meshLimits[kind]??0))||pointer+length*4>memory.buffer.byteLength) {
     throw Error("The game engine returned unreadable data.");
   }
   return new Float32Array(memory.buffer,pointer,length);
@@ -112,6 +114,7 @@ function programFor(gl) {
   uniform mat4 camera;
   uniform bool sky;
   out vec3 tint;
+  flat out highp int surface;
   out vec3 skyRay;
   out vec3 local;
   out float depth;
@@ -123,16 +126,19 @@ function programFor(gl) {
       vec3 forward=vec3(camera[0][3],camera[1][3],camera[2][3]);
       skyRay=forward+ndc.x*right/dot(right,right)+ndc.y*up/dot(up,up);
       gl_Position=vec4(ndc,0.,1.);
-      tint=vec3(0.); local=vec3(0.); depth=0.;
+      tint=vec3(0.); surface=0; local=vec3(0.); depth=0.;
     }else{
       gl_Position=camera*vec4(position,1.);
-      tint=color; local=position; depth=gl_Position.w; skyRay=vec3(0.,0.,1.);
+      surface=int(floor(color.r*.5));
+      tint=vec3(color.r-2.*float(surface),color.gb); local=position; depth=gl_Position.w; skyRay=vec3(0.,0.,1.);
     }
   }`);
   const fragment=shader(gl.FRAGMENT_SHADER,`#version 300 es
   precision highp float;
   uniform bool sky;
+  uniform float waterPhase;
   in vec3 tint;
+  flat in highp int surface;
   in vec3 skyRay;
   in vec3 local;
   in float depth;
@@ -157,6 +163,11 @@ function programFor(gl) {
       pixel=vec4(air,1.);
     }else if(tint.z<0.){
       pixel=vec4(.028,.015,.061,-tint.z);
+    }else if(surface==4){
+      if(tint.g<.002) discard;
+      pixel=vec4(1.,.65,.29,tint.g*(1.-smoothstep(25.,92.,depth)));
+    }else if(surface==5){
+      pixel=vec4(mix(vec3(1.,.83,.54),vec3(.65,.39,.47),smoothstep(20.,170.,depth)*.45),1.);
     }else{
       float haze=smoothstep(19.,185.,depth);
       vec3 normal=cross(dFdy(local),dFdx(local));
@@ -164,7 +175,40 @@ function programFor(gl) {
       float key=max(0.,dot(normal,vec3(-.60,.57,.56)));
       float bounce=max(0.,dot(normal,vec3(.57,.37,-.66)));
       vec3 light=vec3(.76,.75,.92)+vec3(.27,.16,.09)*key+vec3(.05,.09,.16)*bounce;
-      vec3 dusk=tint*light+vec3(.036,.018,.045);
+      vec3 paint=tint;
+      vec3 reflected=vec3(0.);
+      if(surface==1){
+        vec2 grit=local.xz*7.;
+        float footprint=max(length(dFdx(grit)),length(dFdy(grit)));
+        float gritFade=1.-smoothstep(.32,1.,footprint);
+        vec2 cell=floor(grit);
+        float speck=fract(dot(fract(cell*vec2(.1031,.1137)),vec2(7.13,13.9)));
+        float wear=.5+.5*sin(local.x*.67+local.z*.46)*sin(local.z*.91);
+        paint*=.92+.13*wear+(.24*(speck-.5))*gritFade;
+      }else if(surface==2&&abs(normal.y)<.42){
+        float across=abs(normal.x)>.5?local.z:local.x;
+        vec2 brick=vec2(across*1.55,local.y*3.25);
+        float footprint=max(length(dFdx(brick)),length(dFdy(brick)));
+        float detail=1.-smoothstep(.2,.78,footprint);
+        brick.x+=.5*mod(floor(brick.y),2.);
+        vec2 f=fract(brick);
+        float edge=min(min(f.x,1.-f.x),min(f.y,1.-f.y));
+        float mortar=(1.-smoothstep(.035,.105,edge))*detail;
+        paint=mix(paint*(.88+.18*fract(dot(floor(brick),vec2(.77,.41)))*detail),
+                  paint*.64+vec3(.09,.075,.07),mortar);
+      }else if(surface==3){
+        vec2 q=local.xz;
+        float a=dot(q,vec2(.11,2.8))+waterPhase;
+        float b=dot(q,vec2(-.33,4.7))-2.*waterPhase;
+        float detail=1.-smoothstep(.4,2.45,max(fwidth(a),fwidth(b)));
+        float wave=(sin(a)*.63+sin(b)*.37)*detail;
+        float gleam=max(0.,wave);
+        gleam*=gleam; gleam*=gleam;
+        float sunTrail=exp(-abs(q.x+18.-.19*(q.y-75.))*.105);
+        paint*=1.06+.22*wave;
+        reflected=vec3(.095,.12,.16)*(.25+.75*gleam)+vec3(.34,.17,.074)*sunTrail*gleam;
+      }
+      vec3 dusk=paint*light+vec3(.036,.018,.045)+reflected;
       pixel=vec4(mix(dusk,vec3(.51,.34,.44),haze*.69),1.);
     }
   }`);
@@ -182,6 +226,7 @@ function graphics(canvas) {
   const gl=canvas.getContext("webgl2",{alpha:true,antialias:true});
   if (!gl) throw Error("Last Ferry needs WebGL 2. Try a browser with graphics acceleration enabled.");
   const program=programFor(gl), camera=gl.getUniformLocation(program,"camera"), sky=gl.getUniformLocation(program,"sky");
+  const waterPhase=gl.getUniformLocation(program,"waterPhase");
   const skyVao=gl.createVertexArray();
   gl.enable(gl.DEPTH_TEST);
   gl.enable(gl.BLEND);
@@ -209,6 +254,7 @@ function graphics(canvas) {
       gl.clear(gl.COLOR_BUFFER_BIT|gl.DEPTH_BUFFER_BIT);
       gl.useProgram(program);
       gl.uniformMatrix4fv(camera,false,frame.subarray(0,16));
+      gl.uniform1f(waterPhase,(performance.now()%20000)*Math.PI/10000);
       gl.disable(gl.DEPTH_TEST);
       gl.uniform1i(sky,1);
       gl.bindVertexArray(skyVao);
@@ -448,6 +494,10 @@ export async function boot(env=globalThis,createGraphics=graphics) {
   }
   function receive(name,pointer,length) {
     const data=frameData(engine.memory,pointer,length,name);
+    const other=meshes.get(name==="world"?"moving":"world");
+    if (other && pointer+length*4>other[0] && other[0]+other[1]*4>pointer) {
+      throw Error("The game engine returned overlapping geometry.");
+    }
     meshes.set(name,[pointer,length]);
     renderer?.upload(name,data);
   }

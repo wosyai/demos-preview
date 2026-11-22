@@ -28,6 +28,18 @@ facets and facade geometry are modeled in Wosy. The browser sky evaluates a
 direction at infinity from the same camera matrix as the world draw, so the
 sun and clouds are stationary when the player moves.
 
+World storage reserves nine 4,096-vertex chunks and moving storage 24
+256-vertex chunks. Wosy never writes beyond either capacity, and the
+host checks the reported counts and disjoint byte ranges before upload.
+The six-float vertex format stores explicit material bands in red: ordinary
+base red is 0–1; asphalt, masonry, canal, lamp pool and lamp emit red
+plus 2, 4, 6, 8 or 10 respectively. Each triangle has one band, removed
+in the vertex shader before interpolation. Negative blue remains the
+contact-shadow channel. Light-pool green stores opacity; each pool is
+centered under its matching lamp. The GPU shades with world coordinates
+so textures do not slide as the camera moves. Player wheel detail phase
+follows signed simulation displacement; the browser does not move wheels.
+
 Traffic follows separate north-south and east-west lanes on the boulevard and
 the western district. The player and traffic share two vehicle substeps per
 fixed simulation tick. Each move sweeps the oriented body along its relative

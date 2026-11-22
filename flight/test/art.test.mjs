@@ -128,6 +128,25 @@ test("Wright Flyer has thirteen striped cells and a navy canton; Paris has one B
   assert(blue[0][1] - gold[0][1] > .018, "blue disk is not coplanar with the diamond");
 });
 
+test("Paris adds local limestone courses and low stepped moorings on the existing Seine banks", async () => {
+  const demo = await art();
+  const {world} = demo.sample(1);
+  const west = vertices(world,[.76,.67,.54]).filter(([x]) => close(x,53.982));
+  const east = vertices(world,[.71,.61,.48]).filter(([x]) => close(x,64.018));
+  assert.equal(west.length,13*6);
+  assert.equal(east.length,13*6);
+  assert([...west,...east].every(([,y,z]) => y>=7.28 && y<=8.61 && z>172 && z<291),
+    "warm course stones remain a veneer on the same bridge and do not change its clearance");
+  const coping = vertices(world,[.84,.75,.60]).filter(([,y]) => close(y,.086));
+  const risers = vertices(world,[.47,.43,.39]).filter(([,y]) => close(y,.084) || close(y,.135));
+  assert.equal(coping.length,8*6);
+  assert.equal(risers.length,8*6);
+  assert([...coping,...risers].every(([x,y,z]) => x>=78 && x<150 && y<1 &&
+    z < -117+(x+450)*.49),
+    "paving and rises stay on the known land bank below the flight floor");
+  assert(world.length<32768*6);
+});
+
 test("the Wasm cockpit swaps the exterior aircraft for its own near geometry without removing guides", async () => {
   const demo = await art();
   for (const [course, aspect, exteriorWing, frameMaterial] of [
