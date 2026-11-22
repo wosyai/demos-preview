@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Wosy Demos</title>
+<style>
+  :root{color-scheme:dark;background:#132a26;color:#f4ecce;font:16px/1.5 system-ui,sans-serif}
+  body{max-width:42rem;margin:0 auto;padding:clamp(2rem,8vw,6rem) 1.5rem}
+  h1{font-size:clamp(2.6rem,10vw,5rem);line-height:1;margin:1rem 0} p{color:#c2d3bb}
+  a{display:inline-block;margin-top:.5rem;padding:.75rem 1.25rem;background:#efc463;color:#132a26;text-decoration:none;font-weight:750;border-radius:.45rem}
+  a:focus-visible{outline:3px solid white;outline-offset:4px}
+  .demos{display:grid;gap:1rem;margin-top:2rem;grid-template-columns:repeat(auto-fit,minmax(min(17rem,100%),1fr))}
+  section{border:1px solid #647866;border-radius:.65rem;padding:1.25rem;background:#1d3730}
+  h2{font-size:1.55rem;margin:.25rem 0}section p{margin:.6rem 0 1rem}
+</style>
+<main>
+  <p>PLAYABLE WEBASSEMBLY</p>
+  <h1>Wosy Demos</h1>
+  <p>Games built with Wosy and rendered directly in the browser.</p>
+  <div class="demos">
+    <section aria-labelledby="flight-title">
+      <h2 id="flight-title">Flying Low</h2>
+      <p>Land to collect cargo, then take off again to deliver mail over Paris or dust crop rows in the Wright Flyer.</p>
+      <a href="./flight/">Play Flying Low</a>
+    </section>
+    <section aria-labelledby="voxel-title">
+      <h2 id="voxel-title">Pocket Island</h2>
+      <p>Explore a larger seeded island, or race the tide to light two watchfires and the lighthouse.</p>
+      <a href="./voxel/">Play Pocket Island</a>
+    </section>
+    <section aria-labelledby="ferry-title">
+      <h2 id="ferry-title">Last Ferry</h2>
+      <p>Pick up a tape across town, then race through the waterfront district to catch the last boat.</p>
+      <a href="./ferry/">Play Last Ferry</a>
+    </section>
+  </div>
+</main>
+</html>

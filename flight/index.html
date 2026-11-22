@@ -1,0 +1,112 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#162b31">
+  <title>Flying Low · Wosy Arcade</title>
+  <meta name="description" content="Fly two pioneering aircraft on crop patrol and an aerial mail delivery. An original Wosy browser game.">
+  <link rel="stylesheet" href="./style.css?v=county-reservoir-flight-v7">
+  <script type="module" src="./host.mjs?v=county-reservoir-flight-v7-arcade-pause-1"></script>
+  <link rel="stylesheet" href="../arcade/shell.css?v=1">
+</head>
+<body>
+  <main id="game" class="game" tabindex="-1">
+    <canvas id="view" class="view" aria-label="Third-person view of the flight course"></canvas>
+    <div class="shade" aria-hidden="true"></div>
+    <header class="masthead">
+      <a class="brand" href="../" aria-label="Wosy demos">WOSY <span>ARCADE</span></a>
+      <p id="engine" class="engine" role="status">Loading flight engine</p>
+    </header>
+
+    <section id="menu" class="menu" aria-labelledby="game-title">
+      <p class="edition">PIONEERS OF FLIGHT <span></span> AIR TRIAL NO. 01</p>
+      <h1 id="game-title">Flying<br><em>Low</em><span>.</span></h1>
+      <p class="pitch">Two pioneers. Two missions. Follow turquoise guides to your objective and fly through amber rings for bonus points.</p>
+      <div class="courses" aria-label="Choose a mission">
+        <button class="course farm" type="button" data-course="0" disabled>
+          <span class="race-number">01</span>
+          <span class="race-copy"><span class="race-title">Crop Patrol</span><span class="race-location">WRIGHT FLYER · LOAD, SPRAY THREE ROWS, LAND</span></span>
+        </button>
+        <button class="course paris" type="button" data-course="1" disabled>
+          <span class="race-number">02</span>
+          <span class="race-copy"><span class="race-title">Paris Air Mail</span><span class="race-location">SANTOS-DUMONT · LOAD THE POUCH, DROP IT, LAND</span></span>
+        </button>
+      </div>
+      <p id="menu-help" class="menu-help">Take off, land at the marked supply strip, then lift off again with cargo. Deliver mail across Paris or spray three marked farm rows. Fly through the amber rings early for bonus points.</p>
+      <nav class="arcade-menu-tools" aria-label="Arcade menu">
+        <details class="arcade-settings">
+          <summary><svg class="arcade-tool-icon" aria-hidden="true" focusable="false"><use href="../arcade/icons.svg?v=1#settings"></use></svg> Settings</summary>
+          <div class="arcade-settings-body">
+            <p>WASD or arrows to steer. Q and E control power. Space triggers a mission action. Press R to restart.</p>
+          </div>
+        </details>
+        <a class="arcade-back" href="../"><svg class="arcade-tool-icon" aria-hidden="true" focusable="false"><use href="../arcade/icons.svg?v=1#back"></use></svg> Back to Wosy Arcade</a>
+      </nav>
+      <p id="problem" class="problem" role="alert" hidden></p>
+    </section>
+
+    <section id="hud" class="hud" aria-label="Flight instruments" hidden>
+      <h2 id="track" class="track">Crop Patrol</h2>
+      <dl class="instruments">
+        <div><dt>TIME</dt><dd id="time">0:00.00</dd></div>
+        <div><dt>MISSION</dt><dd id="mission-phase">Take off</dd></div>
+        <div><dt>SPEED</dt><dd id="speed">0</dd></div>
+        <div><dt>ALTITUDE</dt><dd id="altitude">0</dd></div>
+        <div class="record"><dt>BONUS GATES</dt><dd id="gates">0/3</dd></div>
+        <div class="record"><dt>BEST</dt><dd id="best">—</dd></div>
+      </dl>
+      <div class="hud-actions">
+        <button id="restart" type="button">Restart</button>
+        <button id="pause" type="button">Pause</button>
+      </div>
+    </section>
+
+    <p id="callout" class="callout" aria-hidden="true" hidden></p>
+    <p id="flight-cue" class="sr-only" role="status"></p>
+
+    <section id="summary" class="summary" role="dialog" aria-labelledby="summary-title" aria-modal="true" hidden>
+      <p id="summary-kicker" class="edition">FLIGHT REPORT</p>
+      <h2 id="summary-title">Run complete</h2>
+      <p id="summary-detail">Fly again to beat your best time.</p>
+      <div class="summary-actions">
+        <button id="again" type="button" class="primary">Fly again</button>
+        <button id="choose" type="button" class="secondary">Choose a mission</button>
+      </div>
+      <nav class="arcade-menu-tools" aria-label="Arcade menu">
+        <details id="flight-dialog-settings" class="arcade-settings">
+          <summary><svg class="arcade-tool-icon" aria-hidden="true" focusable="false"><use href="../arcade/icons.svg?v=1#settings"></use></svg> Settings</summary>
+          <div class="arcade-settings-body">
+            <details>
+              <summary>Flight controls</summary>
+              <p>WASD or arrows to steer. Q and E control power. Space triggers a mission action. Press R to restart.</p>
+              <p>On touchscreens, drag the stick to steer and hold Throttle or Brake to adjust power.</p>
+            </details>
+          </div>
+        </details>
+        <a class="arcade-back" href="../"><svg class="arcade-tool-icon" aria-hidden="true" focusable="false"><use href="../arcade/icons.svg?v=1#back"></use></svg> Back to Wosy Arcade</a>
+      </nav>
+    </section>
+
+    <div id="touch" class="touch" aria-label="Touch flight controls" hidden>
+      <div id="flight-stick" class="stick-zone" role="group" aria-label="Flight stick. Drag sideways to bank. Pull down to climb.">
+        <span class="stick-base" aria-hidden="true"><span class="stick-knob"></span></span>
+        <span class="stick-label" aria-hidden="true">DRAG TO STEER</span>
+      </div>
+      <div class="throttle" aria-label="Throttle controls">
+        <button type="button" data-action="drop" aria-label="Mission action" hidden>ACTION</button>
+        <button type="button" data-action="power" aria-label="Increase power">THROTTLE</button>
+        <button type="button" data-action="brake" aria-label="Reduce power">BRAKE</button>
+      </div>
+    </div>
+
+    <footer id="keys" class="keys" hidden>
+      <span><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> / <kbd>↑</kbd><kbd>←</kbd><kbd>↓</kbd><kbd>→</kbd> flight stick</span>
+      <span><kbd>Q</kbd><kbd>E</kbd> power</span>
+      <span id="drop-key" hidden><kbd>Space</kbd> mission action</span>
+      <span><kbd>R</kbd> restart</span>
+    </footer>
+    <noscript><p class="problem">Flying Low needs JavaScript to connect your controls to the flight engine.</p></noscript>
+  </main>
+</body>
+</html>

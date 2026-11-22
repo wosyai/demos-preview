@@ -1,0 +1,114 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#152a24">
+<meta name="description" content="Explore and reshape a small block island built in Wosy and rendered in your browser.">
+<title>Pocket Island • Wosy</title>
+<link rel="stylesheet" href="./style.css?v=beacon-5-arcade-1">
+<script type="module" src="./main.js?v=beacon-mode-sea-v1"></script>
+  <link rel="stylesheet" href="../arcade/shell.css?v=1">
+</head>
+<body>
+<svg class="glyph-source" width="0" height="0" aria-hidden="true" focusable="false"><defs>
+<symbol id="glyph-view" viewBox="0 0 24 24"><path d="M3 12s3-6 9-6 9 6 9 6-3 6-9 6-9-6-9-6Z"/><circle cx="12" cy="12" r="2.5"/></symbol>
+<symbol id="glyph-person" viewBox="0 0 24 24"><circle cx="12" cy="6" r="2.5"/><path d="M6 19v-2a6 6 0 0 1 12 0v2m-15-9v-6h5m8 0h5v6"/></symbol>
+<symbol id="glyph-jump" viewBox="0 0 24 24"><path d="M6 10l6-6 6 6m-6-6v12M5 20h14"/></symbol>
+<symbol id="glyph-up" viewBox="0 0 24 24"><path d="m6 11 6-6 6 6m-6-6v15"/></symbol>
+<symbol id="glyph-down" viewBox="0 0 24 24"><path d="m6 13 6 6 6-6m-6 6V4"/></symbol>
+<symbol id="glyph-wing" viewBox="0 0 24 24"><path d="M12 21V8m0 7c-5 0-8-4-9-10 3 4 6 5 9 5 3 0 6-1 9-5-1 6-4 10-9 10Z"/></symbol>
+<symbol id="glyph-break" viewBox="0 0 24 24"><path d="m7 20 10-10m-11-4a9 9 0 0 1 14 6M6 6l-2 3m16 3-2 2"/></symbol>
+<symbol id="glyph-place" viewBox="0 0 24 24"><path d="m12 3 8 4.5v9L12 21l-8-4.5v-9L12 3Z M4 7.5 12 12l8-4.5m-8 4.5v9"/></symbol>
+<symbol id="glyph-flame" viewBox="0 0 24 24"><path d="M12 3c2 3 5 5 5 9 1 0 2-.5 3-2 1 7-2 11-8 11-5 0-8-3-8-7 0-3 2-6 4-8 0 3 1 4 2 4 2-2 2-4 2-7Z"/></symbol>
+<symbol id="glyph-tide" viewBox="0 0 24 24"><path d="M3 8c3 0 3-3 6-3s3 3 6 3 3-3 6-3M3 14c3 0 3-3 6-3s3 3 6 3 3-3 6-3M3 20c3 0 3-3 6-3s3 3 6 3 3-3 6-3"/></symbol>
+<symbol id="glyph-goal" viewBox="0 0 24 24"><path d="M5 21V4m0 1c4-6 9 4 14-1v10c-6 5-10-4-14 1"/></symbol>
+<symbol id="glyph-help" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M9.5 8.5a2.5 2.5 0 1 1 3.5 2.3c-1 .5-1 1.2-1 2.2m0 3h.01"/></symbol>
+</defs></svg>
+<main class="shell" id="game">
+  <canvas id="scene" tabindex="-1" aria-label="Three-dimensional view of the island"></canvas>
+  <div class="horizon" aria-hidden="true"></div>
+  <header class="top">
+    <div class="brand">
+      <svg class="mark" viewBox="0 0 36 36" fill="none" aria-hidden="true"><path d="m18 4 12 7v14l-12 7-12-7V11L18 4Z" stroke="currentColor" stroke-width="1.5"/><path d="m6 11 12 7 12-7M18 18v14" stroke="currentColor" stroke-width="1.5"/><path d="m12 14.5 12-7" stroke="currentColor" stroke-width="1.5"/></svg>
+      <div><span class="brand-name">WOSY</span><span class="brand-line">DEMO LAB</span></div>
+    </div>
+    <section class="mission-hud" id="mission-hud" aria-label="Beacon Run" hidden>
+      <p id="mission-result" aria-live="polite" hidden></p>
+      <div class="mission-readouts" id="mission-readouts">
+        <div class="objective"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="#glyph-goal"/></svg><strong id="relay-goal" aria-live="polite">Cross to the north watchfire</strong></div>
+        <div class="supplies">
+          <label class="metric"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="#glyph-flame"/></svg><span class="sr-only">Flame</span><meter id="flame" min="0" max="1" value="1"></meter></label>
+          <span class="metric"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="#glyph-place"/></svg><span class="sr-only">Wood: </span><span id="bridge-stock">12</span></span>
+          <span class="metric tide"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="#glyph-tide"/></svg><span id="tide-level">Low tide</span></span>
+        </div>
+      </div>
+      <button class="secondary" id="mission-retry" type="button" hidden>Try again</button>
+    </section>
+    <div class="top-actions">
+      <span id="engine-status" class="status" role="status"><i></i> Loading engine</span>
+      <button class="icon" id="pause" type="button" title="Return to menu" aria-label="Return to menu"><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M8.5 5v14m7-14v14" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg></button>
+      <button class="icon view-switch" id="camera-view" type="button" title="Change view (V)" aria-label="Third-person view" aria-pressed="false"><svg class="view-first" viewBox="0 0 24 24" aria-hidden="true"><use href="#glyph-view"/></svg><svg class="view-third" viewBox="0 0 24 24" aria-hidden="true"><use href="#glyph-person"/></svg></button>
+      <button class="icon" id="fullscreen" type="button" title="Full screen" aria-label="Full screen"><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M9 4H4v5m11-5h5v5M4 15v5h5m11-5v5h-5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg></button>
+    </div>
+  </header>
+  <section class="intro" id="intro" aria-labelledby="title">
+    <h1 id="title">Pocket<br>Island<span>.</span></h1>
+    <div class="entry-actions">
+      <button class="primary" id="mission-start" type="button" disabled>Beacon Run</button>
+      <button class="secondary" id="enter" type="button" disabled>Play sandbox</button>
+    </div>
+    <p class="mission-intro">Keep the flame alive. Light both watchfires and reach the lighthouse.</p>
+    <nav class="arcade-menu-tools" aria-label="Arcade menu">
+      <details class="arcade-settings">
+        <summary><svg class="arcade-tool-icon" aria-hidden="true" focusable="false"><use href="../arcade/icons.svg?v=1#settings"></use></svg> Settings</summary>
+        <div class="arcade-settings-body">
+          <details class="entry-guide">
+            <summary><svg viewBox="0 0 24 24" aria-hidden="true"><use href="#glyph-help"/></svg> Controls</summary>
+            <p class="entry-keys"><kbd>WASD</kbd> Move <kbd>Space</kbd> Jump / hold to swim up <kbd>F</kbd> Fly<br><kbd>Q</kbd> or left click: break · <kbd>E</kbd> or right click: place<br><kbd>1–6</kbd> Select block</p>
+            <p class="entry-touch">Use the left stick to move. Drag the right side to look. Hold Jump to swim up. Hold Break or Place to edit.</p>
+            <p class="camera-legend"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="#glyph-view"/></svg><svg viewBox="0 0 24 24" aria-hidden="true"><use href="#glyph-person"/></svg><span>Switch first / third person <kbd>V</kbd></span></p>
+          </details>
+          <details class="world-options">
+            <summary>Sandbox settings</summary>
+            <form class="seed" id="seed-form">
+              <label for="seed">SEED</label>
+              <input id="seed" name="seed" type="text" inputmode="numeric" autocomplete="off">
+              <button type="submit" id="apply-seed" disabled>Generate</button>
+              <button type="button" class="random" id="random-seed" title="New random seed" aria-label="New random seed" disabled><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M3 7h3c4 0 6 10 10 10h5m-3-3 3 3-3 3M3 17h3c1.3 0 2.4-1 3.4-2.5M14 8.9C14.7 7.7 15.3 7 16 7h5m-3-3 3 3-3 3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+            </form>
+          </details>
+        </div>
+      </details>
+      <a class="arcade-back" href="../"><svg class="arcade-tool-icon" aria-hidden="true" focusable="false"><use href="../arcade/icons.svg?v=1#back"></use></svg> Back to Wosy Arcade</a>
+    </nav>
+    <p class="error" id="error" role="alert" hidden></p>
+  </section>
+  <span class="reticle" aria-hidden="true"></span>
+  <section class="build-hud" aria-label="Materials and movement">
+    <p class="sr-only" id="player-state" role="status"></p>
+    <div class="hotbar" role="group" aria-label="Building materials">
+      <button class="grass" type="button" data-material="1" aria-label="1. Grass" aria-pressed="false" title="Grass · 1"><i></i><span>1</span></button>
+      <button class="soil" type="button" data-material="2" aria-label="2. Dirt" aria-pressed="false" title="Dirt · 2"><i></i><span>2</span></button>
+      <button class="stone" type="button" data-material="3" aria-label="3. Stone" aria-pressed="false" title="Stone · 3"><i></i><span>3</span></button>
+      <button class="sand" type="button" data-material="4" aria-label="4. Sand" aria-pressed="false" title="Sand · 4"><i></i><span>4</span></button>
+      <button class="wood" type="button" data-material="5" aria-label="5. Wood" aria-pressed="false" title="Wood · 5"><i></i><span>5</span></button>
+      <button class="leaves" type="button" data-material="6" aria-label="6. Leaves" aria-pressed="false" title="Leaves · 6"><i></i><span>6</span></button>
+    </div>
+  </section>
+  <p class="notice" id="notice" aria-live="polite"></p>
+  <section class="touch" aria-label="Touch controls">
+    <div id="move-stick" class="move-stick" role="group" aria-label="Movement stick. Drag in a direction to move.">
+      <span class="stick-base" aria-hidden="true"><span class="stick-knob"></span></span>
+    </div>
+    <div class="touch-actions">
+      <button id="jump-touch" data-move="Space" type="button" title="Jump" aria-label="Jump"><svg class="on-foot" viewBox="0 0 24 24" aria-hidden="true"><use href="#glyph-jump"/></svg><svg class="in-flight" viewBox="0 0 24 24" aria-hidden="true"><use href="#glyph-up"/></svg></button>
+      <button id="descend-touch" data-move="KeyC" type="button" title="Descend" aria-label="Descend" hidden><svg viewBox="0 0 24 24" aria-hidden="true"><use href="#glyph-down"/></svg></button>
+      <button id="flight-touch" type="button" aria-label="Fly" title="Fly" aria-pressed="false"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="#glyph-wing"/></svg></button>
+      <button id="view-touch" type="button" aria-label="Third-person view" aria-pressed="false"><svg class="view-first" viewBox="0 0 24 24" aria-hidden="true"><use href="#glyph-view"/></svg><svg class="view-third" viewBox="0 0 24 24" aria-hidden="true"><use href="#glyph-person"/></svg></button>
+      <div class="touch-edit" role="group" aria-label="Edit blocks"><button id="remove" data-move="KeyQ" type="button" aria-label="Break block" title="Break block"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="#glyph-break"/></svg></button><button id="place" data-move="KeyE" type="button" aria-label="Place selected block" title="Place selected block"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="#glyph-place"/></svg></button></div>
+    </div>
+  </section>
+</main>
+</body>
+</html>
