@@ -62,10 +62,10 @@ const MAP_INTERVAL=72, MAP_HEADING_STEP=.14, FULL_CIRCLE=2*Math.PI;
 
 function drawRouteMap(ctx,base,projection,roads,bounds,frame,route,count) {
   if(!bounds||!roads.length) return;
-  const {width,height}=ctx.canvas, active=[0,1,8].includes(frame[17]);
-  const px=frame[26],pz=frame[27],tx=count?route[(count-1)*2]:frame[24],tz=count?route[(count-1)*2+1]:frame[25];
-  const minX=Math.min(bounds[0],px,active?tx:Infinity), maxX=Math.max(bounds[1],px,active?tx:-Infinity);
-  const minZ=Math.min(bounds[2],pz,active?tz:Infinity), maxZ=Math.max(bounds[3],pz,active?tz:-Infinity);
+  const {width,height}=ctx.canvas, guided=count>1;
+  const px=frame[26],pz=frame[27],tx=guided?route[(count-1)*2]:px,tz=guided?route[(count-1)*2+1]:pz;
+  const minX=Math.min(bounds[0],px,tx), maxX=Math.max(bounds[1],px,tx);
+  const minZ=Math.min(bounds[2],pz,tz), maxZ=Math.max(bounds[3],pz,tz);
   const scale=Math.min((width-30)/(maxX-minX),(height-30)/(maxZ-minZ));
   const dx0=(width-(maxX-minX)*scale)/2-minX*scale;
   const dz0=(height-(maxZ-minZ)*scale)/2+maxZ*scale;
@@ -84,15 +84,13 @@ function drawRouteMap(ctx,base,projection,roads,bounds,frame,route,count) {
     ctx.clearRect(0,0,width,height);
     ctx.drawImage(base.canvas,0,0);
   } else paintRoads(ctx);
-  if(active) {
-    if(count>1) {
-      ctx.beginPath();
-      ctx.moveTo(x(route[0]),z(route[1]));
-      for(let point=1;point<count;point++) ctx.lineTo(x(route[point*2]),z(route[point*2+1]));
-      ctx.lineJoin="round"; ctx.lineCap="round";
-      ctx.strokeStyle="#101924"; ctx.lineWidth=5.5; ctx.stroke();
-      ctx.strokeStyle="#ffcd87"; ctx.lineWidth=3; ctx.stroke();
-    }
+  if(guided) {
+    ctx.beginPath();
+    ctx.moveTo(x(route[0]),z(route[1]));
+    for(let point=1;point<count;point++) ctx.lineTo(x(route[point*2]),z(route[point*2+1]));
+    ctx.lineJoin="round"; ctx.lineCap="round";
+    ctx.strokeStyle="#101924"; ctx.lineWidth=5.5; ctx.stroke();
+    ctx.strokeStyle="#ffcd87"; ctx.lineWidth=3; ctx.stroke();
     ctx.beginPath();
     ctx.arc(x(tx),z(tz),5,0,Math.PI*2);
     ctx.fillStyle="#ffcd87"; ctx.fill();
@@ -321,6 +319,7 @@ export async function boot(env=globalThis,createGraphics=graphics) {
   const touch=get("touch"), trip=get("trip"), departure=get("departure"), brakeIcon=get("brake-icon"), actionIcon=get("action-icon");
   const input=inputState(), meshes=new Map();
   const map=get("city-map"), chart=get("city-chart").getContext?.("2d");
+  const nextStop=get("route-stop"), guide=get("route-guide"), unavailable=get("route-unavailable");
   const roadLayer=chart&&document.createElement?.("canvas").getContext("2d");
   const projection={}, painted={};
   const route=new Float32Array(192), sampled={};
@@ -385,6 +384,8 @@ export async function boot(env=globalThis,createGraphics=graphics) {
         route[i*2]=x; route[i*2+1]=z;
       }
       routeCount=count;
+      nextStop.hidden=guide.hidden=count<=1;
+      unavailable.hidden=!active||count>1;
       sampled.phase=phase; sampled.key=selected; sampled.driving=driving;
       sampled.tx=tx; sampled.tz=tz; sampled.px=px; sampled.pz=pz; sampled.heading=heading;
     }

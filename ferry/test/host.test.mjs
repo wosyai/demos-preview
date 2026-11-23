@@ -30,12 +30,13 @@ test("pedals and one-shot action coexist with analog steering; keyboard axis pre
 test("loader agrees with shell version, WebAssembly triangle shape, and 30-float engine frame",async()=>{
   const html=await readFile(new URL("../index.html",import.meta.url),"utf8");
   const version=html.match(/host\.mjs\?v=([^"]+)/)?.[1];
-  assert.equal(version,"ferry-street-orbit-v1-navigation-v2");
+  assert.equal(version,"ferry-street-orbit-v1-navigation-v3");
   assert(html.includes('style.css?v=ferry-free-orbit-v1"'));
   assert.equal(ENGINE_PATH,"./ferry.wasm?v=ferry-street-orbit-v1");
   assert.doesNotMatch(html,/id="camera-view"/);
   assert.match(html,/<div id="play-hud" class="play-hud" hidden>[\s\S]*?<header[^>]*>[\s\S]*?id="objective"[\s\S]*?id="status"[\s\S]*?id="city-map"[\s\S]*?id="hint"[\s\S]*?<\/header>/);
   assert.match(html,/id="action-icon"[\s\S]*?<span id="action-caption">Interact<\/span>/);
+  assert.match(html,/<p id="route-unavailable" hidden>Route unavailable here\.<\/p>/);
   assert.match(html,/<button id="reverse"[^>]*>[\s\S]*?Reverse<\/button>/);
   assert(html.includes('lang="en"')&&html.includes('id="roam"'));
   const memory=new WebAssembly.Memory({initial:1});
@@ -352,6 +353,7 @@ test("map paints canonical roads and active markers only when expanded and playi
   assert.equal(map.hidden,true);
   app.get("start").emit("click");
   assert.equal(map.hidden,false);
+  app.mission({path:[[0,0],[1,1]]});
   app.advance(); assert.deepEqual(app.mapPaint,[]);
   map.open=true; map.emit("toggle");
   assert.deepEqual(app.mapPaint.filter(entry=>entry[0]==="fill"),[["fill","#ffcd87"],["fill","#fff5e1"]]);
@@ -365,6 +367,31 @@ test("map paints canonical roads and active markers only when expanded and playi
   app.get("pause").emit("click");
   assert.equal(map.hidden,true);
   map.emit("toggle"); app.advance(); assert.equal(app.mapPaint.length,beforePause);
+});
+
+test("map shows no implied stop when Wosy cannot offer a route",async()=>{
+  const app=shell(); await app.started;
+  app.get("start").emit("click");
+  app.mission({state:1,player:[0,3],target:[100,100]});
+  app.advance();
+  const map=app.get("city-map"), stop=app.get("route-stop"), guide=app.get("route-guide");
+  const unavailable=app.get("route-unavailable");
+  const fills=()=>app.mapPaint.filter(([kind])=>kind==="fill");
+  map.open=true; map.emit("toggle");
+  assert.equal(unavailable.hidden,false);
+  assert(stop.hidden&&guide.hidden);
+  assert.deepEqual(fills(),[["fill","#fff5e1"]],"the unverified raw target is not painted as a stop");
+  assert.equal(app.roadPaint.length,1);
+  app.mission({selection:1,path:[[0,3],[0,4],[1,4]]});
+  app.mapPaint.length=0;
+  app.advance(72);
+  assert(unavailable.hidden&&!stop.hidden&&!guide.hidden);
+  assert.deepEqual(fills(),[["fill","#ffcd87"],["fill","#fff5e1"]]);
+  app.mission({state:4});
+  app.mapPaint.length=0;
+  app.advance();
+  assert(unavailable.hidden&&stop.hidden&&guide.hidden);
+  assert.deepEqual(fills(),[["fill","#fff5e1"]],"Free Roam still shows roads and player, without a mission notice");
 });
 
 test("touch action caption follows the same Wosy cue as its accessible name",async()=>{

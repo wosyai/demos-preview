@@ -40,7 +40,8 @@
       <summary><svg class="icon" aria-hidden="true"><use href="#icon-map"/></svg> Map</summary>
       <div class="route-sheet">
         <canvas id="city-chart" width="280" height="182" aria-hidden="true"></canvas>
-        <p><span class="route-you">You</span><span class="route-stop">Next stop</span><span class="route-guide">Guide</span></p>
+        <p><span class="route-you">You</span><span id="route-stop" class="route-stop" hidden>Next stop</span><span id="route-guide" class="route-guide" hidden>Guide</span></p>
+        <p id="route-unavailable" hidden>Route unavailable here.</p>
       </div>
     </details>
     <p id="hint" class="hint" hidden></p>
@@ -75,6 +76,6 @@
   </section>
   <span id="announce" class="sr-only" aria-live="polite"></span>
 </main>
-<script type="module" src="./host.mjs?v=ferry-street-orbit-v1-navigation-v2"></script>
+<script type="module" src="./host.mjs?v=ferry-street-orbit-v1-navigation-v3"></script>
 </body>
 </html>
