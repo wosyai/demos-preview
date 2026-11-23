@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import {readFile} from "node:fs/promises";
 import test from "node:test";
-import {axes,inputState,frameData,ENGINE_PATH,readRouteMap,boot} from "../host.mjs";
+import {axes,inputState,frameData,ENGINE_PATH,readRouteMap,boot,ferrySoundtrack} from "../host.mjs";
 
 test("floating stick is radial and one thumb can steer and move simultaneously",()=>{
   assert.deepEqual(axes(3,2,40),[0,0]);
@@ -27,12 +27,12 @@ test("pedals and one-shot action coexist with analog steering; keyboard axis pre
   assert.deepEqual(control.sample(),[0,0,0,0,0]);
 });
 
-test("loader agrees with shell version, WebAssembly triangle shape, and 30-float engine frame",async()=>{
+test("loader agrees with shell version, WebAssembly triangle shape, and 34-float engine frame",async()=>{
   const html=await readFile(new URL("../index.html",import.meta.url),"utf8");
   const version=html.match(/host\.mjs\?v=([^"]+)/)?.[1];
-  assert.equal(version,"ferry-street-orbit-v1-navigation-v3");
+  assert.equal(version,"ferry-audio-v1");
   assert(html.includes('style.css?v=ferry-free-orbit-v1"'));
-  assert.equal(ENGINE_PATH,"./ferry.wasm?v=ferry-street-orbit-v1");
+  assert.equal(ENGINE_PATH,"./ferry.wasm?v=ferry-audio-v1");
   assert.doesNotMatch(html,/id="camera-view"/);
   assert.match(html,/<div id="play-hud" class="play-hud" hidden>[\s\S]*?<header[^>]*>[\s\S]*?id="objective"[\s\S]*?id="status"[\s\S]*?id="city-map"[\s\S]*?id="hint"[\s\S]*?<\/header>/);
   assert.match(html,/id="action-icon"[\s\S]*?<span id="action-caption">Interact<\/span>/);
@@ -40,10 +40,10 @@ test("loader agrees with shell version, WebAssembly triangle shape, and 30-float
   assert.match(html,/<button id="reverse"[^>]*>[\s\S]*?Reverse<\/button>/);
   assert(html.includes('lang="en"')&&html.includes('id="roam"'));
   const memory=new WebAssembly.Memory({initial:1});
-  assert.equal(frameData(memory,4,30,"frame").length,30);
+  assert.equal(frameData(memory,4,34,"frame").length,34);
   assert.equal(frameData(memory,4,18,"world").length,18);
-  assert.throws(()=>frameData(memory,0,29,"frame"));
-  assert.throws(()=>frameData(memory,1,30,"frame"));
+  assert.throws(()=>frameData(memory,0,30,"frame"));
+  assert.throws(()=>frameData(memory,1,34,"frame"));
   assert.throws(()=>frameData(memory,65532,18,"world"));
   assert.throws(()=>frameData(memory,0,17,"moving"));
   const larger=new WebAssembly.Memory({initial:16});
@@ -51,6 +51,59 @@ test("loader agrees with shell version, WebAssembly triangle shape, and 30-float
   assert.throws(()=>frameData(larger,0,9*4096*6+18,"world"));
   assert.equal(frameData(larger,0,24*256*6,"moving").length,24*256*6);
   assert.throws(()=>frameData(larger,0,24*256*6+18,"moving"));
+});
+
+test("sound follows gameplay edges rather than duplicate frames or reset baselines",()=>{
+  const calls=[];
+  const effects=ferrySoundtrack({
+    play(cue,params){calls.push(["shot",cue,params]);},
+    loop(cue,params){calls.push(["loop",cue,params]);},
+    stopLoop(cue){calls.push(["stop",cue]);}
+  });
+  const frame=new Float32Array(34);
+  const names=()=>calls.filter(call=>call[0]==="shot").map(call=>call[1]);
+  frame[17]=8;
+  effects.sync(frame);
+  effects.update(frame);
+  assert.deepEqual(calls,[],"initial frame is quiet");
+  frame[17]=0;
+  frame[30]=1;
+  effects.update(frame);
+  effects.update(frame);
+  assert.deepEqual(names(),["footstep","phone"]);
+  frame[16]=1;
+  frame[19]=29;
+  frame[33]=.7;
+  frame[31]=1;
+  frame[32]=.9;
+  effects.update(frame);
+  assert.deepEqual(names(),["footstep","phone","door","impact"]);
+  assert.equal(calls.at(-1)[1],"engine");
+  assert(calls.at(-1)[2].rate>1);
+  frame[16]=0;
+  frame[17]=1;
+  effects.update(frame);
+  assert.deepEqual(calls.at(-1),["stop","engine"]);
+  frame[17]=5;
+  effects.update(frame);
+  assert.equal(calls.at(-1)[1],"ferry");
+  frame[17]=6;
+  effects.update(frame);
+  assert.deepEqual(calls.at(-1),["stop","ferry"]);
+  frame[17]=7;
+  effects.update(frame);
+  frame[17]=2;
+  effects.update(frame);
+  effects.update(frame);
+  assert.deepEqual(names().slice(4),["door","tape","board","delivered"]);
+  frame[17]=8;
+  frame[30]=0; frame[31]=0;
+  effects.sync(frame);
+  effects.update(frame);
+  assert.deepEqual(names().slice(4),["door","tape","board","delivered"]);
+  frame[17]=3;
+  effects.update(frame);
+  assert.equal(names().at(-1),"missed");
 });
 
 function shell({defer=false,missing="",cue=1}={}) {
@@ -115,8 +168,8 @@ function shell({defer=false,missing="",cue=1}={}) {
       Memory:WebAssembly.Memory,
       async instantiate(_,imports){
         const bus=imports.ferry;
-        const view=new Float32Array(memory.buffer,0,30);
-        const publish=()=>{view[16]=+driving;view[17]=state;view[18]=seconds;view[20]=cue;view[21]=hit;view[22]=hitSequence;view.set([...target,...player,heading,turn],24);bus.frame(0,30);};
+        const view=new Float32Array(memory.buffer,0,34);
+        const publish=()=>{view[16]=+driving;view[17]=state;view[18]=seconds;view[20]=cue;view[21]=hit;view[22]=hitSequence;view.set([...target,...player,heading,turn],24);bus.frame(0,34);};
         const exports={
           memory,_start(){wasmStarts++;},
           reset(mode){resets.push(mode);bus.world(240,18);bus.moving(360,18);publish();},
@@ -132,7 +185,8 @@ function shell({defer=false,missing="",cue=1}={}) {
       },
     },
   };
-  const started=boot(env,()=>({draw(...args){draws.push(args);},upload(...args){uploads.push(args);}}));
+  const started=boot(env,()=>({draw(...args){draws.push(args);},upload(...args){uploads.push(args);}}),
+    ()=>({unlock(){},play(){},loop(){},stopLoop(){},setActive(){}}));
   return {
     get,window,document,ticks,draws,uploads,resets,started,finishFetch,mapPaint,roadPaint,
     advance(delta=16){ const frame=frames.shift(); assert(frame,"animation callback was scheduled");frame(time+=delta); },

@@ -1684,6 +1684,7 @@ i32(bool) start_harbor = fn(expedition) {
 	relay_stage = 0;
 	sea_level = sea_low;
 	sea_phase = 0.0;
+	reset_pocket_foley();
 	build_beacon_island(0);
 	beacon_canopy(0);
 	clear_controls();
@@ -1923,6 +1924,32 @@ i32(i32) search_spawn = fn(distance) {
 	}
 };
 
+i32 pocket_audio_pending = 0;
+bool pocket_audio_wet = false;
+bool pocket_audio_shore = false;
+f32 pocket_audio_step_distance = 0.0;
+i32 pocket_cue_break = 1;
+i32 pocket_cue_place = 2;
+i32 pocket_cue_pickup = 4;
+i32 pocket_cue_part = 8;
+i32 pocket_cue_step = 16;
+i32 pocket_cue_splash = 32;
+i32 pocket_cue_beacon = 64;
+i32 pocket_cue_fail = 128;
+
+i32() audio_snapshot = fn {
+	i32 snapshot = pocket_audio_pending | (if (pocket_audio_shore) { 512 } else { 0 });
+	pocket_audio_pending = 0;
+	snapshot
+};
+
+unit() reset_pocket_foley = fn {
+	pocket_audio_pending = 0;
+	pocket_audio_wet = false;
+	pocket_audio_shore = false;
+	pocket_audio_step_distance = 0.0;
+};
+
 unit() spawn_player = fn {
 	i32 tile = search_spawn(0);
 	if (tile >= 0) {
@@ -1942,6 +1969,7 @@ unit() spawn_player = fn {
 	ground_contact_dirty = false;
 	jump_pending = false;
 	vertical_speed = 0.0;
+	reset_pocket_foley();
 	gait_phase = 0.0;
 	gait_weight = 0.0;
 	air_weight = if (grounded) { 0.0 } else { 1.0 };
@@ -2095,6 +2123,36 @@ unit(f32, f32, f32, i32) move_player_steps = fn(dx, dy, dz, remaining) {
 	if (remaining > 1) { move_player_steps(dx, remaining_dy, dz, remaining - 1); };
 };
 
+unit(f32, f32) update_pocket_foley = fn(dx, dz) {
+	f32 soles_y = camera_pose.y - player_feet;
+	f32 ocean_depth = if (!flying && soles_y < sea_level + swell + chop) {
+		sea_surface(camera_pose.x, camera_pose.z) - soles_y
+	} else { 0.0 };
+	bool now_wet = ocean_depth > (if (pocket_audio_wet) { 0.08 } else { 0.24 });
+	if (now_wet && !pocket_audio_wet) { pocket_audio_pending = pocket_audio_pending | pocket_cue_splash; };
+	pocket_audio_wet = now_wet;
+	pocket_audio_shore = !flying && soles_y < sea_level + (if (pocket_audio_shore) { 1.8 } else { 1.4 });
+	if (!grounded || flying || now_wet) {
+		pocket_audio_step_distance = 0.0;
+	} else {
+		f32 walked = dx * dx + dz * dz;
+		if (walked > 0.000001) {
+			f32 horizontal = absolute_f(dx);
+			f32 longitudinal = absolute_f(dz);
+			f32 larger = if (horizontal > longitudinal) { horizontal } else { longitudinal };
+			f32 smaller = if (horizontal > longitudinal) { longitudinal } else { horizontal };
+			f32 ratio = smaller / larger;
+			f32 estimate = 1.0 + 0.5 * ratio * ratio;
+			pocket_audio_step_distance = pocket_audio_step_distance +
+				larger * 0.5 * (estimate + (1.0 + ratio * ratio) / estimate);
+			if (pocket_audio_step_distance >= 1.65) {
+				pocket_audio_step_distance = pocket_audio_step_distance - 1.65;
+				pocket_audio_pending = pocket_audio_pending | pocket_cue_step;
+			};
+		};
+	};
+};
+
 unit(f32, f32, f32) move_camera = fn(dt, sy, cy) {
 	if (dt > 0.0) {
 		i32 forward = active(1) - active(2);
@@ -2195,7 +2253,8 @@ unit(f32, f32, f32) move_camera = fn(dt, sy, cy) {
 				if (swim_weight == 0.0) { swim_phase = 0.0; };
 			};
 		};
-		if (camera_pose.y < -6.0) { spawn_player(); };
+		if (camera_pose.y < -6.0) { spawn_player(); }
+		else { update_pocket_foley(camera_pose.x - previous_x, camera_pose.z - previous_z); };
 		if (camera_pose.x != previous_x || camera_pose.y != previous_y || camera_pose.z != previous_z) { target_dirty = true; };
 		pulse_controls = 0;
 	};
@@ -2761,6 +2820,7 @@ unit(i32) collect_lighthouse_parts = fn(part) {
 		};
 		if ((lighthouse_parts & bit) == 0 && right_height && part_distance(part) <= 0.81) {
 			lighthouse_parts = lighthouse_parts | bit;
+			pocket_audio_pending = pocket_audio_pending | pocket_cue_part;
 			if (archipelago_hunt) { refresh_cell_owner(floor_i(lighthouse_part_x(part)), floor_i(lighthouse_part_z(part))); };
 		};
 		collect_lighthouse_parts(part + 1);
@@ -2784,6 +2844,7 @@ unit(f32) update_tide = fn(dt) {
 
 unit() restore_lighthouse = fn {
 	beacon_phase = BeaconPhase::restored;
+	pocket_audio_pending = pocket_audio_pending | pocket_cue_beacon;
 	world[14][4][23] = 8; world[14][4][24] = 8; world[14][4][25] = 8;
 	world[14][5][23] = 8; world[14][5][24] = 8; world[14][5][25] = 8;
 	clear_controls();
@@ -2820,7 +2881,11 @@ unit(f32) update_beacon = fn(dt) {
 		} else {
 			if (lamp_wet > 0.0) { lamp_wet = clamp_f(lamp_wet - 0.65 * dt, 0.0, lamp_limit); };
 		};
-		if (lamp_wet >= lamp_limit) { beacon_phase = BeaconPhase::flooded; clear_controls(); };
+		if (lamp_wet >= lamp_limit) {
+			beacon_phase = BeaconPhase::flooded;
+			pocket_audio_pending = pocket_audio_pending | pocket_cue_fail;
+			clear_controls();
+		};
 	};
 };
 
@@ -2889,6 +2954,7 @@ unit() collect_wood = fn {
 		loose_y[index] = loose_y[last];
 		loose_z[index] = loose_z[last];
 		bridge_blocks = bridge_blocks + 1;
+		pocket_audio_pending = pocket_audio_pending | pocket_cue_pickup;
 		refresh_cell_owner(x, z);
 	};
 };
@@ -3015,7 +3081,7 @@ unit(RayHit) publish_beacon_guide = fn(hit) {
 i32(i32) edit_view = fn(material) {
 	update_orientation();
 	RayHit hit = current_view_target();
-	if (hit.face < 0) { -1 } else {
+	i32 edit_result = if (hit.face < 0) { -1 } else {
 		CellPosition key = if (material > 0) { adjacent_cell(hit) } else { hit.position };
 		if (material > 0 && !inside(key.x, key.y, key.z) && !editable_exterior(key.x, key.y, key.z)) { -2 } else {
 			i32 x = key.x;
@@ -3031,7 +3097,11 @@ i32(i32) edit_view = fn(material) {
 				}
 			}
 		}
-	}
+	};
+	if (edit_result == 1) {
+		pocket_audio_pending = pocket_audio_pending | (if (material > 0) { pocket_cue_place } else { pocket_cue_break });
+	};
+	edit_result
 };
 
 i32(i32) apply_edit_mode = fn(mode) {

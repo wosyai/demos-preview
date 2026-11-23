@@ -1,3 +1,8 @@
+import { createGameAudio } from "../arcade/audio.mjs";
+import { createPocketAudio } from "./audio.mjs?v=1";
+
+const islandAudio = createGameAudio("pocket");
+const islandFoley = createPocketAudio(islandAudio);
 const get = (id) => document.getElementById(id);
 const shell = get("game");
 const canvas = get("scene");
@@ -472,7 +477,7 @@ async function boot() {
   }
   try {
     prepareGraphics();
-    const response = await fetch(new URL("./engine.wasm?v=beacon-expedition-vista-v2", import.meta.url));
+    const response = await fetch(new URL("./engine.wasm?v=beacon-expedition-vista-v2-earshot1", import.meta.url));
     if (!response.ok) throw new Error(`Engine not found (HTTP ${response.status}).`);
     const bytes = await response.arrayBuffer();
     const api = {
@@ -700,7 +705,10 @@ function frame(now) {
   const h = Math.max(1, Math.round(canvas.clientHeight * ratio));
   if (w !== canvas.width || h !== canvas.height) { canvas.width = w; canvas.height = h; }
   gl.viewport(0, 0, w, h);
-  try { engine.tick(dt, w / h, playing ? 1 : 0); }
+  try {
+    engine.tick(dt, w / h, playing ? 1 : 0);
+    if (playing) islandFoley.snapshot(engine.audio_snapshot?.() ?? 0);
+  }
   catch (e) { fail("The engine could not update the scene.", e); }
   startLoop();
 }
@@ -849,6 +857,9 @@ function cycleCamera() {
 
 function startPlaying(presentTransition = false) {
   if (!loaded || contextLost) return;
+  void islandAudio.unlock();
+  engine.audio_snapshot?.();
+  islandFoley.setActive(!document.hidden);
   playing = true;
   shell.classList.add("playing");
   if (presentTransition) {
@@ -861,6 +872,8 @@ function startPlaying(presentTransition = false) {
 
 function stopPlaying() {
   playing = false;
+  islandFoley.setActive(false);
+  engine?.audio_snapshot?.();
   clearInputs();
   shell.classList.remove("playing");
 }
@@ -889,6 +902,7 @@ function playSandbox() {
     if (switched) {
       clearInputs();
       engine.leave_beacon();
+      islandFoley.reset();
     }
     startPlaying(switched);
   } catch (e) { fail("The engine could not open the sandbox.", e); }
@@ -901,6 +915,7 @@ function playBeacon(restart) {
     if (restarted) {
       clearInputs();
       engine.start_archipelago_lighthouse();
+      islandFoley.reset();
     }
     startPlaying(restarted);
   } catch (e) { fail("The engine could not start Beacon Run.", e); }
@@ -973,8 +988,14 @@ window.addEventListener("blur", clearInputs);
 if (window.screen?.orientation?.addEventListener) window.screen.orientation.addEventListener("change", clearInputs);
 else window.addEventListener("orientationchange", clearInputs);
 document.addEventListener("visibilitychange", () => {
-  if (document.hidden) clearInputs();
-  else startLoop();
+  if (document.hidden) {
+    islandFoley.setActive(false);
+    clearInputs();
+    engine?.audio_snapshot?.();
+  } else {
+    islandFoley.setActive(playing);
+    startLoop();
+  }
 });
 document.addEventListener("pointerlockchange", () => {
   if (document.pointerLockElement === canvas) {

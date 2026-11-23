@@ -33,7 +33,7 @@ function view(pointer, count, max, stride) {
 }
 
 engine = new WebAssembly.Instance(binary, { ferry: {
-  frame(p,n) { assert.equal(n,30); frame=view(p,n,30,1).slice(); assert(frame.every(Number.isFinite)); verifyBearing(frame); },
+  frame(p,n) { assert.equal(n,34); frame=view(p,n,34,1).slice(); assert(frame.every(Number.isFinite)); verifyBearing(frame); },
   world(p,n) { worldSends++; assert(n>120000); assert(view(p,n,WORLD_FLOATS,18).every(Number.isFinite)); world=[p,n]; },
   moving(p,n) {
     view(p,n,MOVING_FLOATS,18);
@@ -139,6 +139,16 @@ function ped(i) {
 
 engine._start();
 engine.reset(0);
+assert.deepEqual([...frame.slice(30)], [0,0,0,0], "reset makes a neutral sound baseline");
+run(30);
+assert.equal(frame[30],0,"standing still and simulation ticks do not emit footfalls");
+walkTo(3.8,-4.6);
+assert(frame[30]>0,"moving the feet a stride emits an authoritative sound edge");
+const stepsBeforeStill=frame[30];
+run(30);
+assert.equal(frame[30],stepsBeforeStill,"no sound while idle after walking");
+engine.reset(0);
+assert.equal(frame[30],0,"reset does not carry over cadence");
 const phonePath=streetPath();
 closePoint(phonePath.at(-1),[3.8,-1.6]);
 assert(phonePath.length>=2);
@@ -778,6 +788,8 @@ for(let i=0;i<83;i++) {
 engine.reset(1); mount();
 const mailboxEvents=driver([3.9,18],1);
 assert(mailboxEvents.includes(1),"mailbox contact: "+mailboxEvents);
+assert(frame[31]>0 && frame[32]>0 && frame[32]<=1,"physical mailbox impact carries a normalized audible edge");
+assert(frame[33]>=0 && frame[33]<=1,"engine load is normalized");
 assert(frame[19]>4,"light mailbox does not stop a car");
 const mailRange=()=>rawMoving().slice(7*330*6,(7*330+150)*6);
 const hitMail=mailRange();

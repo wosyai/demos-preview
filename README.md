@@ -44,3 +44,22 @@ Open `http://localhost:8000/voxel/` with a WebGL 2-capable browser. The site is 
 node tools/verify-wasm.mjs voxel/engine.wasm --binary
 node tools/verify-host.mjs
 ```
+
+## Sound design
+
+Sound packs are generated offline with Earshot 1.0.0; see
+[the asset manifest and regeneration notes](arcade/audio/README.md). No Python,
+FFmpeg, model, remote asset service, or JS audio library is needed to play.
+
+| Game | Quiet continuous sound | Gameplay cues |
+| --- | --- | --- |
+| Pocket Island | Surf only near the shore | Grounded footsteps; successful block break and placement; loose material and lighthouse-part pickup; entering the sea; lighthouse restored or run flooded |
+| Flying Low | Throttle/speed-shaped motor and airflow | Bonus gate, cargo pickup, mail release and result, completed spray row, normal and rough touchdown, crash |
+| Last Ferry | Load-shaped car motor, quiet crossing bed | Grounded footsteps, car door, strong player impact, phone, tape pickup, ferry boarding, delivery or missed ferry |
+
+The Wosy simulation supplies confirmed events and continuous state. The audio
+adapter does not decide whether an input succeeded. Aborted actions, repeated
+HUD hints, pointer movement, and routine route updates stay silent. A click or
+tap unlocks audio; the Sound toggle is shared across the arcade, and pause or a
+hidden tab stops the sound. Browser-decodable compressed files are attempted
+first, with fallbacks for devices that cannot decode them.

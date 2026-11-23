@@ -1,3 +1,5 @@
+import { createGameAudio } from "../arcade/audio.mjs";
+import { flightSound } from "./sound.mjs";
 const STEER = Object.freeze({ left: 1, right: 2, climb: 4, dive: 8, power: 16, brake: 32, drop: 128 });
 const KEYS = new Map([
   ["KeyA", STEER.left], ["ArrowLeft", STEER.left],
@@ -307,6 +309,8 @@ export function bootFlight(win, doc) {
   const stick = get("flight-stick"), viewToggle = get("view-toggle");
   const instruments = ["time", "mission-phase", "speed", "altitude", "best", "gates"].map(get);
   const controls = makeControls(), replays = replayStore(() => win.localStorage);
+  const audio = createGameAudio("flight", { win, doc });
+  const sound = flightSound(audio);
   const field = { pointer: 0, length: 0, version: 0 }, moving = { pointer: 0, length: 0, version: 0 };
   const gl = canvas.getContext("webgl2", { alpha: false, antialias: true });
   let gpu, engine, memory, framePointer = null, frameLength = 0;
@@ -345,6 +349,7 @@ export function bootFlight(win, doc) {
   }
   function capability() {
     const active = mode === "playing" && !modal && !lost && !error;
+    audio.setActive(active && !doc.hidden);
     const canSelect = !loading && !error && !lost;
     buttons.forEach((button) => { button.disabled = !canSelect; });
     get("restart").disabled = !canSelect;
@@ -530,6 +535,7 @@ export function bootFlight(win, doc) {
     try {
       current = course;
       cinematicHud = 0;
+      sound.reset();
       clearInput();
       engine.reset(course);
       engine.select_view(playing && cockpit ? 1 : 0);
@@ -548,7 +554,7 @@ export function bootFlight(win, doc) {
       setText(get("track"), COURSES[course]);
       if (playing) {
         const frame = state();
-        if (frame) updateHud(frame);
+        if (frame) { sound.update(frame); updateHud(frame); }
         shell.focus({ preventScroll: true });
       } else {
         buttons[course]?.focus({ preventScroll: true });
@@ -602,6 +608,7 @@ export function bootFlight(win, doc) {
       const frame = state();
       if (active || dirty || resized) { draw(frame); dirty = false; }
       if (active && frame) {
+        sound.update(frame);
         if (frame[22] !== 0 && frame[36] === 0) {
           updateHud(frame);
           showSummary("result", frame);
@@ -734,11 +741,11 @@ export function bootFlight(win, doc) {
     releaseStick(event.pointerId);
     if (controls.pointers.delete(event.pointerId)) syncButtons();
   }, true);
-  buttons.forEach((button) => button.addEventListener("click", () => reset(Number(button.dataset.course), true)));
+  buttons.forEach((button) => button.addEventListener("click", () => { audio.unlock(); reset(Number(button.dataset.course), true); }));
   get("restart").addEventListener("click", () => reset(current, true));
   get("pause").addEventListener("click", togglePause);
   viewToggle.addEventListener("click", toggleView);
-  again.addEventListener("click", () => { if (modal === "pause") togglePause(); else reset(current, true); });
+  again.addEventListener("click", () => { audio.unlock(); if (modal === "pause") togglePause(); else reset(current, true); });
   choose.addEventListener("click", () => reset(current, false));
   win.addEventListener("keydown", (event) => press(event, true));
   win.addEventListener("keyup", (event) => press(event, false));
@@ -748,6 +755,7 @@ export function bootFlight(win, doc) {
   else win.addEventListener("orientationchange", clearInterruptedInput);
   doc.addEventListener("visibilitychange", () => {
     clearInput();
+    capability();
     if (doc.hidden) {
       if (raf) win.cancelAnimationFrame(raf);
       raf = 0;

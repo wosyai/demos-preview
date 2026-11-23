@@ -1,4 +1,35 @@
-export const ENGINE_PATH = "./ferry.wasm?v=ferry-street-orbit-v1";
+import {createGameAudio} from "../arcade/audio.mjs";
+
+export const ENGINE_PATH = "./ferry.wasm?v=ferry-audio-v1";
+const FRAME_FLOATS=34;
+
+export function ferrySoundtrack(audio) {
+  let driving, stage, steps, impacts;
+  return {
+    sync(frame) {
+      [driving,stage,steps,impacts]=[frame[16]===1,frame[17],frame[30],frame[31]];
+    },
+    update(frame) {
+      const nextDriving=frame[16]===1, nextStage=frame[17], nextSteps=frame[30], nextImpacts=frame[31];
+      if (nextDriving!==driving) audio.play("door",{gain:.48});
+      if (nextSteps>steps && !nextDriving) audio.play("footstep",{gain:.29});
+      if (nextImpacts>impacts) audio.play("impact",{gain:.17+.50*frame[32]});
+      if (nextStage!==stage) {
+        const cue=stage===8&&nextStage===0?"phone":stage===0&&nextStage===1?"tape":
+          nextStage===5?"board":nextStage===2?"delivered":nextStage===3?"missed":null;
+        if(cue) audio.play(cue,{gain:.57});
+      }
+      if(nextDriving && nextStage!==2 && nextStage!==3) {
+        const speed=Math.max(0,Math.min(1,frame[19]/75.6)), load=frame[33];
+        audio.loop("engine",{gain:.15+.15*load+.16*speed,rate:.73+.52*speed+.18*load});
+      } else if(driving) audio.stopLoop("engine");
+      if(nextStage===5) audio.loop("ferry",{gain:.25,rate:1});
+      else if(stage===5) audio.stopLoop("ferry");
+      driving=nextDriving; stage=nextStage; steps=nextSteps; impacts=nextImpacts;
+    },
+  };
+}
+
 const INPUTS = new Map([
   ["KeyA","left"],["ArrowLeft","left"],["KeyD","right"],["ArrowRight","right"],
   ["KeyW","up"],["ArrowUp","up"],["KeyS","down"],["ArrowDown","down"],["Space","brake"],
@@ -114,7 +145,7 @@ const meshLimits = {world:9*4096*6,moving:24*256*6};
 
 export function frameData(memory,pointer,length,kind) {
   if (!Number.isSafeInteger(pointer)||pointer<0||pointer%4||!Number.isSafeInteger(length)||length<=0||
-      (kind==="frame" ? length!==30 : length%18!==0||length>(meshLimits[kind]??0))||pointer+length*4>memory.buffer.byteLength) {
+      (kind==="frame" ? length!==FRAME_FLOATS : length%18!==0||length>(meshLimits[kind]??0))||pointer+length*4>memory.buffer.byteLength) {
     throw Error("The game engine returned unreadable data.");
   }
   return new Float32Array(memory.buffer,pointer,length);
@@ -309,7 +340,7 @@ function fit(canvas,pixelRatio) {
   return width/height;
 }
 
-export async function boot(env=globalThis,createGraphics=graphics) {
+export async function boot(env=globalThis,createGraphics=graphics,createAudio=createGameAudio) {
   const {document,window,WebAssembly,performance}=env;
   const get=(id)=>document.getElementById(id);
   const canvas=get("view"), wheel=get("wheel"), thumb=get("thumb"), pause=get("pause");
@@ -318,6 +349,7 @@ export async function boot(env=globalThis,createGraphics=graphics) {
   const actionCaption=get("action-caption"), brakeCaption=get("brake-caption"), playHud=get("play-hud");
   const touch=get("touch"), trip=get("trip"), departure=get("departure"), brakeIcon=get("brake-icon"), actionIcon=get("action-icon");
   const input=inputState(), meshes=new Map();
+  const audio=createAudio("ferry"), soundtrack=ferrySoundtrack(audio);
   const map=get("city-map"), chart=get("city-chart").getContext?.("2d");
   const nextStop=get("route-stop"), guide=get("route-guide"), unavailable=get("route-unavailable");
   const roadLayer=chart&&document.createElement?.("canvas").getContext("2d");
@@ -342,7 +374,8 @@ export async function boot(env=globalThis,createGraphics=graphics) {
     for(const node of heldButtons) node.dataset.held="false";
     if(ready) engine.cancel_action();
   }
-  function overlay(message,cta) {
+  function overlay(message,cta,terminal=false) {
+    if(!terminal) audio.setActive(false);
     playing=false;
     clear();
     menuText=message; label(start,cta);
@@ -447,16 +480,19 @@ export async function boot(env=globalThis,createGraphics=graphics) {
     hint.hidden=!playing||!hint.textContent;
     if(previousState!==state||previousCue!==cue) label(announce,ACTIONS[cue]||OBJECTIVES[state]||"");
     previousCue=cue; previousState=state;
-    if(playing && (state===2||state===3)) overlay(state===2?"Tape delivered. You made it ashore.":"The ferry left without the tape. Try a quicker route.","Play again");
+    if(playing && (state===2||state===3)) overlay(state===2?"Tape delivered. You made it ashore.":"The ferry left without the tape. Try a quicker route.","Play again",true);
   }
   function engage(nextMode) {
     if(!ready||lost) return;
     try {
+      void audio.unlock();
       clear();
       if(!paused||nextMode!==mode) {
         previousCue=-1; previousState=-1;
         mode=nextMode; engine.reset(mode); aspect=0;
       }
+      soundtrack.sync(frame);
+      audio.setActive(true);
       paused=false; playing=true; last=0;
       panel.hidden=true; panel.dataset.intro="false"; get("touch").hidden=false; updateAvailability();
       pause.focus({preventScroll:true});
@@ -552,7 +588,7 @@ export async function boot(env=globalThis,createGraphics=graphics) {
   window.addEventListener("blur",suspend);
   window.addEventListener("orientationchange",clear);
   window.screen?.orientation?.addEventListener("change",clear);
-  document.addEventListener("visibilitychange",()=>{if(document.hidden)suspend();});
+  document.addEventListener("visibilitychange",()=>{if(document.hidden){audio.setActive(false);suspend();}});
   canvas.addEventListener("webglcontextlost",(e)=>{
     e.preventDefault(); lost=true; renderer=null;
     suspend(); updateAvailability();
@@ -620,6 +656,7 @@ export async function boot(env=globalThis,createGraphics=graphics) {
             const [steer,drive,flags,lookX,lookY]=input.sample(dt);
             engine.tick(dt,steer,drive,flags,aspect,lookX,lookY);
             last=now;
+            soundtrack.update(frame);
             show();
           } else if(next!==aspect) {
             syncAspect(next);

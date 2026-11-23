@@ -34,6 +34,7 @@
     <div id="trip" class="trip"><svg class="icon" aria-hidden="true"><use href="#icon-route" id="bearing"/></svg><strong id="objective">Answer the phone</strong><span id="status"></span></div>
     <div id="departure" class="departure" hidden><svg class="icon" aria-hidden="true"><use href="#icon-time"/></svg><strong id="clock" aria-label="Time remaining">--:--</strong></div>
     <div class="deck-actions">
+      <button type="button" class="quiet" data-game-mute aria-label="Mute Last Ferry" aria-pressed="false">Sound on</button>
       <button id="pause" type="button" class="quiet" aria-label="Pause game" disabled><svg class="icon" aria-hidden="true"><use href="#icon-pause"/></svg></button>
     </div>
     <details id="city-map" class="city-map" hidden>
@@ -62,6 +63,7 @@
       <details class="arcade-settings">
         <summary><svg class="arcade-tool-icon" aria-hidden="true" focusable="false"><use href="../arcade/icons.svg?v=2#settings"></use></svg> Controls</summary>
         <div class="arcade-settings-body">
+          <button type="button" data-game-mute aria-label="Mute Last Ferry" aria-pressed="false">Sound on</button>
           <strong>Driving controls</strong><div class="keys"><p id="guide">WASD or arrows to move, Space to brake or sprint, E to interact, I/J/K/L to look, C to recenter, Esc to pause.</p><p>On touch: steer with the stick, and hold Gas, Reverse or Brake. On foot, use the stick and Sprint. Drag the scene to look around (touch or mouse). Double-tap the scene to recenter on touch.</p></div>
         </div>
       </details>
@@ -76,6 +78,6 @@
   </section>
   <span id="announce" class="sr-only" aria-live="polite"></span>
 </main>
-<script type="module" src="./host.mjs?v=ferry-street-orbit-v1-navigation-v3"></script>
+<script type="module" src="./host.mjs?v=ferry-audio-v1"></script>
 </body>
 </html>

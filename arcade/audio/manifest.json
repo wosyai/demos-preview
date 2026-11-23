@@ -1,0 +1,316 @@
+{
+  "pocket": {
+    "beacon": {
+      "takes": [
+        [
+          "pocket/beacon.webm",
+          "pocket/beacon.mp3"
+        ]
+      ]
+    },
+    "break": {
+      "takes": [
+        [
+          "pocket/break_1.webm",
+          "pocket/break_1.mp3"
+        ],
+        [
+          "pocket/break_2.webm",
+          "pocket/break_2.mp3"
+        ]
+      ]
+    },
+    "fail": {
+      "takes": [
+        [
+          "pocket/fail.webm",
+          "pocket/fail.mp3"
+        ]
+      ]
+    },
+    "part": {
+      "takes": [
+        [
+          "pocket/part.webm",
+          "pocket/part.mp3"
+        ]
+      ]
+    },
+    "pickup": {
+      "takes": [
+        [
+          "pocket/pickup.webm",
+          "pocket/pickup.mp3"
+        ]
+      ]
+    },
+    "place": {
+      "takes": [
+        [
+          "pocket/place_1.webm",
+          "pocket/place_1.mp3"
+        ],
+        [
+          "pocket/place_2.webm",
+          "pocket/place_2.mp3"
+        ]
+      ]
+    },
+    "splash": {
+      "takes": [
+        [
+          "pocket/splash_1.webm",
+          "pocket/splash_1.mp3"
+        ],
+        [
+          "pocket/splash_2.webm",
+          "pocket/splash_2.mp3"
+        ]
+      ]
+    },
+    "step": {
+      "takes": [
+        [
+          "pocket/step_1.webm",
+          "pocket/step_1.mp3"
+        ],
+        [
+          "pocket/step_2.webm",
+          "pocket/step_2.mp3"
+        ],
+        [
+          "pocket/step_3.webm",
+          "pocket/step_3.mp3"
+        ],
+        [
+          "pocket/step_4.webm",
+          "pocket/step_4.mp3"
+        ],
+        [
+          "pocket/step_5.webm",
+          "pocket/step_5.mp3"
+        ],
+        [
+          "pocket/step_6.webm",
+          "pocket/step_6.mp3"
+        ]
+      ]
+    },
+    "water": {
+      "takes": [
+        [
+          "pocket/water.webm",
+          "pocket/water.wav"
+        ]
+      ]
+    }
+  },
+  "flight": {
+    "cargo": {
+      "takes": [
+        [
+          "flight/cargo.webm",
+          "flight/cargo.mp3"
+        ]
+      ]
+    },
+    "crash": {
+      "takes": [
+        [
+          "flight/crash.webm",
+          "flight/crash.mp3"
+        ]
+      ]
+    },
+    "delivered": {
+      "takes": [
+        [
+          "flight/delivered.webm",
+          "flight/delivered.mp3"
+        ]
+      ]
+    },
+    "drop": {
+      "takes": [
+        [
+          "flight/drop.webm",
+          "flight/drop.mp3"
+        ]
+      ]
+    },
+    "engine": {
+      "takes": [
+        [
+          "flight/engine.webm",
+          "flight/engine.wav"
+        ]
+      ]
+    },
+    "gate": {
+      "takes": [
+        [
+          "flight/gate.webm",
+          "flight/gate.mp3"
+        ]
+      ]
+    },
+    "missed": {
+      "takes": [
+        [
+          "flight/missed.webm",
+          "flight/missed.mp3"
+        ]
+      ]
+    },
+    "rough-touchdown": {
+      "takes": [
+        [
+          "flight/rough-touchdown_1.webm",
+          "flight/rough-touchdown_1.mp3"
+        ],
+        [
+          "flight/rough-touchdown_2.webm",
+          "flight/rough-touchdown_2.mp3"
+        ]
+      ]
+    },
+    "spray": {
+      "takes": [
+        [
+          "flight/spray_1.webm",
+          "flight/spray_1.mp3"
+        ],
+        [
+          "flight/spray_2.webm",
+          "flight/spray_2.mp3"
+        ]
+      ]
+    },
+    "touchdown": {
+      "takes": [
+        [
+          "flight/touchdown_1.webm",
+          "flight/touchdown_1.mp3"
+        ],
+        [
+          "flight/touchdown_2.webm",
+          "flight/touchdown_2.mp3"
+        ]
+      ]
+    },
+    "wind": {
+      "takes": [
+        [
+          "flight/wind.webm",
+          "flight/wind.wav"
+        ]
+      ]
+    }
+  },
+  "ferry": {
+    "board": {
+      "takes": [
+        [
+          "ferry/board.webm",
+          "ferry/board.mp3"
+        ]
+      ]
+    },
+    "delivered": {
+      "takes": [
+        [
+          "ferry/delivered.webm",
+          "ferry/delivered.mp3"
+        ]
+      ]
+    },
+    "door": {
+      "takes": [
+        [
+          "ferry/door.webm",
+          "ferry/door.mp3"
+        ]
+      ]
+    },
+    "engine": {
+      "takes": [
+        [
+          "ferry/engine.webm",
+          "ferry/engine.wav"
+        ]
+      ]
+    },
+    "ferry": {
+      "takes": [
+        [
+          "ferry/ferry.webm",
+          "ferry/ferry.wav"
+        ]
+      ]
+    },
+    "footstep": {
+      "takes": [
+        [
+          "ferry/footstep_1.webm",
+          "ferry/footstep_1.mp3"
+        ],
+        [
+          "ferry/footstep_2.webm",
+          "ferry/footstep_2.mp3"
+        ],
+        [
+          "ferry/footstep_3.webm",
+          "ferry/footstep_3.mp3"
+        ],
+        [
+          "ferry/footstep_4.webm",
+          "ferry/footstep_4.mp3"
+        ],
+        [
+          "ferry/footstep_5.webm",
+          "ferry/footstep_5.mp3"
+        ],
+        [
+          "ferry/footstep_6.webm",
+          "ferry/footstep_6.mp3"
+        ]
+      ]
+    },
+    "impact": {
+      "takes": [
+        [
+          "ferry/impact_1.webm",
+          "ferry/impact_1.mp3"
+        ],
+        [
+          "ferry/impact_2.webm",
+          "ferry/impact_2.mp3"
+        ]
+      ]
+    },
+    "missed": {
+      "takes": [
+        [
+          "ferry/missed.webm",
+          "ferry/missed.mp3"
+        ]
+      ]
+    },
+    "phone": {
+      "takes": [
+        [
+          "ferry/phone.webm",
+          "ferry/phone.mp3"
+        ]
+      ]
+    },
+    "tape": {
+      "takes": [
+        [
+          "ferry/tape.webm",
+          "ferry/tape.mp3"
+        ]
+      ]
+    }
+  }
+}

@@ -14,7 +14,7 @@ i32 scenery_capacity = 9*4096;
 i32 moving_capacity = 24*256;
 f32[6][16][16][24] moving_mesh = [mesh_chunk_1, mesh_chunk_1, mesh_chunk_1, mesh_chunk_1, mesh_chunk_1, mesh_chunk_1, mesh_chunk_1, mesh_chunk_1, mesh_chunk_1, mesh_chunk_1, mesh_chunk_1, mesh_chunk_1, mesh_chunk_1, mesh_chunk_1, mesh_chunk_1, mesh_chunk_1, mesh_chunk_1, mesh_chunk_1, mesh_chunk_1, mesh_chunk_1, mesh_chunk_1, mesh_chunk_1, mesh_chunk_1, mesh_chunk_1];
 
-f32[30] display = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0];
+f32[34] display = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0];
 i32 vertex_count = 0;
 bool drawing_world = false;
 bool world_ready = false;
@@ -243,6 +243,12 @@ f32 seconds_left = 90.0;
 f32 collision_wait = 0.0;
 i32 collision_kind = 0;
 i32 collision_seq = 0;
+f32 step_distance = 0.0;
+i32 step_sound = 0;
+f32 impact_wait = 0.0;
+i32 impact_sound = 0;
+f32 impact_level = 0.0;
+f32 engine_load = 0.0;
 enum copy MissionStage {
     pickup_tape;
     reach_pier;
@@ -948,11 +954,16 @@ f32(f32,f32,f32,f32,f32,f32) body_distance_sq = fn(x,z,px,pz,s,c) {
     sq(dx-t*s)+sq(dz-t*c)
 };
 
-unit(i32) ring = fn(kind) {
+unit(i32,f32) ring = fn(kind,speed) {
     if (collision_wait<=0.0 || kind!=collision_kind) {
         collision_kind=kind;
         collision_seq=collision_seq+1;
         collision_wait=0.22;
+        if (in_car && kind!=3 && impact_wait<=0.0) {
+            impact_sound=impact_sound+1;
+            impact_level=clamp(speed/10.0,0.0,1.0);
+            impact_wait=0.55;
+        };
     };
 };
 
@@ -966,7 +977,7 @@ unit(i32,f32,f32,f32) strike_mailboxes = fn(i,s,c,speed) {
                 f32 drift=if (mailbox[n][0]>=car_x) { 0.23 } else { -0.23 };
                 mailbox[n][0]=mailbox[n][0]+drift;
                 vx=vx*0.91; vz=vz*0.91;
-                ring(1);
+                ring(1,speed);
             } else {
                 vx=vx*0.75; vz=vz*0.75;
             };
@@ -997,7 +1008,7 @@ unit(i32,f32,f32,f32) strike_peds = fn(i,s,c,speed) {
             peds[n].slide_z=0.15*vz;
             if (speed>2.0) { vx=vx*0.78; vz=vz*0.78; }
             else { vx=vx*0.52; vz=vz*0.52; };
-            ring(3);
+            ring(3,speed);
         };
         strike_peds(i+1,s,c,speed);
     };
@@ -1204,7 +1215,7 @@ unit(i32) move_traffic = fn(i) {
                             car_roll=car_roll+normal_x*momentum*0.022;
                         };
                     };
-                    if (closing>1.4) { ring(4); };
+                    if (closing>1.4) { ring(4,closing); };
                 };
                 traffic[n].speed=0.0;
             } else {
@@ -1243,7 +1254,7 @@ unit(f32,f32,f32,f32,f32,f32,f32,i32) slide_building = fn(dx,dz,yaw,s,c,ns,nc,hi
             };
         };
         if (turned) { car_yaw=yaw; };
-        if (blocked>1.15) { ring(hit); };
+        if (blocked>1.15) { ring(hit,blocked); };
     };
 };
 
@@ -1282,7 +1293,7 @@ unit(f32,f32,f32,f32,i32) move_vehicle = fn(steer,drive,s,c,brake) {
             f32 facing=if (abs_f(direction)>1.5) { nx_contact } else { nz_contact };
             f32 into=vx*nx_contact+vz*nz_contact;
             f32 relative=into-obstacle_speed*facing;
-            if (relative < -1.2) { ring(4); };
+            if (relative < -1.2) { ring(4,-relative); };
             traffic[ix(other)].speed=min_f(traffic[ix(other)].speed,max_f(0.0,traffic[ix(other)].speed+relative*0.45));
             if (into<0.0) {
                 vx=vx-nx_contact*into*1.08;
@@ -1313,7 +1324,7 @@ unit(f32,f32,f32,f32,i32) move_vehicle = fn(steer,drive,s,c,brake) {
                     if (pass_z) { car_z=nz; vx=vx*(-0.17); vz=vz*0.64; }
                     else { vx=vx*(-0.16); vz=vz*(-0.16); };
                 };
-                if (impact>0.92) { ring(hit); };
+                if (impact>0.92) { ring(hit,impact); };
             };
         };
     };
@@ -1321,6 +1332,7 @@ unit(f32,f32,f32,f32,i32) move_vehicle = fn(steer,drive,s,c,brake) {
     strike_mailboxes(0,hs,hc,impact);
     strike_peds(0,hs,hc,impact);
     car_roll=blend(car_roll,clamp((vx*hc-vz*hs)*0.039,-0.18,0.18),0.20);
+    engine_load=if (brake>0) { 0.0 } else { abs_f(drive) };
     brake_mark=if (brake>0 || drive< -0.45) { 1.0 } else { 0.0 };
 };
 
@@ -1346,10 +1358,18 @@ unit(f32,f32,i32) walk = fn(strafe,drive,fast) {
     f32 pace=if (fast!=0) { 6.1 } else { 3.85 };
     foot_speed=clamp(axes,0.0,1.0)*pace;
     if (axes>0.02) {
+        f32 walk_start_x=foot_x;
+        f32 walk_start_z=foot_z;
         f32 x=foot_x+dt_step*foot_speed*strafe/axes;
         f32 z=foot_z+dt_step*foot_speed*drive/axes;
         if (on_foot_clear(x,foot_z)) { foot_x=x; };
         if (on_foot_clear(foot_x,z)) { foot_z=z; };
+        step_distance=step_distance+length(foot_x-walk_start_x,foot_z-walk_start_z);
+        f32 stride=if (fast!=0) { 1.24 } else { 0.98 };
+        if (step_distance>=stride) {
+            step_distance=step_distance-stride;
+            step_sound=step_sound+1;
+        };
         if (abs_f(strafe)>abs_f(drive)) { foot_yaw=if (strafe>0.0) { 1.57079633 } else { -1.57079633 }; }
         else { foot_yaw=if (drive>0.0) { 0.0 } else { 3.14159265 }; };
     };
@@ -1951,7 +1971,7 @@ unit() interact = fn {
     i32 what=cue();
     if (what==9) { avenue_leg=if (avenue_prepared()) { 6 } else { 0 }; waterfront_leg=-1; }
     else { if (what==8) { waterfront_leg=0; avenue_leg=-1; }
-    else { if (what==1) { in_car=true; park_walk=false; waterfront_leg=-1; avenue_walk_leg=-1; }
+    else { if (what==1) { in_car=true; step_distance=0.0; engine_load=0.0; park_walk=false; waterfront_leg=-1; avenue_walk_leg=-1; }
     else {
         if (what==2 || what==7) {
             bool avenue_exit=what==7 && at_avenue_handoff();
@@ -2066,6 +2086,7 @@ unit(f32,f32,i32) step = fn(steer,drive,flags) {
     snapshot();
     MissionStage begin=stage;
     collision_wait=max_f(0.0,collision_wait-dt_step);
+    impact_wait=max_f(0.0,impact_wait-dt_step);
     if (pending_action) { pending_action=false; interact(); };
     if (stage!=MissionStage::delivered && stage!=MissionStage::crossing && stage!=MissionStage::docked && stage!=MissionStage::disembarking) {
         if (!in_car) { walk(steer,drive,flags & 1); };
@@ -2405,7 +2426,11 @@ unit(f32) render_frame = fn(alpha) {
     display[24]=tx; display[25]=tz; display[26]=px; display[27]=pz;
     display[28]=heading;
     display[29]=if ((stage!=MissionStage::pickup_tape && stage!=MissionStage::reach_pier && stage!=MissionStage::answer_phone) || distance<0.25) { 0.0 } else { wrap(bearing(dx,dz)-heading) };
-    unsafe { host.frame(core.pointer_cast<*?u8>(&?display[0]),30); };
+    display[30]=float_i(step_sound);
+    display[31]=float_i(impact_sound);
+    display[32]=impact_level;
+    display[33]=if (in_car) { engine_load } else { 0.0 };
+    unsafe { host.frame(core.pointer_cast<*?u8>(&?display[0]),34); };
 };
 
 unit(i32) reset_props = fn(i) {
@@ -2434,6 +2459,7 @@ unit(i32) reset = fn(mode) {
     in_car=false; pending_action=false; seconds_left=90.0; accumulator=0.0;
     bypass=true; park_walk=false; waterfront_leg=-1; avenue_leg=-1; avenue_walk_leg=-1; pickup_leg=0; return_leg=0;
     collision_wait=0.0; collision_kind=0; collision_seq=0;
+    step_distance=0.0; step_sound=0; impact_wait=0.0; impact_sound=0; impact_level=0.0; engine_load=0.0;
     car_x=0.0; car_z=if (mode==1) { -5.0 } else { -7.0 };
     car_yaw=if (mode==1) { 0.0 } else { 3.14159265 };
     vx=0.0; vz=0.0; brake_mark=0.0; car_roll=0.0; wheel_phase=0.0;

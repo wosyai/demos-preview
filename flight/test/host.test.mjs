@@ -444,7 +444,7 @@ test("the Flight minimal HUD updates both host assets and retains the same Wasm 
   await sim.ready;
   const html = await readFile(new URL("../index.html", import.meta.url), "utf8");
   assert.match(html, /href="\.\/style\.css\?v=paris-quay-quarter-flight-v11-hud1"/);
-  assert.match(html, /src="\.\/host\.mjs\?v=flight-solid-sheds-v16-space1-hud2"/);
+  assert.match(html, /src="\.\/host\.mjs\?v=flight-solid-sheds-v16-space1-hud2-audio1"/);
   assert.deepEqual(sim.called.requests.map((url) => [url.pathname.split("/").at(-1), url.search]),
     [["flight.wasm", "?v=flight-solid-sheds-v16"]]);
 });
