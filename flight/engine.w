@@ -94,6 +94,12 @@ f32 pouch_x = 0.0;
 f32 pouch_y = 0.0;
 f32 pouch_z = 0.0;
 f32 mail_shot = 0.0;
+struct copy ParcelCamera {
+	f32 x; f32 y; f32 z;
+	f32 heading; f32 pitch; f32 roll;
+}
+ParcelCamera published_parcel_camera = { .x=0.0; .y=0.0; .z=0.0; .heading=0.0; .pitch=0.0; .roll=0.0; };
+bool parcel_camera_published = false;
 WreckPart empty_wreck = { .x=0.0; .y=0.0; .z=0.0; .dx=0.0; .dy=0.0; .dz=0.0; .roll=0.0; .pitch=0.0; };
 WreckPart[6] wreck_parts = [empty_wreck, empty_wreck, empty_wreck, empty_wreck, empty_wreck, empty_wreck];
 WreckPart[6] wreck_previous = [empty_wreck, empty_wreck, empty_wreck, empty_wreck, empty_wreck, empty_wreck];
@@ -2641,14 +2647,17 @@ unit(i32,f32) frame = fn(mail_status,wreck_alpha) {
 	f32 hp = sin_small(p_heading);
 	f32 hz0 = cos_small(p_heading);
 	bool following = !wrecking && mail_shot > 0.0;
+	bool parcel_interrupted = wrecking && parcel_camera_published;
 	f32 wreck_heading = wrap(wreck_h-0.37*orbit);
-	f32 heading = if (wrecking) { wrap(p_heading+wrap(wreck_heading-p_heading)*wreck_blend) } else {
+	f32 wreck_home_heading = if (parcel_interrupted) { published_parcel_camera.heading } else { p_heading };
+	f32 heading = if (wrecking) { wrap(wreck_home_heading+wrap(wreck_heading-wreck_home_heading)*wreck_blend) } else {
 		if (following) { wrap(p_heading+wrap(mail_heading-p_heading)*mail_shot) } else { p_heading }
 	};
 	f32 hx = if (wrecking || following) { sin_small(heading) } else { hp };
 	f32 hz = if (wrecking || following) { cos_small(heading) } else { hz0 };
 	f32 base_pitch = if (camera_view >= 1.0) { presented_pose[0].pitch } else { blend(-0.20+presented_pose[0].pitch*0.62,presented_pose[0].pitch,camera_view) };
-	f32 pitch = if (wrecking) { blend(base_pitch,-0.27,wreck_blend) } else { if (following) { blend(base_pitch,-0.57,mail_shot) } else { base_pitch } };
+	f32 wreck_home_pitch = if (parcel_interrupted) { published_parcel_camera.pitch } else { base_pitch };
+	f32 pitch = if (wrecking) { blend(wreck_home_pitch,-0.27,wreck_blend) } else { if (following) { blend(base_pitch,-0.57,mail_shot) } else { base_pitch } };
 	f32 ps = sin_small(pitch);
 	f32 pc = cos_small(pitch);
 	f32 vx = hx*pc;
@@ -2665,6 +2674,9 @@ unit(i32,f32) frame = fn(mail_status,wreck_alpha) {
 	f32 ex = if (following) { blend(ex_home,pouch_x-sin_small(mail_heading)*7.0,mail_shot) } else { ex_home };
 	f32 ey = if (following) { blend(ey_home,pouch_y+4.52,mail_shot) } else { ey_home };
 	f32 ez = if (following) { blend(ez_home,pouch_z-cos_small(mail_heading)*7.0,mail_shot) } else { ez_home };
+	if (parcel_interrupted) {
+		ex = published_parcel_camera.x; ey = published_parcel_camera.y; ez = published_parcel_camera.z;
+	};
 	if (wrecking && wreck_blend > 0.0) {
 		WreckPart p = wreck_previous[0];
 		WreckPart q = wreck_parts[0];
@@ -2676,11 +2688,12 @@ unit(i32,f32) frame = fn(mail_status,wreck_alpha) {
 		f32 wide = ext.max_x-ext.min_x + ext.max_z-ext.min_z;
 		f32 tall = ext.max_y-ext.min_y;
 		f32 pullback = clamp(15.0+0.73*wide+1.38*tall,17.5,68.0);
-		ex = blend(ex_home,0.5*(ext.min_x+ext.max_x)-sin_small(wreck_heading)*pullback,wreck_blend);
-		ey = blend(ey_home,0.5*(ext.min_y+ext.max_y)+0.29*pullback,wreck_blend);
-		ez = blend(ez_home,0.5*(ext.min_z+ext.max_z)-cos_small(wreck_heading)*pullback,wreck_blend);
+		ex = blend(ex,0.5*(ext.min_x+ext.max_x)-sin_small(wreck_heading)*pullback,wreck_blend);
+		ey = blend(ey,0.5*(ext.min_y+ext.max_y)+0.29*pullback,wreck_blend);
+		ez = blend(ez,0.5*(ext.min_z+ext.max_z)-cos_small(wreck_heading)*pullback,wreck_blend);
 	};
-	f32 roll = presented_pose[0].roll*camera_view*(1.0-mail_shot)*(1.0-wreck_blend);
+	f32 home_roll = if (parcel_interrupted) { published_parcel_camera.roll } else { presented_pose[0].roll*camera_view*(1.0-mail_shot) };
+	f32 roll = home_roll*(1.0-wreck_blend);
 	f32 rs = if (roll == 0.0) { 0.0 } else { sin_small(-roll) };
 	f32 rc = if (roll == 0.0) { 1.0 } else { cos_small(roll) };
 	f32 rx = hz*rc+ux*rs;
@@ -2690,6 +2703,10 @@ unit(i32,f32) frame = fn(mail_status,wreck_alpha) {
 	f32 upy = uy*rc;
 	f32 upz = uz*rc+hx*rs;
 	ey = if (ey < 0.45) { 0.45 } else { ey };
+	if (following) {
+		published_parcel_camera = { .x=ex; .y=ey; .z=ez; .heading=heading; .pitch=pitch; .roll=roll; };
+		parcel_camera_published = true;
+	} else { if (!wrecking) { parcel_camera_published = false; }; };
 	f32 scale_y = if (viewport < 0.86) { 1.30 } else { 1.61 };
 	f32 scale_x = scale_y/viewport;
 	f32 near_far = 1.0015052;
@@ -2782,6 +2799,7 @@ unit(i32) reset = fn(requested) {
 	mail_launch_tick = -1;
 	mail_impact_tick = -1;
 	mail_shot = 0.0;
+	parcel_camera_published = false;
 	reset_mission(0);
 	reset_mission(1);
 	accumulator = 0.0;
