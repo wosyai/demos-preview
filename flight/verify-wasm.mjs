@@ -173,6 +173,7 @@ assert.notDeepEqual(world, farmWorld, "courses draw different scenery");
 if (!comparisonBaseline) {
     assert(world.length/6<32000,"the Paris quarter leaves space in the static mesh arena");
     const yard = [], buoyTips = [], crossing = [], streets = [], awnings = [];
+    const plank = [], floats = [], postalTarget = [];
     const approx=(a,b)=>Math.abs(a-b)<.001;
     const riverBand=(x,z)=>z-(103.5+x*.49);
     for(let i=0;i<world.length;i+=6) {
@@ -188,6 +189,13 @@ if (!comparisonBaseline) {
         if (((approx(y,.082) && approx(r,.39)) || (approx(y,.081) && approx(r,.42))) && approx(b,.39+(y<.0815?.03:0)))
             streets.push(bank);
         if (approx(y,2.79) && x>80 && x<122 && bank< -10 && bank> -21) awnings.push([x,bank]);
+        if(x>98 && x<120 && z>207 && z<229) {
+            if(approx(y,.193) && r>.64 && r<.71 && g>.47 && g<.54 && b>.30 && b<.37) plank.push([x,z]);
+            if(approx(y,.163) && approx(r,.27*1.12) && approx(g,.25*1.12) && approx(b,.22*1.12))
+                floats.push(x);
+            if((approx(y,.21) || approx(y,.22)) && approx(r,.96) && approx(g,.70) && approx(b,.29))
+                postalTarget.push([x,z]);
+        }
         if(x>=-92.86 && x<=-81.81 && y>=.143 && y<=.173 && z>=-27.11 && z<=4.81)
             yard.push(Array.from(world.subarray(i,i+6)));
     }
@@ -198,6 +206,16 @@ if (!comparisonBaseline) {
     assert(crossing.every(([,bank])=>bank > -28 && bank < -18),"crossings occupy the bank-side avenue, not the river");
     assert(streets.some(bank=>bank< -18) && streets.some(bank=>bank>126),"paved avenues connect both banks");
     assert.equal(awnings.length,12,"the four station bookstalls have pitched ends above the quay");
+    assert.equal(plank.length,54,"the postal pontoon has nine visible timber runs");
+    assert(plank.every(([x,z])=>x>99 && x<119 && z>208 && z<228),"each timber is inside the preserved target deck");
+    assert.equal(floats.length,12,"the deck has a dark supporting float on both edges");
+    assert(floats.some(x=>x<99) && floats.some(x=>x>119),"both floats read beyond the deck edges");
+    assert.equal(postalTarget.length,12,"the functional postal target is still the same pair of quads");
+    for(const [axis,[min,max]] of [[0,[104,114]],[1,[213,223]]]) {
+        const points=postalTarget.map(v=>v[axis]);
+        assert(approx(Math.min(...points),min) && approx(Math.max(...points),max),
+            "the amber X retains its exact scoring-center footprint");
+    }
     const ofColor = (r,g,b) => yard.filter(v => Math.abs(v[3]-r)<.001 && Math.abs(v[4]-g)<.001 && Math.abs(v[5]-b)<.001);
     const stone = ofColor(.67,.60,.51);
     assert.equal(stone.length,6,"a single stone court links the real stop line to the post room");
