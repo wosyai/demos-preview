@@ -833,8 +833,16 @@ const pedEvents=driver(()=>{const [x,z]=ped(0);return [x+.22,z+.22];},3,320);
 assert(pedEvents.includes(3),"pedestrian contact: "+pedEvents+" at "+spot());
 run(15,0,0,1);
 assert(ped(0)[2]<standing[2]*.82,"a polygonal person visibly falls");
-run(117,0,0,1);
-assert(ped(0)[2]>standing[2]*.92,"the person gets up again");
+run(108,0,0,1);
+assert(ped(0)[2]<standing[2]*.82,"the person is still visibly down just after two seconds");
+run(80,0,0,1);
+assert(ped(0)[2]<standing[2]*.82,"a parked car blocks recovery even after the nominal timer");
+const stopBeforeRecovery=spot();
+run(135,0,-1);
+assert(Math.hypot(frame[26]-stopBeforeRecovery[0],frame[27]-stopBeforeRecovery[1])>3,
+  "the car must clear the fall volume before recovery");
+run(95,0,0,1);
+assert(ped(0)[2]>standing[2]*.92,"the person gets up after the obstructing car moves");
 engine.reset(1);
 assert.equal(frame[22],0);
 const reset=rawMoving();

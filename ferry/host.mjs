@@ -1,6 +1,6 @@
 import {createGameAudio} from "../arcade/audio.mjs";
 
-export const ENGINE_PATH = "./ferry.wasm?v=ferry-camera-handoff-v4";
+export const ENGINE_PATH = "./ferry.wasm?v=ferry-clear-recovery-v5";
 const FRAME_FLOATS=34;
 
 export function ferrySoundtrack(audio) {

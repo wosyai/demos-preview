@@ -170,17 +170,21 @@ f32[2][12] trees = [
 f32[2][4] mailbox_home = [[3.9,18.0],[-4.4,38.0],[12.4,50.4],[-13.6,57.4]];
 f32[4] empty_prop = [0.0,0.0,0.0,0.0];
 f32[4][4] mailbox = [empty_prop,empty_prop,empty_prop,empty_prop];
+f32 ped_stun_time = 2.65;
+f32 ped_rise_time = 0.40;
 struct copy Pedestrian {
     f32 x;
     f32 z;
     bool toward_second_waypoint;
     f32 stun_seconds;
+    bool needs_clear_route;
+    i32 fall_axis;
     f32 slide_x;
     f32 slide_z;
     f32 gait_phase;
 }
 Pedestrian empty_ped = {
-    .x=0.0; .z=0.0; .toward_second_waypoint=false; .stun_seconds=0.0;
+    .x=0.0; .z=0.0; .toward_second_waypoint=false; .stun_seconds=0.0; .needs_clear_route=false; .fall_axis=4;
     .slide_x=0.0; .slide_z=0.0; .gait_phase=0.0;
 };
 Pedestrian[9] peds = [empty_ped,empty_ped,empty_ped,empty_ped,empty_ped,empty_ped,empty_ped,empty_ped,empty_ped];
@@ -1008,11 +1012,44 @@ unit(i32) animate_mail = fn(i) {
     };
 };
 
+f32(i32) ped_fall_x = fn(axis) {
+    if (axis==0) { -1.0 } else { if (axis==1) { 1.0 } else { 0.0 } }
+};
+
+f32(i32) ped_fall_z = fn(axis) {
+    if (axis==2) { 1.0 } else { if (axis==3) { -1.0 } else { 0.0 } }
+};
+
+f32(i32) ped_fall_yaw = fn(axis) {
+    if (axis==1) { 3.14159265 } else {
+        if (axis==2) { 1.57079633 } else { if (axis==3) { -1.57079633 } else { 0.0 } }
+    }
+};
+
+bool(f32,f32,i32) ped_world_roll_clear = fn(x,z,axis) {
+    if (axis==4) { static_hit(x,z,0.28,false)==0 } else {
+        f32 sx=ped_fall_x(axis); f32 sz=ped_fall_z(axis);
+        static_hit(x-sx*0.19,z-sz*0.19,0.40,false)==0 && static_hit(x+sx*0.31,z+sz*0.31,0.40,false)==0 &&
+            static_hit(x+sx*0.81,z+sz*0.81,0.40,false)==0 && static_hit(x+sx*1.31,z+sz*1.31,0.40,false)==0
+    }
+};
+
+i32(f32,f32,i32) choose_ped_fall = fn(x,z,preferred) {
+    if (ped_world_roll_clear(x,z,preferred)) { preferred } else {
+        i32 opposite=1-preferred;
+        if (ped_world_roll_clear(x,z,opposite)) { opposite } else {
+            if (ped_world_roll_clear(x,z,2)) { 2 } else { if (ped_world_roll_clear(x,z,3)) { 3 } else { 4 } }
+        }
+    }
+};
+
 unit(i32,f32,f32,f32) strike_peds = fn(i,s,c,speed) {
     if (i<9) {
         u64 n=ix(i);
         if (peds[n].stun_seconds<=0.0 && body_distance_sq(car_x,car_z,peds[n].x,peds[n].z,s,c)<1.58 && speed>0.7) {
-            peds[n].stun_seconds=1.65;
+            peds[n].stun_seconds=ped_stun_time;
+            peds[n].needs_clear_route=true;
+            peds[n].fall_axis=choose_ped_fall(peds[n].x,peds[n].z,if (peds[n].toward_second_waypoint) { 0 } else { 1 });
             peds[n].slide_x=0.15*vx;
             peds[n].slide_z=0.15*vz;
             if (speed>2.0) { vx=vx*0.78; vz=vz*0.78; }
@@ -1023,21 +1060,76 @@ unit(i32,f32,f32,f32) strike_peds = fn(i,s,c,speed) {
     };
 };
 
+bool(f32,f32,i32) foot_traffic_hit = fn(x,z,i) {
+    if (i>=6) { false } else {
+        u64 n=ix(i);
+        bool west=abs_f(traffic[n].signed_lane_direction)>1.5;
+        f32 s=if (west) { 1.0 } else { 0.0 };
+        f32 c=if (west) { 0.0 } else { 1.0 };
+        if (body_distance_sq(traffic[n].x,traffic[n].z,x,z,s,c)<1.46) { true }
+        else { foot_traffic_hit(x,z,i+1) }
+    }
+};
+
+bool(f32,f32) on_foot_clear = fn(x,z) {
+    static_hit(x,z,0.31,false)==0 &&
+    body_distance_sq(car_x,car_z,x,z,sin_small(car_yaw),cos_small(car_yaw))>1.38 &&
+    !foot_traffic_hit(x,z,0)
+};
+
+bool(f32,f32,f32,f32) ped_vehicle_box = fn(dx,dz,s,c) {
+    abs_f(dx*c-dz*s)<=1.45 && abs_f(dx*s+dz*c)<=2.36
+};
+
+bool(f32,f32,i32) ped_traffic_box = fn(x,z,i) {
+    if (i>=6) { false } else {
+        u64 n=ix(i);
+        f32 dx=x-traffic[n].x; f32 dz=z-traffic[n].z;
+        bool west=abs_f(traffic[n].signed_lane_direction)>1.5;
+        if (ped_vehicle_box(dx,dz,if (west) { 1.0 } else { 0.0 },if (west) { 0.0 } else { 1.0 })) { true }
+        else { ped_traffic_box(x,z,i+1) }
+    }
+};
+
+bool(f32,f32) ped_body_clear = fn(x,z) {
+    !ped_vehicle_box(x-car_x,z-car_z,sin_small(car_yaw),cos_small(car_yaw)) && !ped_traffic_box(x,z,0)
+};
+
+bool(f32,f32,i32) ped_rise_clear = fn(x,z,axis) {
+    if (axis==4) { ped_body_clear(x,z) } else {
+        f32 sx=ped_fall_x(axis); f32 sz=ped_fall_z(axis);
+        ped_body_clear(x-sx*0.19,z-sz*0.19) && ped_body_clear(x+sx*0.31,z+sz*0.31) &&
+            ped_body_clear(x+sx*0.81,z+sz*0.81) && ped_body_clear(x+sx*1.31,z+sz*1.31)
+    }
+};
+
 unit(i32) move_peds = fn(i) {
     if (i<9) {
         u64 n=ix(i);
         f32 dx=0.0;
         f32 dz=0.0;
         if (peds[n].stun_seconds>0.0) {
-            peds[n].stun_seconds=max_f(0.0,peds[n].stun_seconds-dt_step);
-            dx=peds[n].slide_x*dt_step; dz=peds[n].slide_z*dt_step;
-            peds[n].slide_x=peds[n].slide_x*0.88; peds[n].slide_z=peds[n].slide_z*0.88;
+            f32 remain=peds[n].stun_seconds;
+            f32 next=max_f(0.0,remain-dt_step);
+            if (next<ped_rise_time) {
+                if (!ped_rise_clear(peds[n].x,peds[n].z,peds[n].fall_axis)) {
+                    next=min_f(ped_rise_time,remain+dt_step);
+                };
+            };
+            peds[n].stun_seconds=next;
+            if (remain>ped_rise_time) {
+                dx=peds[n].slide_x*dt_step; dz=peds[n].slide_z*dt_step;
+                peds[n].slide_x=peds[n].slide_x*0.88; peds[n].slide_z=peds[n].slide_z*0.88;
+            };
         } else {
             i32 to=if (peds[n].toward_second_waypoint) { 2 } else { 0 };
             f32 gx=sidewalks[n][ix(to)]-peds[n].x;
             f32 gz=sidewalks[n][ix(to+1)]-peds[n].z;
             f32 gap=length(gx,gz);
-            if (gap < 0.48) { peds[n].toward_second_waypoint=!peds[n].toward_second_waypoint; }
+            if (gap < 0.48) {
+                peds[n].toward_second_waypoint=!peds[n].toward_second_waypoint;
+                peds[n].needs_clear_route=false;
+            }
             else { dx=gx/gap*dt_step*1.45; dz=gz/gap*dt_step*1.45; };
             f32 ax=peds[n].x-car_x; f32 az=peds[n].z-car_z;
             f32 clearance=length(ax,az);
@@ -1049,9 +1141,14 @@ unit(i32) move_peds = fn(i) {
                 dz=dz-side*vx/pace*dt_step*2.6;
             };
         };
-        if (static_hit(peds[n].x+dx,peds[n].z,0.28,false)==0) { peds[n].x=peds[n].x+dx; };
-        if (static_hit(peds[n].x,peds[n].z+dz,0.28,false)==0) { peds[n].z=peds[n].z+dz; };
-        peds[n].gait_phase=peds[n].gait_phase+length(dx,dz)*3.15;
+        bool protect=peds[n].needs_clear_route && peds[n].stun_seconds<=0.0;
+        f32 x=peds[n].x; f32 z=peds[n].z;
+        bool fallen=peds[n].stun_seconds>0.0;
+        if (dx!=0.0 && static_hit(x+dx,z,0.28,false)==0 &&
+            (!protect || ped_body_clear(x+dx,z)) && (!fallen || ped_world_roll_clear(x+dx,z,peds[n].fall_axis))) { peds[n].x=x+dx; };
+        if (dz!=0.0 && static_hit(peds[n].x,z+dz,0.28,false)==0 &&
+            (!protect || ped_body_clear(peds[n].x,z+dz)) && (!fallen || ped_world_roll_clear(peds[n].x,z+dz,peds[n].fall_axis))) { peds[n].z=z+dz; };
+        peds[n].gait_phase=peds[n].gait_phase+(if (protect) { length(peds[n].x-x,peds[n].z-z) } else { length(dx,dz) })*3.15;
         if (peds[n].gait_phase>6.2831853) { peds[n].gait_phase=peds[n].gait_phase-6.2831853; };
         move_peds(i+1);
     };
@@ -1343,23 +1440,6 @@ unit(f32,f32,f32,f32,i32) move_vehicle = fn(steer,drive,s,c,brake) {
     car_roll=blend(car_roll,clamp((vx*hc-vz*hs)*0.039,-0.18,0.18),0.20);
     engine_load=if (brake>0) { 0.0 } else { abs_f(drive) };
     brake_mark=if (brake>0 || drive< -0.45) { 1.0 } else { 0.0 };
-};
-
-bool(f32,f32,i32) foot_traffic_hit = fn(x,z,i) {
-    if (i>=6) { false } else {
-        u64 n=ix(i);
-        bool west=abs_f(traffic[n].signed_lane_direction)>1.5;
-        f32 s=if (west) { 1.0 } else { 0.0 };
-        f32 c=if (west) { 0.0 } else { 1.0 };
-        if (body_distance_sq(traffic[n].x,traffic[n].z,x,z,s,c)<1.46) { true }
-        else { foot_traffic_hit(x,z,i+1) }
-    }
-};
-
-bool(f32,f32) on_foot_clear = fn(x,z) {
-    static_hit(x,z,0.31,false)==0 &&
-    body_distance_sq(car_x,car_z,x,z,sin_small(car_yaw),cos_small(car_yaw))>1.38 &&
-    !foot_traffic_hit(x,z,0)
 };
 
 unit(f32,f32,i32) walk = fn(strafe,drive,fast) {
@@ -2236,28 +2316,36 @@ unit(i32,f32) draw_traffic = fn(i,alpha) {
     };
 };
 
-unit(f32,f32,f32,f32) person = fn(r,g,b,gait) {
+unit(f32,f32,f32,f32,f32,f32) person = fn(r,g,b,gait,high,wide) {
     f32 wave=sin_small(wrap(gait));
-    box(-0.235,0.61,-0.16,0.47,0.54,0.32,r,g,b);
-    box(-0.17,1.17,-0.145,0.34,0.36,0.29,0.84,0.61,0.46);
-    box(-0.18,1.47,-0.153,0.36,0.08,0.31,0.24,0.17,0.22);
-    box(-0.24,0.075,-0.11+wave*0.10,0.18,0.55,0.23,0.29,0.25,0.35);
-    box(0.06,0.075,-0.11-wave*0.10,0.18,0.55,0.23,0.29,0.25,0.35);
-    box(-0.342,0.56,-0.12-wave*0.10,0.109,0.48,0.18,r*0.84,g*0.84,b*0.84);
-    box(0.233,0.56,-0.12+wave*0.10,0.109,0.48,0.18,r*0.84,g*0.84,b*0.84);
+    box((-0.235)*wide,(0.61)*high,(-0.16)*wide,(0.47)*wide,(0.54)*high,(0.32)*wide,r,g,b);
+    box((-0.17)*wide,(1.17)*high,(-0.145)*wide,(0.34)*wide,(0.36)*high,(0.29)*wide,0.84,0.61,0.46);
+    box((-0.18)*wide,(1.47)*high,(-0.153)*wide,(0.36)*wide,(0.08)*high,(0.31)*wide,0.24,0.17,0.22);
+    box((-0.24)*wide,(0.075)*high,(-0.11+wave*0.10)*wide,(0.18)*wide,(0.55)*high,(0.23)*wide,0.29,0.25,0.35);
+    box((0.06)*wide,(0.075)*high,(-0.11-wave*0.10)*wide,(0.18)*wide,(0.55)*high,(0.23)*wide,0.29,0.25,0.35);
+    box((-0.342)*wide,(0.56)*high,(-0.12-wave*0.10)*wide,(0.109)*wide,(0.48)*high,(0.18)*wide,r*0.84,g*0.84,b*0.84);
+    box((0.233)*wide,(0.56)*high,(-0.12+wave*0.10)*wide,(0.109)*wide,(0.48)*high,(0.18)*wide,r*0.84,g*0.84,b*0.84);
 };
+
 
 unit(i32) draw_peds = fn(i) {
     if (i<9) {
         u64 n=ix(i);
-        f32 yaw=if (peds[n].toward_second_waypoint) { 0.0 } else { 3.14159265 };
+        f32 patrol_yaw=if (peds[n].toward_second_waypoint) { 0.0 } else { 3.14159265 };
         f32 stun=peds[n].stun_seconds;
-        f32 roll=if (stun>0.0) {
-            1.48*min_f(clamp((1.65-stun)*7.1,0.0,1.0),clamp(stun*2.6,0.0,1.0))
+        i32 axis=peds[n].fall_axis;
+        f32 down=if (stun>0.0) {
+            min_f(clamp((ped_stun_time-stun)*7.1,0.0,1.0),clamp(stun/ped_rise_time,0.0,1.0))
         } else { 0.0 };
+        bool compact=axis==4;
+        f32 roll=if (compact) { 0.0 } else { 1.48*down };
+        f32 yaw=if (compact || stun<=0.0) { patrol_yaw } else {
+            wrap(patrol_yaw+wrap(ped_fall_yaw(axis)-patrol_yaw)*clamp(stun/0.09,0.0,1.0))
+        };
         set_model(peds[n].x,abs_f(sin_small(roll))*0.27,peds[n].z,yaw,roll);
         f32 r=if (i%3==0) { 0.93 } else { 0.31+0.16*float_i(i%3) };
-        person(r,0.61,0.49+0.05*float_i(i),peds[n].gait_phase);
+        person(r,0.61,0.49+0.05*float_i(i),peds[n].gait_phase,
+            if (compact) { blend(1.0,0.24,down) } else { 1.0 },if (compact) { blend(1.0,0.79,down) } else { 1.0 });
         draw_peds(i+1);
     };
 };
@@ -2397,7 +2485,7 @@ unit(f32) render_moving = fn(alpha) {
         f32 height=if (aboard) { blend(old_board_height,board_height,alpha) } else { 0.01 };
         set_model(blend(old_foot_x,foot_x,alpha),height,blend(old_foot_z,foot_z,alpha),view_foot,0.0);
         f32 gait=if (stage==MissionStage::delivered || stage==MissionStage::docked || (stage==MissionStage::crossing && board_time>=1.12)) { 0.0 } else { (foot_x+foot_z)*2.7 };
-        person(0.36,0.83,0.76,wrap(gait-6.2831853*float_i(core.float_to_sint_trunc<i32>(gait/6.2831853))));
+        person(0.36,0.83,0.76,wrap(gait-6.2831853*float_i(core.float_to_sint_trunc<i32>(gait/6.2831853))),1.0,1.0);
     };
     draw_traffic(0,alpha);
     draw_mail(0);
@@ -2471,7 +2559,7 @@ unit(i32) reset_props = fn(i) {
     if (i<9) {
         u64 n=ix(i);
         peds[n].x=sidewalks[n][0]; peds[n].z=sidewalks[n][1]; peds[n].toward_second_waypoint=true;
-        peds[n].stun_seconds=0.0; peds[n].slide_x=0.0; peds[n].slide_z=0.0; peds[n].gait_phase=0.0;
+        peds[n].stun_seconds=0.0; peds[n].needs_clear_route=false; peds[n].fall_axis=4; peds[n].slide_x=0.0; peds[n].slide_z=0.0; peds[n].gait_phase=0.0;
         if (i<4) {
             mailbox[n][0]=mailbox_home[n][0]; mailbox[n][1]=mailbox_home[n][1];
             mailbox[n][2]=0.0; mailbox[n][3]=0.0;
