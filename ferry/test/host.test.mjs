@@ -27,11 +27,30 @@ test("pedals and one-shot action coexist with analog steering; keyboard axis pre
   assert.deepEqual(control.sample(),[0,0,0,0,0]);
 });
 
+test("short landscape reserves both touch-control edges while fitting a larger map",async()=>{
+  const css=await readFile(new URL("../style.css",import.meta.url),"utf8");
+  const landscape=css.match(/@media \(max-height:440px\) and \(min-width:541px\) \{([^]*?)\n\}/)?.[1]??"";
+  assert.match(landscape,/\.city-map \{ position:static; \}/);
+  const space=landscape.match(/\.route-sheet \{ inset-inline:0; margin-inline:auto; width:min\((\d+)px,calc\(100% - (\d+)px\)\); \}/);
+  const height=landscape.match(/\.city-map canvas \{ max-height:min\((\d+)dvh,max\((\d+)px,calc\(100dvh - (\d+)px - env\(safe-area-inset-top\) - env\(safe-area-inset-bottom\)\)\)\); \}/);
+  assert.ok(space&&height);
+  const [widthCap,edgeAllowance]=space.slice(1).map(Number);
+  const [heightShare,floor,verticalReserve]=height.slice(1).map(Number);
+  for(const [w,h,inlineInsets,blockInsets] of [[667,320,80,21],[541,240,0,0]]) {
+    const contentWidth=w-inlineInsets;
+    const panelWidth=Math.min(widthCap,contentWidth-edgeAllowance);
+    const availableHeight=Math.min(h*heightShare/100,Math.max(floor,h-verticalReserve-blockInsets));
+    const drawnWidth=Math.min(panelWidth-14,availableHeight*280/182);
+    assert.ok((contentWidth-panelWidth)/2>=131);
+    assert.ok(drawnWidth>=125);
+  }
+});
+
 test("loader agrees with shell version, WebAssembly triangle shape, and 34-float engine frame",async()=>{
   const html=await readFile(new URL("../index.html",import.meta.url),"utf8");
   const version=html.match(/host\.mjs\?v=([^"]+)/)?.[1];
-  assert.equal(version,"ferry-clear-recovery-v5");
-  assert(html.includes('style.css?v=ferry-free-orbit-v1"'));
+  assert.equal(version,"ferry-map-legibility-v1");
+  assert(html.includes('style.css?v=ferry-map-landscape-v2"'));
   assert.equal(ENGINE_PATH,"./ferry.wasm?v=ferry-clear-recovery-v5");
   assert.doesNotMatch(html,/id="camera-view"/);
   assert.match(html,/<div id="play-hud" class="play-hud" hidden>[\s\S]*?<header[^>]*>[\s\S]*?id="objective"[\s\S]*?id="status"[\s\S]*?id="city-map"[\s\S]*?id="hint"[\s\S]*?<\/header>/);

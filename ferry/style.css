@@ -93,8 +93,9 @@ h1 span{color:var(--rust)}
   .route-sheet { width:min(235px,66vw); }
 }
 @media (max-height:440px) and (min-width:541px) {
-  .route-sheet { width:min(236px,42vw); }
-  .city-map canvas { max-height:min(32dvh,max(34px,calc(100dvh - 230px - env(safe-area-inset-top) - env(safe-area-inset-bottom)))); }
+  .city-map { position:static; }
+  .route-sheet { inset-inline:0; margin-inline:auto; width:min(236px,calc(100% - 280px)); }
+  .city-map canvas { max-height:min(36dvh,max(34px,calc(100dvh - 125px - env(safe-area-inset-top) - env(safe-area-inset-bottom)))); }
 }
 
 .pedals {
