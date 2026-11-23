@@ -26,6 +26,7 @@ i32 paint_masonry = 2;
 i32 paint_canal = 3;
 i32 paint_light_pool = 4;
 i32 paint_lamp = 5;
+i32 paint_wake = 6;
 f32 model_x = 0.0;
 f32 model_y = 0.0;
 f32 model_z = 0.0;
@@ -300,6 +301,7 @@ f32 dock_z = 83.0;
 f32 harbor_traffic_end = 69.9;
 f32 harbor_bollard_z = 72.2;
 f32 harbor_crosswalk_z = 73.55;
+f32 berth_z = 88.0;
 f32 ferry_z = 88.0;
 f32 old_ferry_z = 88.0;
 f32 deck_y = 1.22;
@@ -428,7 +430,7 @@ unit(i32) crosswalk = fn(i) {
     };
 };
 
-i32[6][4] sign_letters = [[31183,31597,24573,31183,29391,9367],[11117,29847,15211,29391,31599,0],[4843,29847,29391,23275,0,31727],[23549,23530,23275,29847,24573,23530]];
+i32[6][5] sign_letters = [[31183,31597,24573,31183,29391,9367],[11117,29847,15211,29391,31599,0],[4843,29847,29391,23275,0,31727],[23549,23530,23275,29847,24573,23530],[4843, 23533, 31599, 24573, 29391, 0]];
 
 unit(i32,i32,f32,f32,f32,f32,bool,f32,f32,f32) glyph = fn(bits,bit,x,y,z,k,side,r,g,b) {
     if (bits>0 && bit<15) {
@@ -667,6 +669,62 @@ unit(f32,f32,f32) dusk_lamp = fn(x,z,reach) {
     surface_paint=0;
 };
 
+unit() working_wharf = fn {
+    box(16.35,-0.43,86.5,7.70,0.75,16.10,0.30,0.36,0.43);
+    box(16.28,0.30,86.43,7.84,0.13,16.26,0.48,0.48,0.48);
+    box(16.64,0.45,90.25,1.68,1.19,1.48,0.52,0.34,0.25);
+    box(16.90,1.65,90.35,1.28,0.79,1.19,0.53,0.42,0.30);
+    box(18.85,0.45,88.85,1.65,1.18,2.35,0.29,0.46,0.50);
+    box(19.10,1.64,89.12,1.15,0.70,1.49,0.37,0.52,0.55);
+    box(19.92,0.44,97.00,1.27,0.76,1.35,0.37,0.37,0.49);
+    box(20.27,1.20,97.36,0.56,6.80,0.60,0.36,0.40,0.51);
+    box(16.70,7.57,97.34,7.15,0.36,0.67,0.74,0.46,0.28);
+    box(22.06,7.92,97.15,1.60,0.51,1.04,0.40,0.40,0.52);
+    box(17.48,7.53,97.60,0.085,0.01,0.085,0.30,0.35,0.44);
+    box(17.48,3.02,97.60,0.085,4.52,0.085,0.29,0.32,0.42);
+    box(17.28,2.81,97.48,0.46,0.23,0.34,0.74,0.52,0.32);
+    box(16.35,0.48,86.59,0.12,0.84,15.93,0.40,0.45,0.53);
+    box(16.33,1.33,86.57,0.16,0.14,15.97,0.84,0.67,0.47);
+};
+
+unit() phone_corner = fn {
+    ground(phone_x-0.86,phone_z-0.69,1.72,1.14,0.022,0.34,0.29,0.35);
+    ground(phone_x-0.86,phone_z-0.69,1.72,0.07,0.025,0.87,0.69,0.37);
+    ground(phone_x-0.86,phone_z-0.68,0.07,1.10,0.025,0.87,0.69,0.37);
+    ground(phone_x+0.79,phone_z-0.68,0.07,1.10,0.025,0.87,0.69,0.37);
+    box(phone_x-0.43,1.65,-1.11,0.86,0.28,0.21,0.44,0.25,0.37);
+    box(phone_x-0.45,1.63,-1.14,0.90,0.046,0.24,0.94,0.62,0.37);
+    neon_words(4,0,phone_x-0.36,1.71,-1.115,0.036,false,1.0,0.88,0.51);
+    box(7.57,0.58,-6.1,0.26,2.04,2.17,0.29,0.52,0.54);
+    box(7.55,0.58,-3.45,0.28,2.04,2.43,0.47,0.34,0.34);
+    box(7.52,1.11,-6.00,0.05,1.34,1.93,0.85,0.64,0.42);
+    box(7.51,1.12,-3.28,0.05,1.36,2.08,0.95,0.73,0.45);
+    box(7.45,1.09,-6.04,0.11,0.09,4.91,0.61,0.42,0.33);
+    box(7.44,1.83,-6.04,0.11,0.063,4.91,0.47,0.32,0.32);
+    box(6.85,2.76,-6.31,1.07,0.14,5.55,0.29,0.48,0.54);
+    box(6.84,2.68,-6.35,0.047,0.24,5.62,0.79,0.51,0.38);
+};
+
+unit(f32,f32,i32) video_card = fn(x,z,design) {
+    f32 r=if (design%3==0) { 0.91 } else { if (design%3==1) { 0.42 } else { 0.72 } };
+    f32 b=if (design%3==0) { 0.43 } else { if (design%3==1) { 0.68 } else { 0.57 } };
+    box(x-0.06,1.23,z+0.008,0.59,0.96,0.037,0.31,0.25,0.35);
+    box(x,1.29,z,0.47,0.78,0.025,r,0.43,b);
+    f32 shift=if (design%2==0) { 0.04 } else { 0.13 };
+    box(x+shift,1.59,z-0.01,0.29,0.30,0.016,0.23,0.28,0.45);
+    box(x+0.07,1.39,z-0.013,0.33,0.042,0.016,0.84,0.76,0.52);
+};
+
+unit(f32,f32,i32) video_windows = fn(x,z,i) {
+    if (i<4) {
+        f32 spacing=if (i>=2) { 0.51 } else { 0.0 };
+        f32 shift=float_i(i)*0.70+spacing;
+        video_card(x+0.96+shift,z,i);
+        video_card(x+9.76+shift,z,i+2);
+        video_windows(x,z,i+1);
+    };
+};
+
 unit() render_world = fn {
     vertex_count=0;
     model_local=false;
@@ -796,6 +854,9 @@ unit() render_world = fn {
     dusk_lamp(-4.60,64.5,1.10);
     dusk_lamp(-124.0,39.3,0.78);
     dusk_lamp(-139.0,46.1,-0.82);
+    working_wharf();
+    phone_corner();
+    video_windows(-88.8,39.81,0);
     unsafe { host.world(core.pointer_cast<*?u8>(&?scenery[0][0][0][0][0]),vertex_count*6); };
     world_ready=true;
 };
@@ -1773,6 +1834,39 @@ unit(i32,f32) traffic_shadows = fn(i,alpha) {
     };
 };
 
+unit(f32,f32,f32,f32) stern_ribbon = fn(s,stern,span,strength) {
+    f32 x=11.0+s*2.35;
+    f32 mid_x=11.0+s*3.22;
+    f32 tail_x=11.0+s*4.78;
+    f32 mid_z=stern-span*0.40;
+    f32 tail_z=stern-span;
+    put(x-0.14,-0.017,stern,0.50,strength*0.70,0.72);
+    put(x+0.14,-0.017,stern,0.50,strength*0.70,0.72);
+    put(mid_x+0.34,-0.017,mid_z,0.50,strength,0.72);
+    put(x-0.14,-0.017,stern,0.50,strength*0.70,0.72);
+    put(mid_x+0.34,-0.017,mid_z,0.50,strength,0.72);
+    put(mid_x-0.34,-0.017,mid_z,0.50,strength,0.72);
+    put(mid_x-0.34,-0.017,mid_z,0.50,strength,0.72);
+    put(mid_x+0.34,-0.017,mid_z,0.50,strength,0.72);
+    put(tail_x+0.57,-0.017,tail_z,0.50,0.0,0.72);
+    put(mid_x-0.34,-0.017,mid_z,0.50,strength,0.72);
+    put(tail_x+0.57,-0.017,tail_z,0.50,0.0,0.72);
+    put(tail_x-0.57,-0.017,tail_z,0.50,0.0,0.72);
+};
+
+unit(f32) ferry_wake = fn(alpha) {
+    if (ferry_z>old_ferry_z && (stage==MissionStage::crossing || stage==MissionStage::missed_departure)) {
+        f32 distance=blend(old_ferry_z,ferry_z,alpha)-berth_z;
+        f32 strength=0.38*clamp(distance*0.55,0.0,1.0);
+        f32 stern=berth_z+distance-2.43;
+        f32 span=min_f(10.8,1.60+distance);
+        surface_paint=paint_wake;
+        stern_ribbon(-1.0,stern,span,strength);
+        stern_ribbon(1.0,stern,span,strength);
+        surface_paint=0;
+    };
+};
+
 unit(f32) render_moving = fn(alpha) {
     vertex_count=0; drawing_world=false;
     f32 vis_yaw=wrap(old_yaw+alpha*wrap(car_yaw-old_yaw));
@@ -1792,6 +1886,7 @@ unit(f32) render_moving = fn(alpha) {
     draw_peds(0);
     boat(alpha);
     model_local=false;
+    ferry_wake(alpha);
     if (stage==MissionStage::answer_phone) { objective(phone_x,phone_z,1.0,0.77,0.40); };
     if (stage==MissionStage::pickup_tape) {
         if (follows_backstreet()) { objective(tape_guide_x(),tape_guide_z(),0.85,0.95,0.60); }
@@ -1879,7 +1974,7 @@ unit(i32) reset = fn(mode) {
     vx=0.0; vz=0.0; brake_mark=0.0; car_roll=0.0; wheel_phase=0.0;
     foot_x=2.1; foot_z=-4.6; foot_speed=0.0; foot_yaw=0.0;
     camera_x=2.1; camera_z=-11.6; camera_y=3.9; camera_yaw=0.0; camera_pitch=-0.25; wide_camera=false;
-    ferry_z=88.0; board_time=0.0; board_height=0.01;
+    ferry_z=berth_z; board_time=0.0; board_height=0.01;
     reset_props(0); snapshot();
     render_moving(1.0); render_frame(1.0);
 };

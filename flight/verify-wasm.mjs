@@ -79,6 +79,20 @@ function reset(course) {
 
 reset(0);
 const farmWorld = world;
+if (!comparisonBaseline) {
+    const countWorld = (x0,x1,y0,y1,z0,z1) => {
+        let found = 0;
+        for (let i=0;i<farmWorld.length;i+=6) {
+            const x=farmWorld[i], y=farmWorld[i+1], z=farmWorld[i+2];
+            if (x>=x0 && x<=x1 && y>=y0 && y<=y1 && z>=z0 && z<=z1) found++;
+        }
+        return found;
+    };
+    assert.equal(countWorld(-45.93,-45.84,3.45,6.01,156,173),54,"supply approach barn has panelled side windows");
+    assert(countWorld(163.6,169.4,13.89,16.71,111.6,117.4)>=72,"ribbed eastern silo has a full roof within the old obstacle footprint");
+    for (const z of [185,225,265])
+        assert.equal(countWorld(-30.41,0,.1505,.153,z+3.3,z+24.3),96,"every treated field has apparent cut rows within its original bounds");
+}
 assert(worldPointer + world.length * 4 <= aircraftPointer || aircraftPointer + aircraft.length * 4 <= worldPointer,
     "persistent static and streamed moving meshes have disjoint backing");
 const farmAircraft = aircraft;
@@ -446,6 +460,7 @@ function sortie(course, mode = "normal") {
     let checkedPredictedImpact = false;
     let craftStartX;
     let movingSeine = false;
+    let cartStartZ, movingCart = false;
     const checkedLoadVisibility = new Set();
     function step(input = 0, dt = 1/30, aspect = 1.65) {
         const gates = frame[32];
@@ -465,6 +480,23 @@ function sortie(course, mode = "normal") {
         visited.add(phase);
         observer?.before(p, phase);
         let input = 0;
+        if (!comparisonBaseline && course === 0 && mode === "normal") {
+            const cart = marker([.91,.58,.23]);
+            const servicePhase = phase === 7 || phase === 8 || phase === 9;
+            if (phase === 9) assert.equal(cart.length,6,"the stopped loading scene still shows the cart deck");
+            if (servicePhase && cart.length) {
+                assert.equal(cart.length,6,"the service cart has a whole deck");
+                assert(cart.every(([x,y,z])=>x>4 && x<8.1 && y>.84 && y<.85 && z>126 && z<135.3),
+                    "the animated cart stays low and confined to the yard outside the runway");
+                if (phase === 7) {
+                    if (cartStartZ === undefined) cartStartZ = cart[0][2];
+                    if (Math.abs(cart[0][2]-cartStartZ)>1.2) movingCart = true;
+                }
+                assert(aircraft.length/6 < 2048,"the active Wright yard fits the moving arena");
+            } else if (!servicePhase) {
+                assert.equal(cart.length,0,"the yard cart is not submitted outside the service phases");
+            }
+        }
         if (!comparisonBaseline && course === 1 && (mode === "normal" || mode === "cyan")) {
             const craft = marker([.32,.16,.11]);
             const wake = marker([.62,.77,.72]);
@@ -683,6 +715,8 @@ function sortie(course, mode = "normal") {
         assert.equal(marker([.23,.58,.43]).length, frame[32]*84, "earned rings remain marked after the flash");
     }
     observer?.finish();
+    if (!comparisonBaseline && course === 0 && mode === "normal")
+        assert(movingCart,"ordinary Wright descent encounters the actively moving supply cart");
     if (!comparisonBaseline && course === 1 && (mode === "normal" || mode === "cyan"))
         assert(movingSeine,"ordinary Paris controls observe a real moving market boat and wake");
     if (mode === "riverside" || mode === "county") return {result: frame[22], phase:frame[20], position: aircraftPose(), surveyCruise, surveyEast};

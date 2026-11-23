@@ -1,4 +1,4 @@
-export const ENGINE_PATH = "./ferry.wasm?v=ferry-pier-camera-v1";
+export const ENGINE_PATH = "./ferry.wasm?v=ferry-neighborhood-v1";
 const INPUTS = new Map([
   ["KeyA","left"],["ArrowLeft","left"],["KeyD","right"],["ArrowRight","right"],
   ["KeyW","up"],["ArrowUp","up"],["KeyS","down"],["ArrowDown","down"],["Space","brake"],
@@ -166,6 +166,9 @@ function programFor(gl) {
     }else if(surface==4){
       if(tint.g<.002) discard;
       pixel=vec4(1.,.65,.29,tint.g*(1.-smoothstep(25.,92.,depth)));
+    }else if(surface==6){
+      if(tint.g<.003) discard;
+      pixel=vec4(.65,.86,.92,tint.g*(1.-smoothstep(24.,108.,depth)));
     }else if(surface==5){
       pixel=vec4(mix(vec3(1.,.83,.54),vec3(.65,.39,.47),smoothstep(20.,170.,depth)*.45),1.);
     }else{

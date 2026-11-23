@@ -239,6 +239,57 @@ unit(f32,f32,f32,f32,f32,f32,f32,f32) ground_patch = fn(x,z,w,l,y,r,g,b) {
 	quad(x,y,z,x+w,y,z,x+w,y,z+l,x,y,z+l,r,g,b);
 };
 
+unit(f32,f32,i32) barn_windows = fn(x,z,n) {
+	if (n < 3) {
+		f32 at = z-7.3+float_i(n)*6.3;
+		quad(x,3.46,at, x,3.46,at+2.5, x,6.0,at+2.5, x,6.0,at, 0.84,0.68,0.46);
+		quad(x+0.035,3.73,at+0.23, x+0.035,3.73,at+2.27, x+0.035,5.75,at+2.27, x+0.035,5.75,at+0.23, 0.26,0.31,0.27);
+		quad(x+0.065,3.73,at+1.15, x+0.065,3.73,at+1.35, x+0.065,5.75,at+1.35, x+0.065,5.75,at+1.15, 0.76,0.62,0.42);
+		barn_windows(x,z,n+1);
+	};
+};
+
+unit(f32,f32,i32) grain_silo = fn(x,z,n) {
+	if (n < 12) {
+		f32 a = wrap(float_i(n)*0.52359879);
+		f32 b = wrap(float_i(n+1)*0.52359879);
+		f32 ax = x+2.72*sin_small(a);
+		f32 az = z+2.72*cos_small(a);
+		f32 bx = x+2.72*sin_small(b);
+		f32 bz = z+2.72*cos_small(b);
+		f32 shade = 0.55+0.12*cos_small(a)+float_i(n%2)*0.04;
+		quad(ax,0.06,az,bx,0.06,bz,bx,13.9,bz,ax,13.9,az,shade,shade*0.98,shade*0.88);
+		tri(ax,13.9,az,bx,13.9,bz,x,16.7,z,0.49,0.34,0.26);
+		f32 ax_rim = x+(ax-x)*1.032;
+		f32 az_rim = z+(az-z)*1.032;
+		f32 bx_rim = x+(bx-x)*1.032;
+		f32 bz_rim = z+(bz-z)*1.032;
+		quad(ax_rim,2.28,az_rim,bx_rim,2.28,bz_rim,bx_rim,2.64,bz_rim,ax_rim,2.64,az_rim,0.38,0.37,0.32);
+		quad(ax_rim,10.94,az_rim,bx_rim,10.94,bz_rim,bx_rim,11.22,bz_rim,ax_rim,11.22,az_rim,0.38,0.37,0.32);
+		grain_silo(x,z,n+1);
+	};
+};
+
+unit(f32,i32) harvest_rows = fn(z,n) {
+	if (n < 8) {
+		f32 x = -30.4+float_i(n)*3.9;
+		f32 tint = float_i(n%4)*0.017;
+		ground_patch(x,z+3.4,1.58,20.8,0.151,0.38+tint,0.43+tint,0.20);
+		ground_patch(x+1.58,z+3.4,0.76,20.8,0.152,0.77+tint,0.66+tint,0.31);
+		harvest_rows(z,n+1);
+	};
+};
+
+unit(f32,f32) supply_court = fn(x,z) {
+	ground_patch(x-0.30,z+10.4,8.0,14.2,0.161,0.58,0.51,0.38);
+	ground_patch(x+1.22,z+11.2,0.28,12.6,0.167,0.43,0.38,0.29);
+	ground_patch(x+4.87,z+11.2,0.28,12.6,0.167,0.43,0.38,0.29);
+	ground_patch(x+0.52,z+10.8,5.50,0.46,0.174,0.90,0.73,0.45);
+	ground_patch(x+0.52,z+23.4,5.50,0.46,0.174,0.90,0.73,0.45);
+	box(x+6.10,0.17,z+11.4,1.1,0.91,2.4,0.70,0.46,0.25);
+	box(x+6.22,0.17,z+14.6,1.0,0.58,1.9,0.52,0.43,0.28);
+};
+
 unit(f32,f32,i32,i32) furrows = fn(x,z,j,k) {
 	if (k < 15) {
 		f32 offset = 5.0 + float_i(k)*8.2;
@@ -543,6 +594,7 @@ unit(i32) crop_markers = fn(n) {
 		ground_patch(-31.0,z,32.0,27.0,0.14,0.51+0.045*float_i(n),0.64,0.25);
 		ground_patch(-30.2,z+2.0,30.4,1.0,0.15,0.92,0.79,0.36);
 		ground_patch(-30.2,z+24.0,30.4,1.0,0.15,0.92,0.79,0.36);
+		harvest_rows(z,0);
 		crop_markers(n+1);
 	};
 };
@@ -817,8 +869,9 @@ unit() render_land = fn {
 		forage_edges(0);
 		barn(145.0,97.0);
 		barn(-61.0,164.0);
-		box(164.0,0.0,112.0,5.5,14.0,5.5,0.57,0.53,0.44);
-		diamond(166.75,14.0,114.75,3.4,3.8,0.64,0.56,0.49);
+		barn_windows(160.085,97.0,0);
+		barn_windows(-45.915,164.0,0);
+		grain_silo(166.5,114.5,0);
 		box(-100.0,0.05,132.0,270.0,0.10,6.0,0.63,0.53,0.34);
 		box(54.0,0.05,-52.0,7.0,0.10,343.0,0.57,0.48,0.33);
 		fence(70.0,127.0,0);
@@ -860,7 +913,10 @@ unit() render_land = fn {
 	box(sx,0.0,sz,service_w(),service_h()-0.32,service_l(),0.38,0.38,0.31);
 	box(sx-0.4,service_h()-0.32,sz-0.4,service_w()+0.8,0.32,service_l()+0.8,0.41,0.61,0.54);
 	box(sx-0.1,0.2,sz+2.0,0.10,2.1,4.8,0.82,0.72,0.42);
-	if (course == 0) { crop_markers(0); };
+	if (course == 0) {
+		supply_court(sx,sz);
+		crop_markers(0);
+	};
 	if (course == 1) {
 		box(sx+1.0,4.34,sz+3.0,5.0,2.2,3.8,0.83,0.31,0.15);
 		quad(sx+1.5,4.76,sz+2.97,sx+5.5,4.76,sz+2.97,sx+5.5,6.15,sz+2.97,sx+1.5,6.15,sz+2.97,0.97,0.92,0.76);
@@ -1982,6 +2038,20 @@ unit(f32) seine_market_craft = fn(alpha) {
 	};
 };
 
+unit(f32) wright_supply_cart = fn(alpha) {
+	f32 x = service_x()+1.17;
+	f32 z0 = service_z()+13.1;
+	if (abs_f(x-presented_pose[0].x) < 100.0 && abs_f(z0-presented_pose[0].z) < 103.0) {
+		f32 t = (float_i(stage_tick[0])+alpha)/30.0;
+		f32 z = z0+3.4*(1.0-sin_small(wrap(t*0.57+1.5707963)));
+		ground_patch(x-0.29,z-0.34,4.13,2.49,0.179,0.37,0.33,0.25);
+		box(x,0.37,z,3.82,0.47,2.09,0.60,0.39,0.21);
+		quad(x+0.42,0.842,z+0.24, x+3.38,0.842,z+0.24, x+3.38,0.842,z+1.86, x+0.42,0.842,z+1.86, 0.91,0.58,0.23);
+		quad(x+0.34,0.18,z+2.104, x+0.94,0.18,z+2.104, x+0.94,0.68,z+2.104, x+0.34,0.68,z+2.104, 0.26,0.23,0.19);
+		quad(x+2.86,0.18,z+2.104, x+3.46,0.18,z+2.104, x+3.46,0.68,z+2.104, x+2.86,0.68,z+2.104, 0.26,0.23,0.19);
+	};
+};
+
 unit(f32,i32,f32,f32) draw_aircraft = fn(alpha,mail_status,impact_x,impact_z) {
 	vertex_count = 0;
 	drawing_world = false;
@@ -1990,6 +2060,7 @@ unit(f32,i32,f32,f32) draw_aircraft = fn(alpha,mail_status,impact_x,impact_z) {
 		paint_crops(0);
 		i32 age = stage_tick[0]-spray_tick;
 		if (age < 36) { spray_mist(0,age); };
+		if (phase[0] == MissionPhase::supply_approach || phase[0] == MissionPhase::supply_rollout || phase[0] == MissionPhase::cargo_pickup) { wright_supply_cart(alpha); };
 	} else {
 		if (phase[0] == MissionPhase::seine_crossing || phase[0] == MissionPhase::mail_approach) { seine_market_craft(alpha); };
 	};
