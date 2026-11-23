@@ -234,6 +234,8 @@ f32 old_camera_z = -12.0;
 f32 old_camera_yaw = 0.0;
 f32 camera_pitch = -0.25;
 bool wide_camera = false;
+f32 camera_width = 0.0;
+f32 old_camera_width = 0.0;
 f32 accumulator = 0.0;
 f32 viewport = 1.0;
 f32 seconds_left = 90.0;
@@ -1210,6 +1212,38 @@ unit(i32) move_traffic = fn(i) {
     };
 };
 
+bool(f32,f32,f32,f32,f32,f32) can_slide = fn(dx,dz,s,c,ns,nc) {
+    car_hit(car_x+dx,car_z+dz,ns,nc)==0 &&
+    car_hit(car_x+dx*0.5,car_z+dz*0.5,(s+ns)*0.5,(c+nc)*0.5)==0 &&
+    traffic_hit(car_x,car_z,dx,dz,ns,nc)<0
+};
+
+unit(f32,f32,f32,f32,f32,f32,f32,i32) slide_building = fn(dx,dz,yaw,s,c,ns,nc,hit) {
+    if (yaw!=car_yaw && can_slide(dx,dz,s,c,s,c)) {
+        car_x=car_x+dx; car_z=car_z+dz;
+    } else {
+        bool clear_x=abs_f(dx)>0.00001 && can_slide(dx,0.0,s,c,ns,nc);
+        bool clear_z=abs_f(dz)>0.00001 && can_slide(0.0,dz,s,c,ns,nc);
+        bool turned=clear_x || clear_z;
+        if (!turned && yaw!=car_yaw) {
+            clear_x=abs_f(dx)>0.00001 && can_slide(dx,0.0,s,c,s,c);
+            clear_z=abs_f(dz)>0.00001 && can_slide(0.0,dz,s,c,s,c);
+        };
+        f32 blocked=0.0;
+        if (clear_x && (!clear_z || abs_f(dx)>=abs_f(dz))) {
+            car_x=car_x+dx;
+            vx=vx*0.985; blocked=abs_f(vz); vz=0.0;
+        } else {
+            if (clear_z) { car_z=car_z+dz; vz=vz*0.985; blocked=abs_f(vx); vx=0.0; }
+            else {
+                blocked=length(vx,vz); vx=0.0; vz=0.0;
+            };
+        };
+        if (turned) { car_yaw=yaw; };
+        if (blocked>1.15) { ring(hit); };
+    };
+};
+
 unit(f32,f32,f32,f32,i32) move_vehicle = fn(steer,drive,s,c,brake) {
     f32 ahead=vx*s+vz*c;
     f32 sideways=vx*c-vz*s;
@@ -1266,15 +1300,18 @@ unit(f32,f32,f32,f32,i32) move_vehicle = fn(steer,drive,s,c,brake) {
                 vx=vx*0.3; vz=vz*0.3;
             };
         } else {
-            bool pass_x=car_hit(nx,car_z,s,c)==0 && traffic_hit(car_x,car_z,dx,0.0,s,c)<0;
-            bool pass_z=car_hit(car_x,nz,s,c)==0 && traffic_hit(car_x,car_z,0.0,dz,s,c)<0;
-            if (pass_x && (!pass_z || abs_f(dx)>=abs_f(dz))) {
-                car_x=nx; vx=vx*0.64; vz=vz*(-0.17);
-            } else {
-                if (pass_z) { car_z=nz; vx=vx*(-0.17); vz=vz*0.64; }
-                else { vx=vx*(-0.16); vz=vz*(-0.16); };
+            if (hit==5) { slide_building(dx,dz,yaw,s,c,ns,nc,hit); }
+            else {
+                bool pass_x=car_hit(nx,car_z,s,c)==0 && traffic_hit(car_x,car_z,dx,0.0,s,c)<0;
+                bool pass_z=car_hit(car_x,nz,s,c)==0 && traffic_hit(car_x,car_z,0.0,dz,s,c)<0;
+                if (pass_x && (!pass_z || abs_f(dx)>=abs_f(dz))) {
+                    car_x=nx; vx=vx*0.64; vz=vz*(-0.17);
+                } else {
+                    if (pass_z) { car_z=nz; vx=vx*(-0.17); vz=vz*0.64; }
+                    else { vx=vx*(-0.16); vz=vz*(-0.16); };
+                };
+                if (impact>0.92) { ring(hit); };
             };
-            if (impact>0.92) { ring(hit); };
         };
     };
     f32 hs=sin_small(car_yaw); f32 hc=cos_small(car_yaw);
@@ -1589,13 +1626,14 @@ unit() camera_step = fn {
     camera_yaw=wrap(camera_yaw+wrap(aim-camera_yaw)*0.15);
     f32 hx=sin_small(camera_yaw); f32 hz=cos_small(camera_yaw);
     f32 sx=player_x(); f32 sz=player_z();
-    f32 goal=if (wide_camera) { if (in_car) { 12.0 } else { 10.5 } } else { if (in_car) { 8.4 } else { 7.0 } };
+    camera_width=blend(camera_width,if (wide_camera) { 1.0 } else { 0.0 },0.14);
+    f32 goal=if (in_car) { blend(8.4,12.0,camera_width) } else { blend(7.0,10.5,camera_width) };
     f32 dist=clear_boom(sx,sz,-hx,-hz,goal,0);
     camera_x=sx-dist*hx;
     camera_z=sz-dist*hz;
     f32 camera_deck=if (stage==MissionStage::crossing || stage==MissionStage::docked || stage==MissionStage::disembarking || stage==MissionStage::delivered) { board_height } else { 0.0 };
-    f32 camera_base=if (dist<3.8) { 2.35 } else { if (wide_camera) { 6.1 } else { if (in_car) { 4.2 } else { 3.9 } } };
-    f32 aim_pitch=if (dist<3.8) { -0.48 } else { if (wide_camera) { -0.35 } else { if (in_car) { -0.29 } else { -0.25 } } };
+    f32 camera_base=if (dist<3.8) { 2.35 } else { blend(if (in_car) { 4.2 } else { 3.9 },6.1,camera_width) };
+    f32 aim_pitch=if (dist<3.8) { -0.48 } else { blend(if (in_car) { -0.29 } else { -0.25 },-0.35,camera_width) };
     f32 eye_y=camera_deck+camera_base;
     if (!in_car && sx>pier_marquee_x && sx<pier_marquee_x+pier_marquee_width &&
         sz>pier_marquee_z-1.45 && camera_z<pier_marquee_z+1.15) {
@@ -1603,7 +1641,7 @@ unit() camera_step = fn {
         f32 clears=clamp(((pier_marquee_z+1.15)-camera_z)/0.62,0.0,1.0);
         f32 underpass=min_f(enters,clears);
         eye_y=blend(eye_y,min_f(eye_y,pier_marquee_floor-0.64),underpass);
-        if (wide_camera && dist>=3.8) { aim_pitch=blend(aim_pitch,-0.18,underpass); };
+        if (dist>=3.8) { aim_pitch=blend(aim_pitch,-0.18,underpass*camera_width); };
     };
     camera_y=blend(camera_y,eye_y,0.38);
     camera_pitch=blend(camera_pitch,aim_pitch,0.22);
@@ -1623,6 +1661,7 @@ unit() snapshot = fn {
     old_x=car_x; old_z=car_z; old_yaw=car_yaw;
     previous_wheel_phase=wheel_phase;
     old_foot_x=foot_x; old_foot_z=foot_z; old_foot_yaw=foot_yaw;
+    old_camera_width=camera_width;
     old_camera_x=camera_x; old_camera_y=camera_y; old_camera_z=camera_z; old_camera_yaw=camera_yaw;
 };
 
@@ -1940,7 +1979,8 @@ unit(f32) render_frame = fn(alpha) {
     f32 ex=blend(old_camera_x,camera_x,alpha);
     f32 ey=blend(old_camera_y,camera_y,alpha);
     f32 ez=blend(old_camera_z,camera_z,alpha);
-    f32 sy=if (viewport<0.85) { 1.16 } else { 1.48 };
+    f32 lens=blend(1.0,0.76,blend(old_camera_width,camera_width,alpha));
+    f32 sy=lens*(if (viewport<0.85) { 1.16 } else { 1.48 });
     f32 sx=sy/viewport;
     f32 nf=1.000770;
     display[0]=hz*sx; display[1]=ux*sy; display[2]=fx*nf; display[3]=fx;
@@ -2001,7 +2041,7 @@ unit(i32) reset = fn(mode) {
     car_yaw=if (mode==1) { 0.0 } else { 3.14159265 };
     vx=0.0; vz=0.0; brake_mark=0.0; car_roll=0.0; wheel_phase=0.0;
     foot_x=2.1; foot_z=-4.6; foot_speed=0.0; foot_yaw=0.0;
-    camera_x=2.1; camera_z=-11.6; camera_y=3.9; camera_yaw=0.0; camera_pitch=-0.25; wide_camera=false;
+    camera_x=2.1; camera_z=-11.6; camera_y=3.9; camera_yaw=0.0; camera_pitch=-0.25; wide_camera=false; camera_width=0.0;
     ferry_z=berth_z; board_time=0.0; board_height=0.01;
     reset_props(0); snapshot();
     render_moving(1.0); render_frame(1.0);

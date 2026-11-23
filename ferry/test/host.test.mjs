@@ -30,11 +30,12 @@ test("pedals and one-shot action coexist with analog steering; keyboard axis pre
 test("loader agrees with shell version, WebAssembly triangle shape, and 30-float engine frame",async()=>{
   const html=await readFile(new URL("../index.html",import.meta.url),"utf8");
   const version=html.match(/host\.mjs\?v=([^"]+)/)?.[1];
-  assert.equal(version,"ferry-pier-signal-v1-arcade-ui4");
-  assert(html.includes('style.css?v=ferry-mobile-hud-v5-arcade-ui4"'));
-  assert.equal(ENGINE_PATH,"./ferry.wasm?v=ferry-pier-signal-v1");
-  assert.match(html,/<div id="play-hud" class="play-hud" hidden>[\s\S]*?<header[^>]*>[\s\S]*?id="camera-view"[\s\S]*?id="hint"[\s\S]*?<\/header>[\s\S]*?id="city-map"/);
+  assert.equal(version,"ferry-wide-lens-v1-navigation-v2");
+  assert(html.includes('style.css?v=ferry-navigation-v2"'));
+  assert.equal(ENGINE_PATH,"./ferry.wasm?v=ferry-wide-lens-v1");
+  assert.match(html,/<div id="play-hud" class="play-hud" hidden>[\s\S]*?<header[^>]*>[\s\S]*?id="objective"[\s\S]*?id="status"[\s\S]*?id="camera-view"[\s\S]*?id="city-map"[\s\S]*?id="hint"[\s\S]*?<\/header>/);
   assert.match(html,/id="action-icon"[\s\S]*?<span id="action-caption">Interact<\/span>/);
+  assert.match(html,/<button id="reverse"[^>]*>[\s\S]*?Reverse<\/button>/);
   assert(html.includes('lang="en"')&&html.includes('id="roam"'));
   const memory=new WebAssembly.Memory({initial:1});
   assert.equal(frameData(memory,4,30,"frame").length,30);
@@ -77,21 +78,29 @@ function shell({defer=false,missing="",cue=1}={}) {
     if(!nodes.has(id))nodes.set(id,Object.assign(new Target(),{id}));
     return nodes.get(id);
   };
-  const mapPaint=[];
+  const mapPaint=[], roadPaint=[];
   const chart=get("city-chart");
-  chart.width=224; chart.height=152;
+  chart.width=280; chart.height=182;
   chart.getContext=()=>({
     canvas:chart, clearRect(){mapPaint.push(["clear"]);},
-    fillRect(...args){mapPaint.push(["road",...args]);},
+    drawImage(){mapPaint.push(["roads-layer"]);},
     beginPath(){}, moveTo(...args){mapPaint.push(["route-start",...args]);},
-    lineTo(...args){mapPaint.push(["route-leg",...args]);}, stroke(){mapPaint.push(["stroke",this.strokeStyle]);}, arc(...args){mapPaint.push(["dot",this.fillStyle,...args]);}, fill(){},
+    lineTo(...args){mapPaint.push(["route-leg",...args]);},
+    setLineDash(pattern){this.dash=pattern;},
+    closePath(){mapPaint.push(["close-shape"]);},
+    stroke(){mapPaint.push(["stroke",this.strokeStyle,this.dash]);},
+    arc(...args){mapPaint.push(["dot",...args]);}, fill(){mapPaint.push(["fill",this.fillStyle]);},
   });
   const window=new Target(), document=Object.assign(new Target(),{getElementById:get});
   window.screen={orientation:new Target()};
+  document.createElement=()=>{
+    const canvas={width:0,height:0};
+    return {getContext:()=>({canvas,clearRect(){},fillRect(...args){roadPaint.push(args);}})};
+  };
   const memory=new WebAssembly.Memory({initial:1});
   const frames=[],ticks=[],draws=[],uploads=[],resets=[];
   let finishFetch,cancellations=0,wasmStarts=0,time=0;
-  let state=0,seconds=90,turn=0,selection=0,routeReads=0;
+  let state=0,seconds=90,turn=0,selection=0,routeReads=0, player=[0,0],target=[0,0],heading=0,driving=false, routeSelections=0, exitOnAction=false, hit=0, hitSequence=0;
   const fetchGate=new Promise(resolve=>{finishFetch=resolve;});
   const env={
     window,document,devicePixelRatio:1,performance:{now:()=>time},
@@ -105,14 +114,14 @@ function shell({defer=false,missing="",cue=1}={}) {
       async instantiate(_,imports){
         const bus=imports.ferry;
         const view=new Float32Array(memory.buffer,0,30);
-        const publish=()=>{view[17]=state;view[18]=seconds;view[20]=cue;view[29]=turn;bus.frame(0,30);};
+        const publish=()=>{view[16]=+driving;view[17]=state;view[18]=seconds;view[20]=cue;view[21]=hit;view[22]=hitSequence;view.set([...target,...player,heading,turn],24);bus.frame(0,30);};
         const exports={
           memory,_start(){wasmStarts++;},
           reset(mode){resets.push(mode);bus.world(240,18);bus.moving(360,18);publish();},
-          tick(...values){ticks.push(values);publish();},
+          tick(...values){ticks.push(values);if(exitOnAction&&(values[3]&2)){driving=false;cue=0;exitOnAction=false;}publish();},
           cancel_action(){cancellations++;},
           map_value(row,column){ return row===-1 ? 1 : [-1,2,3,4][column]; },
-          route_selection(){ return selection; },
+          route_selection(){ routeSelections++; return selection; },
           route_value(key,row,column){ routeReads++; return row===-1 ? 3 : [[-1,2],[-1,4],[2,4]][row][column]; },
         };
         if(missing)delete exports[missing];
@@ -122,9 +131,10 @@ function shell({defer=false,missing="",cue=1}={}) {
   };
   const started=boot(env,()=>({draw(...args){draws.push(args);},upload(...args){uploads.push(args);}}));
   return {
-    get,window,document,ticks,draws,uploads,resets,started,finishFetch,mapPaint,
-    advance(){ const frame=frames.shift(); assert(frame,"animation callback was scheduled");frame(time+=16); },
-    mission(next){({state,seconds,turn,cue,selection}={state,seconds,turn,cue,selection,...next});},
+    get,window,document,ticks,draws,uploads,resets,started,finishFetch,mapPaint,roadPaint,
+    advance(delta=16){ const frame=frames.shift(); assert(frame,"animation callback was scheduled");frame(time+=delta); },
+    mission(next){({state,seconds,turn,cue,selection,player,target,heading,driving,exitOnAction,hit,hitSequence}={state,seconds,turn,cue,selection,player,target,heading,driving,exitOnAction,hit,hitSequence,...next});},
+    get routeSelections(){return routeSelections;},
     get routeReads(){return routeReads;},
     get wasmStarts(){return wasmStarts;},
     get cancellations(){return cancellations;},
@@ -202,6 +212,7 @@ test("cancelled touch does not clear keyboard interact; action only fires on rel
   action.emit("click",{detail:0});
   app.advance(); assert.equal(app.ticks.at(-1)[3],2);
   const wheel=app.get("wheel"), power=app.get("power");
+  app.mission({driving:true}); app.advance();
   wheel.emit("pointerdown",{pointerId:3,clientX:0,clientY:0});
   wheel.emit("pointermove",{pointerId:3,clientX:30,clientY:-20});
   power.emit("pointerdown",{pointerId:4});
@@ -320,16 +331,17 @@ test("map paints canonical roads and active markers only when expanded and playi
   assert.equal(map.hidden,false);
   app.advance(); assert.deepEqual(app.mapPaint,[]);
   map.open=true; map.emit("toggle");
-  assert.deepEqual(app.mapPaint.map(entry=>entry.slice(0,entry[0]==="dot" ? 2 : 1)),
-    [["clear"],["road"],["dot","#ffc276"],["dot","#fff5e1"]]);
-  map.open=false; map.emit("toggle"); app.advance(); assert.equal(app.mapPaint.length,4);
+  assert.deepEqual(app.mapPaint.filter(entry=>entry[0]==="fill"),[["fill","#ffcd87"],["fill","#fff5e1"]]);
+  assert.equal(app.roadPaint.length,1);
+  const initial=app.mapPaint.length;
+  map.open=false; map.emit("toggle"); app.advance(); assert.equal(app.mapPaint.length,initial);
   app.mission({state:4}); app.advance();
   map.open=true; map.emit("toggle");
-  assert.deepEqual(app.mapPaint.slice(4).map(entry=>entry.slice(0,entry[0]==="dot" ? 2 : 1)),
-    [["clear"],["road"],["dot","#fff5e1"]]);
+  assert.deepEqual(app.mapPaint.slice(initial).filter(entry=>entry[0]==="fill"),[["fill","#fff5e1"]]);
+  const beforePause=app.mapPaint.length;
   app.get("pause").emit("click");
   assert.equal(map.hidden,true);
-  map.emit("toggle"); app.advance(); assert.equal(app.mapPaint.length,7);
+  map.emit("toggle"); app.advance(); assert.equal(app.mapPaint.length,beforePause);
 });
 
 test("touch action caption follows the same Wosy cue as its accessible name",async()=>{
@@ -353,24 +365,130 @@ test("touch action caption follows the same Wosy cue as its accessible name",asy
 test("the minimap paints Wosy turns and reads path points only on selection changes",async()=>{
   const app=shell(); await app.started;
   app.get("start").emit("click");
-  app.mission({state:1,selection:64});
+  app.mission({state:1,selection:65,player:[0,3],target:[-1,4]});
   app.advance();
   assert.equal(app.routeReads,0,"the closed map has no path work");
   const map=app.get("city-map");
   map.open=true; map.emit("toggle");
   assert.equal(app.routeReads,7);
-  const start=app.mapPaint.find(row=>row[0]==="route-start");
+  const starts=app.mapPaint.filter(row=>row[0]==="route-start");
   const legs=app.mapPaint.filter(row=>row[0]==="route-leg");
-  assert.equal(legs.length,2);
-  assert.equal(legs[0][1],start[1],"first segment shares the same map x");
-  assert.equal(legs[1][2],legs[0][2],"second segment changes direction, not a diagonal to the goal");
+  assert.equal(legs.length,3);
+  assert.equal(legs[0][2],starts[0][2],"future route follows the road turn");
+  assert.deepEqual(legs[1].slice(1),starts[2].slice(1),"dotted connector reaches the active segment");
+  assert.equal(legs[2][1],starts[2][1],"current leg stays on the engine's vertical segment");
+  assert(app.mapPaint.some(([kind,color,dash])=>kind==="stroke"&&color==="#ffcd87"&&dash.length===2));
+  assert(app.mapPaint.some(([kind,color,dash])=>kind==="stroke"&&color==="#ffcd87"&&dash.length===0));
+  const firstPaint=app.mapPaint.length, firstSelection=app.routeSelections;
   app.advance(); app.advance();
-  assert.equal(app.routeReads,7,"unchanged legs render from cached points");
-  app.mission({state:1,selection:65});
-  app.advance();
-  assert.equal(app.routeReads,14);
+  assert.equal(app.routeSelections,firstSelection,"does not read the route key each RAF");
+  app.advance(72);
+  assert.equal(app.mapPaint.length,firstPaint,"unchanged map is not repainted at a poll");
+  assert.equal(app.routeReads,7,"unchanged legs keep cached route points");
+  assert.equal(app.roadPaint.length,1);
+  app.mission({selection:66,driving:true,heading:Math.PI/2});
   app.mapPaint.length=0;
-  app.mission({state:1,selection:0});
+  app.advance(72);
+  assert.equal(app.routeReads,14,"same-phase route key changes are detected");
+  assert.equal(app.roadPaint.length,1,"pose/heading changes reuse a static projection");
+  assert.equal(app.mapPaint.filter(row=>row[0]==="close-shape").length,1,"car gets a heading glyph");
+  const direction=app.mapPaint.filter(row=>row[0]==="route-start").at(-1);
+  const sides=app.mapPaint.filter(row=>row[0]==="route-leg").slice(-3);
+  assert(sides.every(([,x])=>direction[1]>x),"eastbound heading points right");
+  app.mapPaint.length=0;
+  app.mission({selection:0,driving:false});
+  app.advance(72);
+  const guide=app.mapPaint.filter(([kind,color])=>kind==="stroke"&&color==="#ffcd87");
+  assert.equal(guide.length,1);
+  assert.deepEqual(guide[0][2],[3,5],"without a selected route only a dotted cue is displayed");
+  assert(!app.mapPaint.some(row=>row[0]==="close-shape"),"frame does not expose heading on foot");
+  app.mapPaint.length=0;
+  app.mission({state:5});
   app.advance();
-  assert(!app.mapPaint.some(row=>row[0]==="route-start"),"when no route exists do not draw a shortcut");
+  assert.deepEqual(app.mapPaint.filter(row=>row[0]==="fill"),[["fill","#fff5e1"]],"phase transition paints immediately");
+});
+
+
+test("mobile reverse steers independently, can brake, and clears on cancellation",async()=>{
+  const app=shell(); await app.started;
+  app.get("start").emit("click");
+  app.mission({driving:true});
+  app.advance();
+  const reverse=app.get("reverse"), power=app.get("power"), brake=app.get("brake"), wheel=app.get("wheel");
+  wheel.emit("pointerdown",{pointerId:1,clientX:0,clientY:0});
+  wheel.emit("pointermove",{pointerId:1,clientX:30,clientY:0});
+  power.emit("pointerdown",{pointerId:2});
+  reverse.emit("pointerdown",{pointerId:3});
+  brake.emit("pointerdown",{pointerId:4});
+  app.advance();
+  assert(app.ticks.at(-1)[1]>0);
+  assert.deepEqual(app.ticks.at(-1).slice(2,4),[-1,1]);
+  assert.equal(app.get("brake-caption").textContent,"Brake");
+  reverse.emit("pointercancel",{pointerId:3});
+  app.advance();
+  assert.deepEqual(app.ticks.at(-1).slice(2,4),[1,1]);
+  app.window.screen.orientation.emit("change");
+  app.advance();
+  assert.deepEqual(app.ticks.at(-1).slice(1,4),[0,0,0]);
+  assert.equal(reverse.dataset.held,"false");
+});
+
+
+test("leaving a car clears all pedals before the exit tick without losing stick or action",async()=>{
+  const app=shell({cue:2}); await app.started;
+  app.get("start").emit("click");
+  app.mission({driving:true,exitOnAction:true});
+  app.advance();
+  const reverse=app.get("reverse"), power=app.get("power"), brake=app.get("brake"), wheel=app.get("wheel"), action=app.get("action");
+  reverse.emit("pointerdown",{pointerId:1});
+  power.emit("pointerdown",{pointerId:2});
+  wheel.emit("pointerdown",{pointerId:3,clientX:0,clientY:0});
+  wheel.emit("pointermove",{pointerId:3,clientX:30,clientY:0});
+  action.emit("pointerdown",{pointerId:4});
+  brake.emit("pointerdown",{pointerId:5});
+  app.window.emit("keydown",{code:"Space"});
+  app.advance();
+  assert.deepEqual(app.ticks.at(-1).slice(2,4),[-1,1],"all pedals are initially active");
+  action.emit("pointerup",{pointerId:4});
+  app.advance();
+  assert(app.ticks.at(-1)[1]>0,"exit preserves intentional steering on the same tick");
+  assert(app.ticks.at(-1)[2]===0,"exit tick has no drive from pedals");
+  assert.equal(app.ticks.at(-1)[3],2,"exit tick passes action without Brake");
+  assert(!power.hasPointerCapture(2)&&!reverse.hasPointerCapture(1)&&!brake.hasPointerCapture(5));
+  assert.equal(reverse.dataset.held,"false");
+  assert.equal(power.dataset.held,"false");
+  assert.equal(brake.dataset.held,"false");
+  assert.equal(app.get("brake-caption").textContent,"Sprint");
+  assert(wheel.hasPointerCapture(3));
+  app.advance();
+  assert(app.ticks.at(-1)[1]>0);
+  assert(app.ticks.at(-1)[2]===0,"walking does not inherit either pedal");
+  assert.equal(app.ticks.at(-1)[3],0,"walking does not inherit Brake or repeat exit");
+  reverse.emit("pointerdown",{pointerId:6});
+  assert(!reverse.hasPointerCapture(6),"a stale event cannot start a vehicle hold on foot");
+});
+
+
+test("repeated contacts are silent and Pier 8 boarding cues remain actionable",async()=>{
+  const app=shell({cue:0}); await app.started;
+  app.get("start").emit("click");
+  app.mission({state:1,hit:5,hitSequence:1});
+  app.advance();
+  assert.equal(app.get("hint").hidden,true);
+  assert.equal(app.get("hint").textContent,"");
+  assert.equal(app.get("announce").textContent,"Reach Pier 8");
+  app.mission({hit:5,hitSequence:2,cue:4});
+  app.advance();
+  assert.equal(app.get("hint").hidden,false);
+  assert.equal(app.get("hint").textContent,"E · Board ferry");
+  assert.equal(app.get("announce").textContent,"Board ferry");
+  assert.equal(app.get("action").attributes.get("aria-label"),"Board ferry");
+  app.mission({hit:4,hitSequence:3});
+  app.advance();
+  assert.equal(app.get("hint").textContent,"E · Board ferry");
+  assert.equal(app.get("announce").textContent,"Board ferry");
+  app.mission({state:2,cue:0});
+  app.advance();
+  assert.equal(app.get("announce").textContent,"Tape delivered");
+  assert.equal(app.get("summary").textContent,"Tape delivered. You made it ashore.");
 });

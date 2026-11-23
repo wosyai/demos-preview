@@ -1,11 +1,10 @@
-export const ENGINE_PATH = "./ferry.wasm?v=ferry-pier-signal-v1";
+export const ENGINE_PATH = "./ferry.wasm?v=ferry-wide-lens-v1";
 const INPUTS = new Map([
   ["KeyA","left"],["ArrowLeft","left"],["KeyD","right"],["ArrowRight","right"],
   ["KeyW","up"],["ArrowUp","up"],["KeyS","down"],["ArrowDown","down"],["Space","brake"],
 ]);
 const ACTIONS = ["","Enter car","Exit car","Collect tape","Board ferry","Leave ferry","Answer phone","Park & walk","Mark waterfront","Mark avenue"];
 const ACTION_ICONS = ["","enter","exit","tape","board","exit","phone","exit","waterfront","avenue"];
-const HIT = ["","Mailbox hit","Tree hit","Pedestrian hit","Vehicle hit","Wall hit"];
 const OBJECTIVES = ["Collect the tape","Reach Pier 8","Tape delivered","Missed the ferry","Free roam","Crossing the canal","Leave the ferry","Walk ashore","Answer the phone"];
 
 export function axes(x,y,radius) {
@@ -28,7 +27,7 @@ export function inputState() {
       const vertical=held("up")||held("down");
       const pedal=Array.from(buttons.values());
       const steer=horizontal ? Number(held("right"))-Number(held("left")) : (this.stick?.axis[0]??0);
-      const drive=vertical ? Number(held("up"))-Number(held("down")) : pedal.includes("power") ? 1 : (this.stick?.axis[1]??0);
+      const drive=vertical ? Number(held("up"))-Number(held("down")) : pedal.includes("reverse") ? -1 : pedal.includes("power") ? 1 : (this.stick?.axis[1]??0);
       const flags=Number(held("brake")||pedal.includes("brake")) | (this.action ? 2 : 0) | (this.camera ? 4 : 0);
       this.action=false;
       this.camera=false;
@@ -55,39 +54,82 @@ function routeMapBounds(roads) {
   }
   return [minX,maxX,minZ,maxZ];
 }
-function drawRouteMap(ctx,roads,bounds,frame,route) {
+const MAP_INTERVAL=72, MAP_DASH=[3,5], MAP_SOLID=[];
+
+function drawRouteMap(ctx,base,projection,roads,bounds,frame,route,step) {
   if(!bounds||!roads.length) return;
   const {width,height}=ctx.canvas, active=[0,1,8].includes(frame[17]);
-  let minX=Math.min(bounds[0],frame[26]),maxX=Math.max(bounds[1],frame[26]);
-  let minZ=Math.min(bounds[2],frame[27]),maxZ=Math.max(bounds[3],frame[27]);
-  if(active) {
-    minX=Math.min(minX,frame[24]); maxX=Math.max(maxX,frame[24]);
-    minZ=Math.min(minZ,frame[25]); maxZ=Math.max(maxZ,frame[25]);
+  const px=frame[26],pz=frame[27],tx=frame[24],tz=frame[25];
+  const minX=Math.min(bounds[0],px,active?tx:Infinity), maxX=Math.max(bounds[1],px,active?tx:-Infinity);
+  const minZ=Math.min(bounds[2],pz,active?tz:Infinity), maxZ=Math.max(bounds[3],pz,active?tz:-Infinity);
+  const scale=Math.min((width-30)/(maxX-minX),(height-30)/(maxZ-minZ));
+  const dx0=(width-(maxX-minX)*scale)/2-minX*scale;
+  const dz0=(height-(maxZ-minZ)*scale)/2+maxZ*scale;
+  const x=(v)=>dx0+v*scale, z=(v)=>dz0-v*scale;
+  function paintRoads(layer) {
+    layer.clearRect(0,0,width,height);
+    layer.fillStyle="#668680";
+    for(const [rx,rz,w,d] of roads) layer.fillRect(x(rx),z(rz+d),w*scale,d*scale);
   }
-  const scale=Math.min((width-16)/(maxX-minX),(height-16)/(maxZ-minZ));
-  const x=(v)=>(width-(maxX-minX)*scale)/2+(v-minX)*scale;
-  const z=(v)=>(height-(maxZ-minZ)*scale)/2+(maxZ-v)*scale;
-  ctx.clearRect(0,0,width,height);
-  ctx.fillStyle="#49716d";
-  for(const [rx,rz,w,d] of roads) ctx.fillRect(x(rx),z(rz+d),w*scale,d*scale);
-  if(route.length>1) {
-    ctx.beginPath();
-    ctx.moveTo(x(route[0][0]),z(route[0][1]));
-    for(let i=1;i<route.length;i++) ctx.lineTo(x(route[i][0]),z(route[i][1]));
+  if(base) {
+    if(projection.scale!==scale||projection.x!==dx0||projection.z!==dz0||base.canvas.width!==width||base.canvas.height!==height) {
+      base.canvas.width=width; base.canvas.height=height;
+      projection.scale=scale; projection.x=dx0; projection.z=dz0;
+      paintRoads(base);
+    }
+    ctx.clearRect(0,0,width,height);
+    ctx.drawImage(base.canvas,0,0);
+  } else paintRoads(ctx);
+  function stroke(color,weight,dash) {
     ctx.lineJoin="round";
     ctx.lineCap="round";
+    ctx.setLineDash(dash);
     ctx.strokeStyle="#101924";
-    ctx.lineWidth=4.5;
+    ctx.lineWidth=weight+2.5;
     ctx.stroke();
-    ctx.strokeStyle="#ffc276";
-    ctx.lineWidth=2.25;
+    ctx.strokeStyle=color;
+    ctx.lineWidth=weight;
     ctx.stroke();
+    ctx.setLineDash(MAP_SOLID);
   }
-  const dot=(px,pz,r,color)=>{
-    ctx.fillStyle=color; ctx.beginPath(); ctx.arc(x(px),z(pz),r,0,Math.PI*2); ctx.fill();
-  };
-  if(active) dot(frame[24],frame[25],4,"#ffc276");
-  dot(frame[26],frame[27],3,"#fff5e1");
+  function segment(ax,az,bx,bz,weight,dash) {
+    ctx.beginPath();
+    ctx.moveTo(x(ax),z(az));
+    ctx.lineTo(x(bx),z(bz));
+    stroke("#ffcd87",weight,dash);
+  }
+  if(active) {
+    if(step>=0&&step<route.length-1) {
+      ctx.beginPath();
+      ctx.moveTo(x(tx),z(tz));
+      for(let i=step+1;i<route.length;i++) ctx.lineTo(x(route[i][0]),z(route[i][1]));
+      stroke("#c09465",2,MAP_SOLID);
+    }
+    if(step>0) {
+      const [ax,az]=route[step-1], dx=tx-ax, dz=tz-az;
+      const size=dx*dx+dz*dz;
+      const u=size?Math.max(0,Math.min(1,((px-ax)*dx+(pz-az)*dz)/size)):0;
+      const jx=ax+dx*u, jz=az+dz*u;
+      if(Math.hypot(px-jx,pz-jz)*scale>2) segment(px,pz,jx,jz,2,MAP_DASH);
+      segment(jx,jz,tx,tz,3,MAP_SOLID);
+    } else if(Math.hypot(px-tx,pz-tz)*scale>2) segment(px,pz,tx,tz,2,MAP_DASH);
+    ctx.beginPath();
+    ctx.arc(x(tx),z(tz),5,0,Math.PI*2);
+    ctx.fillStyle="#ffcd87"; ctx.fill();
+    ctx.strokeStyle="#101924"; ctx.lineWidth=1.5; ctx.stroke();
+  }
+  const sx0=x(px), sz0=z(pz), yaw=frame[28];
+  ctx.beginPath();
+  if(frame[16]===1&&Number.isFinite(yaw)) {
+    const sx=Math.sin(yaw), cz=Math.cos(yaw);
+    ctx.moveTo(sx0+sx*8,sz0-cz*8);
+    ctx.lineTo(sx0-sx*5-cz*5,sz0+cz*5-sx*5);
+    ctx.lineTo(sx0-sx*2,sz0+cz*2);
+    ctx.lineTo(sx0-sx*5+cz*5,sz0+cz*5+sx*5);
+    ctx.closePath();
+  } else ctx.arc(sx0,sz0,3.6,0,Math.PI*2);
+  ctx.fillStyle="#fff5e1"; ctx.fill();
+  ctx.strokeStyle="#101924"; ctx.lineWidth=1.5; ctx.stroke();
 }
 
 const meshLimits = {world:9*4096*6,moving:24*256*6};
@@ -293,15 +335,17 @@ export async function boot(env=globalThis,createGraphics=graphics) {
   const {document,window,WebAssembly,performance}=env;
   const get=(id)=>document.getElementById(id);
   const canvas=get("view"), wheel=get("wheel"), thumb=get("thumb"), pause=get("pause"), cameraView=get("camera-view");
-  const panel=get("panel"), start=get("start"), roam=get("roam"), power=get("power"), brake=get("brake"), action=get("action");
+  const panel=get("panel"), start=get("start"), roam=get("roam"), power=get("power"), reverse=get("reverse"), brake=get("brake"), action=get("action");
   const objective=get("objective"), stats=get("status"), clock=get("clock"), hint=get("hint"), summary=get("summary"), announce=get("announce");
-  const actionCaption=get("action-caption"), playHud=get("play-hud");
+  const actionCaption=get("action-caption"), brakeCaption=get("brake-caption"), playHud=get("play-hud");
   const touch=get("touch"), trip=get("trip"), departure=get("departure"), brakeIcon=get("brake-icon"), actionIcon=get("action-icon");
   const input=inputState(), meshes=new Map();
   const map=get("city-map"), chart=get("city-chart").getContext?.("2d");
-  let roads=[], roadBounds, routeKey=-1, route=[];
-  let engine, renderer, frame, aspect=0, menuText="Loading the waterfront…", failed=false, noticeUntil=0, notice="", last=0, playing=false, lost=false, ready=false, paused=false, mode=0, event=0, previousCue=-1, previousState=-1;
-  const heldButtons=[power,brake,action];
+  const roadLayer=chart&&document.createElement?.("canvas").getContext("2d");
+  const projection={}, painted={};
+  let roads=[], roadBounds, routeKey=-1, route=[], routeStep=-1, nextMap=0, mapPhase=-1;
+  let engine, renderer, frame, aspect=0, menuText="Loading the waterfront…", failed=false, last=0, playing=false, lost=false, ready=false, paused=false, mode=0, previousCue=-1, previousState=-1;
+  const heldButtons=[power,reverse,brake,action];
   const renderThumb=(x,y)=>{
     thumb.style.setProperty("--x",`${x}px`);
     thumb.style.setProperty("--y",`${y}px`);
@@ -338,10 +382,13 @@ export async function boot(env=globalThis,createGraphics=graphics) {
     map.hidden=pause.disabled||!chart;
     label(summary,lost&&!failed ? "Graphics interrupted. Waiting for the browser to restore the scene." : menuText);
   }
-  function paintMap() {
+  function paintMap(force=false) {
     if(!chart||!frame||!map.open||map.hidden) return;
-    const selected=engine.route_selection();
-    if(selected!==routeKey) {
+    const phase=frame[17], now=performance.now();
+    if(!force&&phase===mapPhase&&now<nextMap) return;
+    mapPhase=phase; nextMap=now+MAP_INTERVAL;
+    const selected=engine.route_selection(), changed=selected!==routeKey;
+    if(changed) {
       const next=[];
       if(selected!==0) {
         const length=engine.route_value(selected,-1,0);
@@ -354,9 +401,31 @@ export async function boot(env=globalThis,createGraphics=graphics) {
       }
       route=next; routeKey=selected;
     }
-    drawRouteMap(chart,roads,roadBounds,frame,route);
+    const driving=frame[16]===1, heading=driving?frame[28]:0;
+    const active=phase===0||phase===1||phase===8, tx=active?frame[24]:0, tz=active?frame[25]:0;
+    const px=frame[26], pz=frame[27];
+    const targetChanged=painted.tx!==tx||painted.tz!==tz;
+    if(changed||targetChanged) routeStep=route.findIndex(([x,z])=>Math.hypot(x-tx,z-tz)<.05);
+    if(!force&&!changed&&painted.phase===phase&&!targetChanged&&painted.px===px&&painted.pz===pz&&painted.driving===driving&&painted.heading===heading) return;
+    painted.phase=phase; painted.tx=tx; painted.tz=tz; painted.px=px; painted.pz=pz;
+    painted.driving=driving; painted.heading=heading;
+    drawRouteMap(chart,roadLayer,projection,roads,roadBounds,frame,route,routeStep);
   }
-  map.addEventListener("toggle",()=>{ if(ready) paintMap(); });
+  map.addEventListener("toggle",()=>{ if(ready) paintMap(true); });
+  function releasePedals(includeBrake=false) {
+    for(const [id,name] of input.buttons) {
+      if(name!=="power"&&name!=="reverse"&&!(includeBrake&&name==="brake")) continue;
+      const button=name==="power"?power:name==="reverse"?reverse:brake;
+      input.buttons.delete(id);
+      if(button.hasPointerCapture(id)) button.releasePointerCapture(id);
+      button.dataset.held="false";
+    }
+    if(includeBrake) input.keys.delete("Space");
+  }
+  function vehiclePedalsAvailable() {
+    const state=frame?.[17];
+    return frame?.[16]===1&&state!==5&&state!==6&&state!==7;
+  }
   function syncAspect(next) {
     aspect=next;
     engine.tick(0,0,0,0,aspect);
@@ -366,7 +435,7 @@ export async function boot(env=globalThis,createGraphics=graphics) {
     if(!frame || !renderer) return;
     renderer.draw(frame);
     paintMap();
-    const foot=frame[16]===0,state=frame[17],cue=frame[20],hit=frame[21],target=state===0||state===1||state===8;
+    const foot=frame[16]===0,state=frame[17],cue=frame[20],target=state===0||state===1||state===8;
     label(objective,OBJECTIVES[state]||"Find the ferry");
     label(stats,target ? `${Math.round(frame[23])} m` : "");
     trip.dataset.route=String(target);
@@ -376,30 +445,25 @@ export async function boot(env=globalThis,createGraphics=graphics) {
     touch.dataset.crossing=String(state===5||state===7);
     touch.dataset.docked=String(state===6);
     brake.parentElement.dataset.foot=String(foot);
+    const brakeMode=foot?"Sprint":"Brake";
+    const brakeChanged=brake.dataset.mode!==undefined&&brake.dataset.mode!==brakeMode;
+    if(brakeChanged||(previousState!==state&&(state===5||state===6||state===7))) releasePedals(true);
+    else if(input.buttons.size&&!vehiclePedalsAvailable()) releasePedals();
     if(previousState!==state||previousCue!==cue) {
       action.hidden=!ACTIONS[cue];
       action.setAttribute("aria-label",ACTIONS[cue]||"Interact");
       label(actionCaption,ACTIONS[cue]||"Interact");
       if(ACTION_ICONS[cue]) actionIcon.setAttribute("href",`#icon-${ACTION_ICONS[cue]}`);
     }
-    const brakeMode=foot?"Sprint":"Brake";
     if(brake.dataset.mode!==brakeMode) {
       brake.dataset.mode=brakeMode;
       brake.setAttribute("aria-label",brakeMode);
+      label(brakeCaption,brakeMode);
       brakeIcon.setAttribute("href",foot?"#icon-sprint":"#icon-brake");
     }
-    if(frame[22]!==event) {
-      notice=HIT[hit]||""; noticeUntil=performance.now()+1800;
-    }
-    const message=performance.now()<noticeUntil ? notice : "";
-    label(hint,message|| (ACTIONS[cue] ? `E · ${ACTIONS[cue]}` : ""));
-    hint.dataset.notice=String(Boolean(message));
+    label(hint,ACTIONS[cue] ? `E · ${ACTIONS[cue]}` : "");
     hint.hidden=!playing||!hint.textContent;
-    if(frame[22]!==event) {
-      event=frame[22]; if(HIT[hit]) label(announce,HIT[hit]);
-    } else if(previousState!==state||previousCue!==cue) {
-      label(announce,ACTIONS[cue]||OBJECTIVES[state]||"");
-    }
+    if(previousState!==state||previousCue!==cue) label(announce,ACTIONS[cue]||OBJECTIVES[state]||"");
     previousCue=cue; previousState=state;
     if(playing && (state===2||state===3)) overlay(state===2?"Tape delivered. You made it ashore.":"The ferry left without the tape. Try a quicker route.","Play again");
   }
@@ -408,12 +472,13 @@ export async function boot(env=globalThis,createGraphics=graphics) {
     try {
       clear();
       if(!paused||nextMode!==mode) {
-        event=0; previousCue=-1; previousState=-1; noticeUntil=0;
+        previousCue=-1; previousState=-1;
         mode=nextMode; engine.reset(mode); aspect=0;
       }
       paused=false; playing=true; last=0;
       panel.hidden=true; panel.dataset.intro="false"; get("touch").hidden=false; updateAvailability();
       pause.focus({preventScroll:true});
+      paintMap(true);
     } catch(error) { fail(error); }
   }
   function suspend() {
@@ -445,7 +510,9 @@ export async function boot(env=globalThis,createGraphics=graphics) {
   });
   for(const node of heldButtons) {
     node.addEventListener("pointerdown",(e)=>{
-      if(!playing||e.button!==0||(node===action&&!ACTIONS[frame?.[20]])) return;
+      if(!playing||e.button!==0||(node===action&&!ACTIONS[frame?.[20]])||
+        ((node===power||node===reverse)&&!vehiclePedalsAvailable())||
+        (node===brake&&(frame?.[17]===5||frame?.[17]===6||frame?.[17]===7))) return;
       e.preventDefault(); node.setPointerCapture(e.pointerId);
       input.buttons.set(e.pointerId,node.id);
       node.dataset.held="true";
@@ -466,7 +533,7 @@ export async function boot(env=globalThis,createGraphics=graphics) {
       return;
     }
     if(!playing||e.ctrlKey||e.metaKey||e.altKey) return;
-    if(e.code==="Space"&&/^(BUTTON|A)$/.test(e.target?.tagName)&&e.target!==pause) return;
+    if(e.code==="Space"&&/^(BUTTON|A|SUMMARY)$/.test(e.target?.tagName)&&e.target!==pause) return;
     if(e.code!=="KeyE"&&e.code!=="KeyC"&&!INPUTS.has(e.code)) return;
     e.preventDefault();
     if(e.repeat) return;
@@ -541,6 +608,7 @@ export async function boot(env=globalThis,createGraphics=graphics) {
           const next=fit(canvas,env.devicePixelRatio);
           if(playing) {
             aspect=next;
+            if(input.action&&frame?.[16]===1&&(frame[20]===2||frame[20]===7)) releasePedals(true);
             engine.tick(last ? Math.min((now-last)/1000,.05) : 0,...input.sample(),aspect);
             last=now;
             show();

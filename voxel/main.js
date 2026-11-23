@@ -57,6 +57,7 @@ let engine, memory, gpu, playing = false, loaded = false, failed = false, contex
 let pointerLook = null, stick = null, axes = 0, toastTimer = 0, previous = 0, raf = 0;
 let displayedMaterial, displayedFlight, displayedGrounded;
 let aimX = 0, aimY = 0, terrainVersion = 0;
+const recentNotices = new Map();
 let beaconState = 0, shownTide = -1, shownWood = -1, shownRelay = -2, shownParts = -2;
 
 const vertex = `#version 300 es
@@ -425,6 +426,9 @@ function fail(message, detail) {
 }
 
 function toast(message) {
+  const now = performance.now();
+  if (now - (recentNotices.get(message) ?? -Infinity) < 6000) return;
+  recentNotices.set(message, now);
   notice.textContent = message;
   clearTimeout(toastTimer);
   toastTimer = setTimeout(() => { notice.textContent = ""; }, 2800);
@@ -794,10 +798,14 @@ function sendEdit(mode, state) {
   } catch (e) { fail("The engine could not update the island.", e); }
 }
 
+function showLookFallback() {
+  if (playing && !document.hidden && document.pointerLockElement !== canvas) toast("Drag the scene to look around.");
+}
+
 function requestLook() {
   if (coarse.matches || typeof canvas.requestPointerLock !== "function") return;
-  try { canvas.requestPointerLock()?.catch(() => toast("Drag the scene to look around.")); }
-  catch { toast("Drag the scene to look around."); }
+  try { canvas.requestPointerLock()?.catch(showLookFallback); }
+  catch { showLookFallback(); }
 }
 
 function positionAim(x, y) {
@@ -849,7 +857,7 @@ function readSeed(value, trim) {
 function changeSeed(seed) {
   if (!engine || !loaded || contextLost) return;
   if (seed === null) { toast("Enter a valid whole number for the seed."); return; }
-  try { generate(seed); toast(`New island · seed ${seed}`); }
+  try { generate(seed); }
   catch (e) { fail("The engine could not generate this island.", e); }
 }
 
@@ -957,7 +965,7 @@ document.addEventListener("pointerlockchange", () => {
   if (fullscreenButton) clearInputs();
   else stopPlaying();
 });
-document.addEventListener("pointerlockerror", () => toast("Drag the scene to look around."));
+document.addEventListener("pointerlockerror", showLookFallback);
 document.addEventListener("mousemove", (e) => {
   if (playing && document.pointerLockElement === canvas) look(e.movementX, e.movementY);
 });
@@ -1081,7 +1089,6 @@ document.addEventListener("wheel", (e) => {
 canvas.addEventListener("webglcontextlost", (e) => {
   e.preventDefault();
   loseGraphics();
-  if (!failed) toast("The browser paused the graphics.");
 });
 canvas.addEventListener("webglcontextrestored", () => {
   if (failed) return;

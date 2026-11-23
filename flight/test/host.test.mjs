@@ -389,7 +389,7 @@ test("the Flight minimal HUD updates both host assets and retains the same Wasm 
   await sim.ready;
   const html = await readFile(new URL("../index.html", import.meta.url), "utf8");
   assert.match(html, /href="\.\/style\.css\?v=paris-quay-quarter-flight-v11-hud1"/);
-  assert.match(html, /src="\.\/host\.mjs\?v=paris-quay-quarter-flight-v11-space1-hud1"/);
+  assert.match(html, /src="\.\/host\.mjs\?v=paris-quay-quarter-flight-v11-space1-hud2"/);
   assert.deepEqual(sim.called.requests.map((url) => [url.pathname.split("/").at(-1), url.search]),
     [["flight.wasm", "?v=paris-quay-quarter-flight-v11"]]);
 });
@@ -599,7 +599,7 @@ test("rough touchdown announces survivable rollout and keeps cargo unloaded", as
   assert.match(sim.nodes.get("callout").textContent, /Steer gently and brake/);
 });
 
-test("ring feedback uses the engine flash, not a host timer or a count delta", async () => {
+test("bonus rings never interrupt the active instruction or live region", async () => {
   const sim = mock({inputVersion: 1});
   await sim.ready;
   sim.courses[0].events("click");
@@ -609,8 +609,8 @@ test("ring feedback uses the engine flash, not a host timer or a count delta", a
   assert.doesNotMatch(sim.nodes.get("flight-cue").textContent, /Ring cleared/);
   sim.rings(1, 1, 4, 1);
   sim.frame(220);
-  assert.match(sim.nodes.get("callout").textContent, /Ring cleared · \+80/);
-  assert.match(sim.nodes.get("flight-cue").textContent, /Ring cleared/);
+  assert.doesNotMatch(sim.nodes.get("callout").textContent, /Ring cleared|\+80/);
+  assert.doesNotMatch(sim.nodes.get("flight-cue").textContent, /Ring cleared|\+80/);
   sim.rings(1, 1, 3, 0);
   sim.frame(330);
   assert.doesNotMatch(sim.nodes.get("callout").textContent, /Ring cleared/);

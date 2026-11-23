@@ -221,6 +221,36 @@ assert(switchedView[23].view[15]-closeView[23].view[15]>1,"wide camera noticeabl
 assert(switchedView[47].view[15]-closeView[47].view[15]>1,"toggle persists after the one-shot flag");
 assert(switchedView[119].view.every((v,i)=>Math.abs(v-closeView[119].view[i])<.0001),
   "second independent toggle returns to the original close projection");
+function cameraEye() {
+  const v=frame;
+  const right=v[0]**2+v[8]**2, up=v[1]**2+v[5]**2+v[9]**2;
+  return [0,4,8].map(i=>-(v[12]*v[i]/right+v[13]*v[i+1]/up+v[15]*v[i+3]));
+}
+const cameraLens=()=>Math.hypot(frame[1],frame[5],frame[9]);
+function framedWallFoot(wide) {
+  engine.reset(0);
+  for(const p of [[3.8,-4.6],[3.8,5.0],[9.5,5.0]]) walkTo(...p);
+  for(let i=0;i<24;i++) tick(0,0,0,step,.53);
+  const before=cameraLens(), position=spot(), views=[];
+  for(let i=0;i<44;i++) {
+    tick(i<18?.22:0,0,wide&&i===0?4:0,step,.53);
+    const eye=cameraEye();
+    assert(eye[2]>3.65 && eye[2]<frame[27]-.55,"walking camera remains in front of the actual north facade");
+    assert(eye[1]>2.2 && eye[1]<2.6,"walking camera uses the constrained pose");
+    views.push({state:frame.slice(16),lens:cameraLens(), eye, route:guidePoints()});
+  }
+  assert(frame[26]>position[0]+.06,"the walking comparison includes real normal-input motion");
+  return {before,views};
+}
+const tightFoot=framedWallFoot(false), wideFoot=framedWallFoot(true);
+assert(wideFoot.views[0].lens>wideFoot.before*.90,"one toggle does not snap the lens");
+assert(wideFoot.views[43].lens < tightFoot.views[43].lens*.79,"the wall-constrained walking camera still visibly switches lens");
+for(let i=0;i<44;i++) {
+  assert.deepEqual(wideFoot.views[i].state,tightFoot.views[i].state,"foot map, mission and direction cue are not camera-dependent");
+  assert.deepEqual(wideFoot.views[i].route,tightFoot.views[i].route);
+  assert(wideFoot.views[i].eye.every((v,j)=>Math.abs(v-tightFoot.views[i].eye[j])<.001),"lens distinction does not require putting the eye inside the wall");
+}
+
 engine.reset(1);
 assert.equal(frame[17],4,"annex is reachable in free roam");
 for(const p of [[3.8,-4.6],[3.8,28.9],[-82,28.9],[-118,28.9]]) walkTo(...p);
@@ -657,6 +687,70 @@ assert.equal(frame[21],4,"oblique approach collides without overlapping");
 const oblique=spot();
 for(let i=0;i<65;i++)lane(0,-.7);
 assert(Math.hypot(frame[26]-oblique[0],frame[27]-oblique[1])>1.7,"oblique contact can be escaped");
+
+function solidClear(rect) {
+  const [x,z]=spot(), [left,right,near,far]=rect;
+  const sn=Math.sin(frame[28]),cs=Math.cos(frame[28]);
+  for(const axle of [1,0,-.95]) {
+    const px=x+axle*sn,pz=z+axle*cs;
+    assert(Math.hypot(px-clamp(px,left,right),pz-clamp(pz,near,far))>=.88,
+      "vehicle never crosses a tested solid facade or corner");
+  }
+}
+
+for(const [side,target,wall] of [
+  [-1,[-8,0.9],[-11.1,-6,-8,4.6]],
+  [1,[9,0.9],[7.8,23.8,-10,3.5]],
+]) {
+  engine.reset(1); mount();
+  assert(driver(target,5,260).includes(5),"normal steering reaches the side facade");
+  solidClear(wall);
+  const atWall=spot(), firstEvent=frame[22];
+  for(let i=0;i<36;i++) {
+    tick(side*.23,.70);
+    solidClear(wall);
+  }
+  assert(frame[27]>atWall[1]+.245 && frame[19]>.25,
+    "a sustained glancing contact keeps forward travel and does not bog down");
+  assert(frame[22]-firstEvent<3,"continuous sideways contact is not reported every frame");
+  const along=spot(), lastYaw=frame[28];
+  for(let i=0;i<68;i++) {
+    tick(-side*.3,-.86);
+    solidClear(wall);
+  }
+  assert(side*(along[0]-frame[26])>1.0,"ordinary reverse separates from either wall");
+  assert(Math.abs(normalAngle(frame[28]-lastYaw))>.06,"can steer while reversing from contact");
+}
+engine.reset(1); mount();
+assert(driver([9,4.4],5,350).includes(5),"normal controls reach the east building corner");
+const cornerRect=[7.8,23.8,-10,3.5], corner=spot();
+assert(Math.hypot(corner[0]-7.8,corner[1]-3.5)<3.1,"the contact is at the real building corner");
+for(let i=0;i<83;i++) {
+  tick(-.38,-.86);
+  solidClear(cornerRect);
+}
+assert(Math.hypot(frame[26]-corner[0],frame[27]-corner[1])>1.7,"ordinary reverse can exit the corner without reset");
+
+function movingWallCar(wide) {
+  engine.reset(1); mount();
+  assert(driver([9,4.4],5,350).includes(5),"camera comparison starts at the real building corner");
+  const atContact=spot(), before=cameraLens(), views=[];
+  for(let i=0;i<83;i++) {
+    tick(-.38,-.86,wide&&i===0?4:0,step,.53);
+    solidClear(cornerRect);
+    const [x,,z]=cameraEye();
+    assert(x<7.8 || x>23.8 || z< -10 || z>3.5,"car camera eye stays out of the tested building");
+    views.push({lens:cameraLens(), state:frame.slice(16), route:guidePoints()});
+  }
+  assert(Math.hypot(frame[26]-atContact[0],frame[27]-atContact[1])>1.7,"the car comparison includes an ordinary reverse turn");
+  return {before,views};
+}
+const tightCar=movingWallCar(false), wideCar=movingWallCar(true);
+assert(wideCar.views[82].lens < tightCar.views[82].lens*.79,"a camera tap visibly changes the moving car view");
+for(let i=0;i<83;i++) {
+  assert.deepEqual(wideCar.views[i].state,tightCar.views[i].state,"camera tap never changes car collision, speed or direction");
+  assert.deepEqual(wideCar.views[i].route,tightCar.views[i].route);
+}
 
 engine.reset(1); mount();
 const mailboxEvents=driver([3.9,18],1);

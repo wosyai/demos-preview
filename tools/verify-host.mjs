@@ -82,6 +82,8 @@ async function loadHost(caseId, startsLost = false, stored = null, mobile = fals
   const pending = new Set(), held = new Set();
   let lost = startsLost;
   let frameId = 0, cameraThird = false, avatarActive = false;
+  let noticeTime = 0, timerId = 0;
+  const timers = new Map();
 
   let waterPhase = 0, drawPass = -1, blend = false;
   let mission = 0;
@@ -125,7 +127,13 @@ async function loadHost(caseId, startsLost = false, stored = null, mobile = fals
     return button;
   });
   canv.getContext = () => gl;
-  canv.requestPointerLock = () => { counters.lockRequests++; };
+  canv.requestPointerLock = () => {
+    counters.lockRequests++;
+    if (caseId === 'notices') {
+      doc.dispatch('pointerlockerror');
+      return Promise.reject(new Error('pointer lock denied'));
+    }
+  };
   const controls = ['enter', 'mission-start', 'mission-retry', 'apply-seed', 'random-seed'].map(node);
   for (const button of controls) button.disabled = true;
   const status = node('engine-status');
@@ -157,8 +165,15 @@ async function loadHost(caseId, startsLost = false, stored = null, mobile = fals
     },
     requestAnimationFrame(fn) { frames.set(++frameId, fn); return frameId; },
     cancelAnimationFrame(id) { frames.delete(id); },
-    setTimeout: () => 1,
-    clearTimeout: () => {},
+    setTimeout: (fn, duration) => {
+      if (caseId !== 'notices') return 1;
+      timers.set(++timerId, { fn, at: noticeTime + duration });
+      return timerId;
+    },
+    clearTimeout: (id) => timers.delete(id),
+  });
+  if (caseId === 'notices') Object.defineProperty(globalThis, 'performance', {
+    configurable: true, writable: true, value: { now: () => noticeTime },
   });
   WebAssembly.instantiate = async (_, { showcase }) => {
     const instanceExports = {
@@ -250,6 +265,7 @@ async function loadHost(caseId, startsLost = false, stored = null, mobile = fals
       edit_control(mode, state) {
         counters.editStates.push([mode, state]);
         if (state === 0) return 0;
+        if (caseId === 'notices') return counters.editResult;
         counters.edits.push(mode === 1 ? counters.picked : 0);
         new Float32Array(memory.buffer,256,18).fill(0.25);
         showcase.mesh(256, 3, 0, 0);
@@ -282,7 +298,11 @@ async function loadHost(caseId, startsLost = false, stored = null, mobile = fals
     const [id, fn] = frames.entries().next().value;
     frames.delete(id); fn(mockTime += 16);
   };
-  return { node, doc, win, counters, status, controls, frames, memory, lostEvent, restoredEvent, resolveFetch, grantLock, frame };
+  const advanceNotices = (elapsed) => {
+    noticeTime += elapsed;
+    for (const [id, timer] of timers) if (timer.at <= noticeTime) { timers.delete(id); timer.fn(); }
+  };
+  return { node, doc, win, counters, status, controls, frames, memory, lostEvent, restoredEvent, resolveFetch, grantLock, frame, advanceNotices };
 }
 
 function disabled(host, state) {
@@ -582,7 +602,7 @@ const page = await readFile(new URL('../voxel/index.html', import.meta.url), 'ut
 assert.match(page, /<html lang="en">/);
 assert.match(page, /<title>Pocket Island • Wosy<\/title>/);
 assert.match(page, /href="\.\/style\.css\?v=beacon-bearing-v1-arcade-ui4-single1"/);
-assert.match(page, /src="\.\/main\.js\?v=beacon-expedition-parts-art-v1-arcade-ui4-single1-depth1-horizon1"/);
+assert.match(page, /src="\.\/main\.js\?v=beacon-expedition-parts-art-v1-arcade-ui4-single1-depth1-horizon1-notices1"/);
 assert.match(page, /id="move-stick"/);
 assert.doesNotMatch(page, /class="dpad"|data-move="Key[WASD]"/);
 assert.match(page, /title="Dirt · 2"/);
@@ -817,3 +837,41 @@ assert.equal(beacon.counters.generations, 1);
 assert.equal(bearing.hidden, true, 'no objective bearing leaks into Creative');
 assert.equal(beacon.node('mission-hud').hidden, true);
 console.log('Verified Beacon Run entry, authoritative HUD, terminal pointer lock, retry, and sandbox switch.');
+
+
+const originalPerformance = globalThis.performance;
+const notices = await loadHost('notices');
+await notices.resolveFetch();
+notices.node('mission-start').dispatch('click');
+await Promise.resolve();
+const notice = notices.node('notice');
+assert.equal(notice.textContent, 'Drag the scene to look around.');
+notices.advanceNotices(2100);
+notices.doc.dispatch('pointerlockerror');
+notices.advanceNotices(701);
+assert.equal(notice.textContent, '', 'a duplicate pointer-lock error does not keep the message alive');
+notices.counters.editResult = -2;
+const tryPlace = () => {
+  notices.doc.dispatch('keydown', { code: 'KeyE' });
+  notices.doc.dispatch('keyup', { code: 'KeyE' });
+};
+tryPlace();
+assert.equal(notice.textContent, 'You reached the island boundary.', 'the first actionable error remains visible');
+notices.advanceNotices(2801);
+tryPlace();
+assert.equal(notice.textContent, '', 'repeated boundary attempts do not immediately republish the notice');
+notices.advanceNotices(3200);
+tryPlace();
+assert.equal(notice.textContent, 'You reached the island boundary.', 'a later separate attempt can be explained again');
+notices.advanceNotices(2801);
+notices.counters.editResult = -7;
+tryPlace();
+assert.equal(notice.textContent, 'This world has reached its edit limit. Existing edits are safe.');
+notices.advanceNotices(2801);
+notices.node('pause').dispatch('click');
+notices.doc.dispatch('pointerlockerror');
+assert.equal(notice.textContent, '', 'out-of-run pointer-lock failures have no notice');
+notices.lostEvent();
+assert.equal(notices.status.textContent, 'Restoring graphics');
+assert.equal(notice.textContent, '', 'the persistent recovery status needs no duplicate notification');
+globalThis.performance = originalPerformance;

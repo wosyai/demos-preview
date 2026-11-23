@@ -416,7 +416,6 @@ export function bootFlight(win, doc) {
   function updateHud(frame) {
     setText(instruments[2], roundText(frame[18], "m/s"));
     setText(instruments[3], roundText(frame[19], "m"));
-    const gateFeedback = frame[35] === 1;
     const phase = frame[20], dropStatus = frame[21], route = frame[25];
     dropAvailable = phase === 1 || phase === 9 || phase === 11;
     if (dropButton) {
@@ -428,26 +427,30 @@ export function bootFlight(win, doc) {
       dropButton.classList.toggle("drop-ready", phase === 9 || dropStatus === 9);
     }
     const meters = roundText(frame[27], "m");
-    let label, cue;
+    let label, cue, distance = "";
     if (phase === 6 || phase === 10) {
       label = phase === 6 ? "Take off" : current === 1 ? "Mail loaded" : "Spray loaded";
       cue = "Hold throttle · pull down to lift off";
     } else if (phase === 7) {
       label = "Land at the supply strip";
-      cue = `${LANDING_CUES[frame[29]] ?? LANDING_CUES[0]} · ${meters}`;
+      cue = `${LANDING_CUES[frame[29]] ?? LANDING_CUES[0]}`;
+      distance = meters;
     } else if (phase === 8) {
       label = frame[26] === 13 ? "Rough touchdown · stay on the strip" : "Stop at the supply strip";
-      cue = `Brake to load cargo · ${meters} left to stop`;
+      cue = "Brake to load cargo";
+      distance = `${meters} left`;
     } else if (phase === 9) {
       label = current === 1 ? "Pick up the mail pouch" : "Pick up the spray";
       cue = "Stopped on the strip · press Space or tap Load";
     } else if (phase === 11) {
       label = `Spray the marked rows · ${frame[31]}/3`;
       const sprayCues = {5:"Descend toward the row", 6:"Climb above the row", 7:"Level the wings and center on the row", 8:"Approach the next marked row", 9:"Spray now"};
-      cue = `${sprayCues[dropStatus] ?? sprayCues[8]} · ${meters}`;
+      cue = sprayCues[dropStatus] ?? sprayCues[8];
+      distance = meters;
     } else if (phase === 0) {
       label = "Cross the Seine";
-      cue = frame[30] ? "Climb now to clear the bridge" : `Follow the turquoise guide · ${meters}`;
+      cue = frame[30] ? "Climb now to clear the bridge" : "Follow the turquoise guide";
+      if (!frame[30]) distance = meters;
     } else if (phase === 1) {
       label = "Deliver mail";
       cue = RELEASE_CUES[dropStatus] ?? RELEASE_CUES[8];
@@ -457,16 +460,18 @@ export function bootFlight(win, doc) {
       cue = "Pouch away · landing strip marked";
     } else if (phase === 3) {
       label = frame[26] === 13 ? "Rough touchdown · stay on the strip" : "Rollout";
-      cue = `Steer gently and brake · ${meters} left`;
+      cue = "Steer gently and brake";
+      distance = `${meters} left`;
     } else {
       label = current === 1 ? "Mail delivered · land" : "Land in the pasture";
-      cue = `${LANDING_CUES[frame[29]] ?? LANDING_CUES[0]} · ${meters}`;
+      cue = `${LANDING_CUES[frame[29]] ?? LANDING_CUES[0]}`;
+      distance = meters;
     }
     setText(instruments[1], label);
     const routeLabel = route === 1 ? "Low route." : route === 2 ? "Wide route." : "";
-    setText(callout, gateFeedback ? `Ring cleared · +80 · ${cue}` : cue);
+    setText(callout, distance ? `${cue} · ${distance}` : cue);
     callout.hidden = false;
-    setText(flightCue, `${gateFeedback ? "Ring cleared. " : ""}${label}. ${phase === 3 ? "Steer gently and hold Brake to stop" : phase === 2 ? LANDING_CUES[frame[29]] ?? LANDING_CUES[0] : cue}. ${routeLabel}`.trim());
+    setText(flightCue, `${label}. ${phase === 3 ? "Steer gently and hold Brake to stop" : phase === 2 ? LANDING_CUES[frame[29]] ?? LANDING_CUES[0] : cue}. ${routeLabel}`.trim());
   }
   function showSummary(type, frame) {
     modal = type;
