@@ -477,7 +477,7 @@ async function boot() {
   }
   try {
     prepareGraphics();
-    const response = await fetch(new URL("./engine.wasm?v=beacon-camera-handoff-v4", import.meta.url));
+    const response = await fetch(new URL("./engine.wasm?v=pocket-chase-orbit-v6", import.meta.url));
     if (!response.ok) throw new Error(`Engine not found (HTTP ${response.status}).`);
     const bytes = await response.arrayBuffer();
     const api = {

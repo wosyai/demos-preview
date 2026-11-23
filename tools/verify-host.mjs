@@ -2,6 +2,8 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 
 const markup = await readFile(new URL('../voxel/index.html', import.meta.url), 'utf8');
+const engineVersion = markup.match(/src="\.\/main\.js(\?v=[a-z0-9-]+)"/)?.[1];
+assert(engineVersion, 'the Pocket host script has an explicit cache version');
 for (const id of ['pause', 'fullscreen', 'camera-view', 'view-touch', 'jump-touch', 'descend-touch', 'flight-touch', 'remove', 'place']) {
   const button = markup.match(new RegExp(`<button[^>]+id="${id}"[^>]*>([\\s\\S]*?)</button>`));
   assert(button && /aria-label="[^"]+"/.test(button[0]) && /<svg /.test(button[1]), id + ' is an accessible icon button');
@@ -160,7 +162,7 @@ async function loadHost(caseId, startsLost = false, stored = null, mobile = fals
     devicePixelRatio: 1,
     fetch(url) {
       assert(url.pathname.endsWith('/voxel/engine.wasm'));
-      assert.equal(url.search, '?v=beacon-expedition-vista-v2');
+      assert.equal(url.search, engineVersion, 'Pocket host and Wasm use the same cache version');
       return fetchResponse.promise;
     },
     requestAnimationFrame(fn) { frames.set(++frameId, fn); return frameId; },
@@ -602,7 +604,6 @@ const page = await readFile(new URL('../voxel/index.html', import.meta.url), 'ut
 assert.match(page, /<html lang="en">/);
 assert.match(page, /<title>Pocket Island • Wosy<\/title>/);
 assert.match(page, /href="\.\/style\.css\?v=beacon-bearing-v1-arcade-ui4-single1"/);
-assert.match(page, /src="\.\/main\.js\?v=beacon-expedition-parts-art-v1-arcade-ui4-single1-depth1-vista2-notices1"/);
 assert.match(page, /id="move-stick"/);
 assert.doesNotMatch(page, /class="dpad"|data-move="Key[WASD]"/);
 assert.match(page, /title="Dirt · 2"/);

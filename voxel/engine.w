@@ -127,6 +127,7 @@ bool third_person = false;
 f32 boom_mix = 0.0;
 f32 boom_distance = 0.0;
 bool boom_initialized = false;
+f32 boom_yaw = 0.0;
 bool avatar_visible = false;
 f32 edit_pose_time = 0.0;
 bool edit_pose_place = false;
@@ -2712,18 +2713,18 @@ f32(i32, i32, i32, f32, f32, f32, f32, f32, f32, f32, f32, i32) find_visible_boo
 	}
 };
 
-f32(f32, f32, f32, f32, f32, f32, f32, f32, f32) chase_terrain_limit = fn(ox, oy, oz, dx, dy, dz, fx, fy, fz) {
+f32(f32, f32, f32, f32, f32, f32, f32, f32, f32, f32, f32) chase_terrain_limit = fn(ox, oy, oz, dx, dy, dz, fx, fy, fz, sy, cy) {
 	f32 center = camera_boom_probe(ox, oy, oz, dx, dy, dz, 4.72);
 	f32 near_x = ox + fx * 0.16;
 	f32 near_y = oy + fy * 0.16;
 	f32 near_z = oz + fz * 0.16;
 	f32 half_height = 0.16 / view_scale;
 	f32 half_width = half_height * frame_values[20];
-	f32 ux = 0.0 - sin_yaw * sin_pitch * half_height;
+	f32 ux = 0.0 - sy * sin_pitch * half_height;
 	f32 uy = cos_pitch * half_height;
-	f32 uz = cos_yaw * sin_pitch * half_height;
-	f32 sx = cos_yaw * half_width;
-	f32 sz = sin_yaw * half_width;
+	f32 uz = cy * sin_pitch * half_height;
+	f32 sx = cy * half_width;
+	f32 sz = sy * half_width;
 	f32 corner0 = camera_corner(near_x, near_y, near_z, ux, uy, uz, sx, sz, dx, dy, dz, center);
 	f32 corner1 = camera_corner(near_x, near_y, near_z, ux, uy, uz, 0.0 - sx, 0.0 - sz, dx, dy, dz, corner0);
 	f32 corner2 = camera_corner(near_x, near_y, near_z, 0.0 - ux, 0.0 - uy, 0.0 - uz, sx, sz, dx, dy, dz, corner1);
@@ -2749,7 +2750,7 @@ unit(RayHit, f32, f32, f32) publish_play_frame = fn(hit, dt, advance_x, advance_
 		f32 dz = 0.92 * cos_yaw + shoulder * sin_yaw;
 		f32 back = 0.92 * cos_pitch - dy * sin_pitch;
 		f32 lift = 0.92 * sin_pitch + dy * cos_pitch;
-		f32 terrain_limit = chase_terrain_limit(camera_pose.x, camera_pose.y, camera_pose.z, dx, dy, dz, fx, fy, fz);
+		f32 terrain_limit = chase_terrain_limit(camera_pose.x, camera_pose.y, camera_pose.z, dx, dy, dz, fx, fy, fz, sin_yaw, cos_yaw);
 		f32 aim_distance = if (hit.face < 0) { 5.0 } else {
 			clamp_f(ray_hit_distance(hit, camera_pose.x, camera_pose.y, camera_pose.z, fx, fy, fz), 0.0, 5.0)
 		};
@@ -2761,11 +2762,17 @@ unit(RayHit, f32, f32, f32) publish_play_frame = fn(hit, dt, advance_x, advance_
 			camera_pose.y + dy * terrain_limit, camera_pose.z + dz * terrain_limit, tx, ty, tz)) { terrain_limit } else {
 			find_visible_boom(hit.position.x, hit.position.y, hit.position.z, dx, dy, dz, tx, ty, tz, 0.0, terrain_limit, 5)
 		};
-		f32 predicted = if (dt > 0.0 && (advance_x != 0.0 || advance_z != 0.0)) {
-			f32 ahead_x = clamp_f(advance_x * (0.22 / dt), -0.70, 0.70);
-			f32 ahead_z = clamp_f(advance_z * (0.22 / dt), -0.70, 0.70);
-			f32 next_limit = chase_terrain_limit(camera_pose.x + ahead_x, camera_pose.y, camera_pose.z + ahead_z, dx, dy, dz, fx, fy, fz);
-			clamp_f(next_limit, limit - 2.0, limit)
+		bool rotating = boom_initialized && boom_yaw != camera_pose.yaw;
+		f32 predicted = if (dt > 0.0 && (rotating || advance_x != 0.0 || advance_z != 0.0)) {
+			f32 horizon = 0.22 / (if (dt < 0.0001) { 0.0001 } else { dt });
+			f32 ahead_x = clamp_f(advance_x * horizon, -0.70, 0.70);
+			f32 ahead_z = clamp_f(advance_z * horizon, -0.70, 0.70);
+			f32 ahead_yaw = if (rotating) { camera_pose.yaw + clamp_f(wrap_yaw(camera_pose.yaw - boom_yaw) * horizon, -0.36, 0.36) } else { camera_pose.yaw };
+			f32 sy = if (rotating) { sine(ahead_yaw) } else { sin_yaw };
+			f32 cy = if (rotating) { cosine(ahead_yaw) } else { cos_yaw };
+			f32 next_limit = chase_terrain_limit(camera_pose.x + ahead_x, camera_pose.y, camera_pose.z + ahead_z,
+				0.0 - 0.92 * sy + shoulder * cy, dy, 0.92 * cy + shoulder * sy, sy * cos_pitch, fy, 0.0 - cy * cos_pitch, sy, cy);
+			clamp_f(next_limit, if (rotating) { 0.0 } else { limit - 2.0 }, limit)
 		} else { limit };
 		f32 pace = if (predicted < boom_distance) { 11.0 } else { 5.0 };
 		f32 time = dt * pace;
@@ -2781,6 +2788,7 @@ unit(RayHit, f32, f32, f32) publish_play_frame = fn(hit, dt, advance_x, advance_
 			}
 		};
 		boom_distance = if (boom_mix == 1.0) { distance } else { blended };
+		if (dt > 0.0 || !boom_initialized) { boom_yaw = camera_pose.yaw; };
 		boom_initialized = true;
 		f32 depth = clamp_f(aim_distance + back * distance, 0.16, 9.0);
 		f32 projected = view_scale * distance / depth;
