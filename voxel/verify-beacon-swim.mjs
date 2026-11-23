@@ -21,6 +21,7 @@ for (const aspect of [.56, 1.67]) {
   engine._start();
   assert(engine.start_beacon() > 0);
   const tick = (dt = .05) => engine.tick(dt, aspect, 1);
+  const settleView = () => { for (let i = 0; i < 20; i++) tick(1 / 60); };
   const walk = (button, axis, limit, sign) => {
     engine.control(button, 1);
     for (let i = 0; i < 80 && (limit - hud[axis]) * sign > 0 && hud[25] === 1; i++) tick();
@@ -48,12 +49,12 @@ for (const aspect of [.56, 1.67]) {
   tick(0);
   assert.equal(avatar.length, 0, 'normal first-person play does not draw a body');
   assert.equal(engine.cycle_camera(), 1);
-  tick(0);
+  settleView();
   assert.equal(avatar.length, 396 * 6);
   const dry = center(0, 2) - center(1, 2);
   assert(Math.abs(dry) < .02, 'dry standing torso is upright');
   assert.equal(engine.cycle_camera(), 0);
-  tick(0);
+  settleView();
   assert.equal(avatar.length, 0, 'switching back hides the visible body');
 
   walk(0, 18, 33.42, -1);
@@ -66,7 +67,7 @@ for (const aspect of [.56, 1.67]) {
   assert.equal(avatar.length, 0);
 
   assert.equal(engine.cycle_camera(), 1);
-  tick(0);
+  settleView();
   assert.equal(avatar.length, 396 * 6);
   const startZ = center(1, 2);
   let minArm = Infinity, maxArm = -Infinity, minLean = Infinity;
@@ -90,9 +91,11 @@ for (const aspect of [.56, 1.67]) {
   assert.deepEqual(avatar, finalPose);
   assert.equal(engine.cycle_camera(), 0);
   tick(0);
+  assert.deepEqual(avatar, finalPose, 'changing the requested view is not a zero-time cut');
+  settleView();
   assert.equal(avatar.length, 0, 'first person hides the wet body too');
   assert.equal(engine.cycle_camera(), 1);
-  tick(0);
-  assert.deepEqual(avatar, finalPose, 'restoring third person preserves the actual running stroke pose');
+  settleView();
+  assert.equal(avatar.length, 396 * 6, 'restoring third person shows the actual running swim pose');
   console.log(JSON.stringify({ aspect, dry, minLean, minArm, maxArm, forward: startZ - center(1, 2) }));
 }

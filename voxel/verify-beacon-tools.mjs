@@ -35,7 +35,7 @@ for (const aspect of [.56, 1.67]) {
   const pitch = Math.atan2(5 - eyeY, eyeZ - 40.5);
   game.look(0, (frame[19] - pitch) / .0034);
   assert.equal(game.cycle_camera(), 1);
-  tick();
+  for (let i = 0; i < 8; i++) tick(.05);
   assert.equal((hit >>> 6) & 15, 4);
   const neutral = arm();
   const stock = frame[28];

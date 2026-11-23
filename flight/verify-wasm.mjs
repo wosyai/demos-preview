@@ -303,7 +303,9 @@ function pilot(p, bearing, height, slope, power) {
 function marker(color, minY = -Infinity) {
     const result = [];
     for (let i = 0; i < aircraft.length; i += 6) {
-        if (aircraft[i+1] >= minY && color.every((value, c) => Math.abs(aircraft[i+3+c] - value) < .001)) {
+        const rawRed = aircraft[i+3];
+        const red = rawRed < 0 ? (-rawRed-1)%2 : rawRed;
+        if (aircraft[i+1] >= minY && color.every((value, c) => Math.abs((c === 0 ? red : aircraft[i+3+c]) - value) < .001)) {
             result.push(aircraft.slice(i,i+3));
         }
     }
@@ -311,11 +313,10 @@ function marker(color, minY = -Infinity) {
 }
 function verifyCueProjection(label, cue, minimumWidth, minimumHeight, screenHeight = null) {
     const before = frame.slice();
-    for (const view of [0, 1]) for (const aspect of [1.65, .45]) {
-        engine.select_view(view);
+    for (const aspect of [1.65, .45]) {
         tick(0, 0, aspect);
         assert.deepEqual(frame.subarray(16), before.subarray(16), label + " camera inspection must not advance play");
-        const points = cue(view);
+        const points = cue();
         assert(points.length > 0, label + " emits actual geometry");
         const ndc = points.map(([x,y,z]) => {
             const c = (i) => frame[i]*x+frame[i+4]*y+frame[i+8]*z+frame[i+12];
@@ -323,17 +324,16 @@ function verifyCueProjection(label, cue, minimumWidth, minimumHeight, screenHeig
             assert(w > 0, label + " is in front of the eye");
             const projected = [c(0)/w, c(1)/w, c(2)/w];
             assert(projected.every(value => Math.abs(value) < 1),
-                label + " fits the true frustum in view " + view + " at aspect " + aspect);
+                label + " fits the true frustum at aspect " + aspect);
             return projected;
         });
         for (const [axis, minimum] of [[0, minimumWidth], [1, minimumHeight]]) {
             const values = ndc.map(point => point[axis]);
             const span = Math.max(...values)-Math.min(...values);
             const size = screenHeight === null ? span : span*screenHeight*.5*(axis === 0 ? aspect : 1);
-            assert(screenHeight === null ? size > minimum : size >= minimum, label + " is legible on screen in view " + view + " at aspect " + aspect);
+            assert(screenHeight === null ? size > minimum : size >= minimum, label + " is legible on screen at aspect " + aspect);
         }
     }
-    engine.select_view(0);
     tick(0, 0, 1.65);
     assert.deepEqual(frame, before, label + " restores the ordinary chase replay frame");
 }
@@ -370,6 +370,7 @@ if (!comparisonBaseline) {
         reset(kind);
         assert.equal(marker(materials[kind]).length,0,"the actual interior is absent in chase view");
         engine.select_view(1);
+        reset(kind);
         for (const aspect of [1.65,.54,.45]) {
             tick(0,0,aspect);
             assert(marker(materials[kind]).length > 5,"the cockpit has real airframe-specific framing");
@@ -523,6 +524,7 @@ function observeMarkers(course, mode) {
 }
 function sortie(course, mode = "normal") {
     verifyCockpitMail=false;
+    engine.select_view(0);
     reset(1-course); reset(course);
     if (!comparisonBaseline) {
         const start = aircraftPose();
@@ -540,6 +542,7 @@ function sortie(course, mode = "normal") {
     let checkedPredictedImpact = false;
     let seenFalling=0, seenContact=0, returnedAfterContact=false, previousPouchHeight=Infinity;
     let cockpitAtRelease=false, returnedCockpit=false, heldPouchXZ=null, releaseHeading=null;
+    let portraitCockpitSteps=0;
     let craftStartX;
     let movingSeine = false;
     let cartStartZ, movingCart = false;
@@ -565,15 +568,12 @@ function sortie(course, mode = "normal") {
         observer?.before(p, phase);
         let input = 0;
         if(!comparisonBaseline && course===1 && (mode==="normal" || mode==="cockpit mail")) {
-            if(frame[36]===2 && !cockpitAtRelease && mode==="cockpit mail") {
-                engine.select_view(1);
-                tick(0,0,.45);
-                verifyCockpitMail=true;
-                cockpitAtRelease=true;
-            }
             if(frame[36]===2 && phase===5) {
                 if(mode==="cockpit mail") {
-                    assert.equal(marker([.99,.91,.71]).length,0,"the dashboard cannot cross the blended eye");
+                    cockpitAtRelease = verifyCockpitMail;
+                    const depth = ([x,y,z]) => frame[3]*x+frame[7]*y+frame[11]*z+frame[15];
+                    assert(marker([.99,.91,.71]).every(point => depth(point) > .7),
+                        "as dashboard lowers it cannot cross the blended eye");
                     assert.equal(marker([.96,.96,.86]).length,0,"the exterior airframe does not enclose the blending cockpit eye");
                 }
                 const pouch=marker([.88,.41,.19]);
@@ -608,8 +608,7 @@ function sortie(course, mode = "normal") {
                     assert.equal(marker([.99,.91,.71]).length,228,"the selected cockpit returns without another toggle");
                     const interior=frame.slice(0,16);
                     engine.select_view(0); tick(0,0,1.65);
-                    assert.notDeepEqual(frame.slice(0,16),interior);
-                    verifyCockpitMail=false;
+                    assert.deepEqual(frame.slice(0,16),interior,"a pause never consumes live camera easing");
                     returnedCockpit=true;
                 }
                 assert.equal(marker([.31,.82,.32]).length,0,"the landing view does not retain a cinematic marker");
@@ -698,9 +697,9 @@ function sortie(course, mode = "normal") {
             } else if (!checkedLoadVisibility.has(phase)) {
                 if (mode === "normal") {
                     assert(checkedSupplyFrustum, "this ordinary flight checked the airborne supply cue during descent");
-                    verifyCueProjection("stopped load sign", (view) => {
+                    verifyCueProjection("stopped load sign", () => {
                         const label = marker([.42,.97,.84]);
-                        assert.equal(label.length,view ? 84 : 87,"only chase view points to the stopped plane");
+                        assert.equal(label.length,87,"chase view points to the stopped plane");
                         return label.concat(marker([.045,.17,.16]));
                     }, .20, .09);
                     if (course === 1)
@@ -776,6 +775,10 @@ function sortie(course, mode = "normal") {
             input = pilot(p,Math.atan2(target[0]-p.x,target[1]-p.z),height,slope,0);
         }
         if (phase === 1) {
+            if (!comparisonBaseline && mode === "cockpit mail" && !verifyCockpitMail) {
+                engine.select_view(1);
+                verifyCockpitMail = true;
+            }
             if (mode === "tower impact") {
                 const bearing = Math.atan2(228-p.x,359-p.z);
                 input = pilot(p,bearing,51,0,16);
@@ -785,16 +788,17 @@ function sortie(course, mode = "normal") {
             if (mode === "riverside") {
                 assert(surveyCruise, "the survey reached roof clearance before leaving the launch corridor");
                 if (!comparisonBaseline && !checkedPortraitDrop && p.y >= 35) {
-                    const before = frame.slice();
-                    engine.select_view(1);
-                    tick(0, 0, .45);
-                    assert.equal(marker([.99,.72,.29]).length, 105, "the anchored DROP objective is still generated in tall portrait cockpit");
-                    assert.equal(marker([.035,.095,.10]).length, 24, "the directional fallback remains when the high cockpit can look over the target");
-                    assert.deepEqual(frame.subarray(16), before.subarray(16), "the cockpit check cannot change route state");
-                    engine.select_view(0);
-                    tick(0, 0, 1.65);
-                    assert.deepEqual(frame, before, "restore the ordinary route camera");
-                    checkedPortraitDrop = true;
+                    if (portraitCockpitSteps === 0) {
+                        engine.select_view(1);
+                        verifyCockpitMail = true;
+                    }
+                    if (portraitCockpitSteps === 14) {
+                        assert.equal(marker([.99,.72,.29]).length, 105, "the anchored DROP objective is still generated in tall portrait cockpit");
+                        assert.equal(marker([.035,.095,.10]).length, 24, "the directional fallback remains when the high cockpit can look over the target");
+                        assert.equal(marker([.99,.91,.71]).length,228,"the live transition has fully reached portrait cockpit");
+                        checkedPortraitDrop = true;
+                    }
+                    portraitCockpitSteps++;
                 }
                 if (surveyEast && p.z > 447 && p.x > 315 && p.x < 435 && p.y > 19) {
                     assert(comparisonBaseline || checkedPortraitDrop, "the northeast survey exercised a high cockpit portrait cue");
@@ -803,7 +807,7 @@ function sortie(course, mode = "normal") {
                 if (p.x >= 310 && p.z >= 240 && p.z <= 310) surveyEast = true;
                 const target = surveyEast ? [368, 468] : [332, 272];
                 input = pilot(p, Math.atan2(target[0]-p.x, target[1]-p.z), 38, 0, 16);
-                step(input);
+                step(input,1/30,portraitCockpitSteps > 0 ? .45 : 1.65);
                 continue;
             }
             if (!comparisonBaseline && mode === "normal") {
@@ -1005,9 +1009,12 @@ if (!comparisonBaseline) {
     engine.select_view(1);
     reset(1);
     assert.equal(frame[36],0,"retry clears the wreck");
+    assert.equal(marker([.99,.91,.71]).length,228,"retry immediately retained the user-selected cockpit");
     const cockpit = frame.slice();
     engine.select_view(0); tick(0,0);
-    assert.notDeepEqual(frame.subarray(0,16),cockpit.subarray(0,16),"retry retained the user-selected cockpit");
+    assert.deepEqual(frame,cockpit,"zero dt does not jump away from the retried cockpit");
+    for(let i=0;i<14;i++) tick(0);
+    assert.equal(marker([.99,.91,.71]).length,0,"running presentation reaches chase after a retry");
 }
 assert.equal(sortie(0,"overrun").result,9,"pickup overrun remains an explicit failure");
 if(!comparisonBaseline) {
@@ -1224,6 +1231,46 @@ if (!comparisonBaseline) {
         assert(seen,"the recorded flight genuinely moved more than 11 m from the stationary pilot");
         engine.select_view(0);
     }
+}
+
+if (!comparisonBaseline) {
+    const eyeZ = () => {
+        const [a,b,c,d,e,f,g,h,i] = [frame[0],frame[4],frame[8],frame[1],frame[5],frame[9],frame[3],frame[7],frame[11]];
+        const det = a*(e*i-f*h)-b*(d*i-f*g)+c*(d*h-e*g);
+        return (-(d*h-e*g)*frame[12]-(g*b-h*a)*frame[13]-(a*e-b*d)*frame[15])/det;
+    };
+    for (const aspect of [1.65,.45]) {
+        engine.select_view(0);
+        reset(0);
+        tick(0,0,aspect);
+        const chase = frame.slice(), startZ = eyeZ();
+        engine.select_view(1);
+        tick(0,0,aspect);
+        assert.deepEqual(frame,chase,"select_view queues a live transition without a paused camera jump");
+        let prev = startZ;
+        const partial = new Set();
+        for (let i=0; i<14; i++) {
+            tick(0,1/30,aspect);
+            const current = eyeZ();
+            for (let k=3;k<aircraft.length;k+=6) {
+                if (aircraft[k] < 0) partial.add(Math.floor((-aircraft[k]-1)*.5));
+            }
+            assert(current >= prev-.001 && current-prev < 2.2,"chase-to-cockpit translation is eased and monotone");
+            prev = current;
+        }
+        assert(partial.size >= 3 && [...partial].every(x=>x>=0 && x<16),"physical meshes use multiple fade coverage steps before settling");
+        assert(Math.abs(prev-startZ-18.25)<.003,"camera reaches the authored cockpit without lag");
+        assert.equal(marker([.99,.91,.71]).length,228,"cockpit remains full after easing");
+        engine.select_view(0);
+        for (let i=0; i<6; i++) tick(0,1/30,aspect);
+        const between = frame.slice();
+        engine.select_view(1);
+        tick(0,0,aspect);
+        assert.deepEqual(frame,between,"reversing an in-progress live transition cannot jump");
+        for (let i=0; i<14; i++) tick(0,1/30,aspect);
+        assert(Math.abs(eyeZ()-prev)<.003,"retargeted camera reaches the same authored endpoint");
+    }
+    engine.select_view(0);
 }
 
 // Recheck that the plane and chase camera share the same presentation pose.

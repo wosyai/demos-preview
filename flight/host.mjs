@@ -132,17 +132,27 @@ uniform mat4 viewProjection;
 out vec3 tint;
 out vec3 surface;
 out float depth;
+flat out int coverage;
 void main() {
   tint = color;
+  coverage = 16;
+  if (color.r < 0.0) {
+    // The transition mesh packs a 0–15 coverage band above its unmodified red channel.
+    float packedRed = -color.r - 1.0;
+    coverage = int(floor(packedRed * 0.5));
+    tint.r = packedRed - float(coverage * 2);
+  }
   surface = position;
   gl_Position = viewProjection * vec4(position, 1.0);
   depth = gl_Position.w;
 }`;
 const WORLD_FRAGMENT = `#version 300 es
 precision highp float;
+precision highp int;
 in vec3 tint;
 in vec3 surface;
 in float depth;
+flat in int coverage;
 uniform vec3 atmosphere;
 out vec4 fragment;
 float detailHash(vec2 v) {
@@ -179,6 +189,13 @@ void main() {
     float fields = aaNoise(xz*.31,groundFootprint*.31)*.58 + aaNoise(xz*1.73,groundFootprint*1.73)*.42;
     float material = mix(aaNoise(facade,facadeFootprint),fields,ground);
     color *= 1.0+(material-.5)*mix(.087,.21,ground);
+  }
+  if (coverage < 16) {
+    ivec2 pixel = ivec2(gl_FragCoord.xy);
+    int x0 = pixel.x & 1, y0 = pixel.y & 1;
+    int x1 = (pixel.x >> 1) & 1, y1 = (pixel.y >> 1) & 1;
+    int threshold = ((x0 ^ y0) * 2 + y0) * 4 + (x1 ^ y1) * 2 + y1;
+    if (threshold >= coverage) discard;
   }
   float haze = smoothstep(60.0, 580.0, depth);
   vec3 horizon = mix(atmosphere,vec3(.89,.82,.69),.28);
@@ -789,7 +806,7 @@ export function bootFlight(win, doc) {
     if (!gl) { failure("This game needs WebGL 2. Try a current browser with hardware acceleration enabled."); return; }
     try {
       gpu = graphics(gl);
-      const wasm = await win.fetch(new URL("./flight.wasm?v=flight-solid-sheds-v16", import.meta.url));
+      const wasm = await win.fetch(new URL("./flight.wasm?v=flight-camera-handoff-v4", import.meta.url));
       if (!wasm.ok) throw new Error("The flight engine could not be downloaded.");
       const { instance } = await win.WebAssembly.instantiate(await wasm.arrayBuffer(), imports);
       engine = instance.exports;

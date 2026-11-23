@@ -251,6 +251,31 @@ function cameraEye() {
   return [0,4,8].map(i=>-(v[12]*v[i]/right+v[13]*v[i+1]/up+v[15]*v[i+3]));
 }
 const cameraHeading=()=>Math.atan2(frame[3],frame[11]);
+function handoffCamera(action, riding, aspect) {
+  const anchor=cameraEye(), start=cameraHeading();
+  let prev=start;
+  tick(0,0,action,step,aspect);
+  assert.equal(frame[16],riding,"camera blending does not delay the action");
+  tick(0,0,0,step,aspect);
+  const first=cameraEye();
+  assert(Math.hypot(...first.map((x,i)=>x-anchor[i]))<.25,
+    "handoff starts at the outgoing eye pose despite the new gameplay anchor");
+  for(let i=0;i<95;i++) {
+    const now=cameraHeading();
+    assert(Math.abs(normalAngle(now-prev))<.112,"handoff heading cannot jump in a fixed step");
+    prev=now;
+    tick(0,0,0,step,aspect);
+  }
+  return Math.abs(normalAngle(cameraHeading()-start));
+}
+for(const aspect of [.53,1.65]) {
+  engine.reset(0);
+  tick(0,0,0,step,aspect);
+  assert.equal(frame[20],1,"parked taxi is available without moving");
+  assert(handoffCamera(2,1,aspect)>3.0,"driving still settles behind the opposite-facing taxi");
+  assert.equal(frame[20],2);
+  assert(handoffCamera(2,0,aspect)>3.0,"exiting still settles into walking view");
+}
 function framedWallFoot(wide) {
   engine.reset(0);
   for(const p of [[3.8,-4.6],[3.8,5.0],[9.5,5.0]]) walkTo(...p);

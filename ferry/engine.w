@@ -236,6 +236,15 @@ f32 camera_pitch = -0.25;
 f32 orbit_yaw = 0.0;
 f32 orbit_pitch = 0.0;
 f32 camera_boom = 7.0;
+f32 camera_anchor_x = 2.1;
+f32 camera_anchor_z = -4.6;
+bool camera_in_car = false;
+f32 camera_handoff_t = 1.0;
+f32 camera_handoff_x = 0.0;
+f32 camera_handoff_z = 0.0;
+f32 camera_handoff_yaw = 0.0;
+f32 camera_handoff_rig = 0.0;
+f32 camera_rig = 0.0;
 f32 old_camera_pitch = -0.25;
 f32 accumulator = 0.0;
 f32 viewport = 1.0;
@@ -2042,18 +2051,43 @@ bool(f32,f32,f32,f32,f32,f32) marquee_boom = fn(x,z,dx,dz,dist,pad) {
 
 unit() camera_step = fn {
     f32 aim=wrap((if (in_car) { car_yaw } else { 0.0 })+orbit_yaw);
-    camera_yaw=wrap(camera_yaw+wrap(aim-camera_yaw)*0.15);
+    f32 px=player_x(); f32 pz=player_z();
+    f32 sx=px; f32 sz=pz;
+    f32 rig=if (in_car) { 1.0 } else { 0.0 };
+    if (camera_in_car!=in_car) {
+        camera_in_car=in_car;
+        camera_handoff_t=0.0;
+        camera_handoff_x=camera_anchor_x-px;
+        camera_handoff_z=camera_anchor_z-pz;
+        camera_handoff_yaw=wrap(camera_yaw-aim);
+        camera_handoff_rig=camera_rig;
+    };
+    if (camera_handoff_t<1.0) {
+        f32 t=camera_handoff_t;
+        f32 keep=1.0-t*t*(3.0-2.0*t);
+        f32 dx=camera_handoff_x*keep; f32 dz=camera_handoff_z*keep;
+        f32 span=length(dx,dz);
+        if (span>0.75) {
+            f32 clear=clear_boom(px,pz,dx/span,dz/span,span,0);
+            dx=dx*clear/span; dz=dz*clear/span;
+        };
+        sx=px+dx; sz=pz+dz;
+        aim=wrap(aim+camera_handoff_yaw*keep);
+        rig=blend(rig,camera_handoff_rig,keep);
+        camera_handoff_t=min_f(1.0,t+1.0/24.0);
+    };
+    camera_anchor_x=sx; camera_anchor_z=sz; camera_rig=rig;
+    camera_yaw=wrap(camera_yaw+clamp(wrap(aim-camera_yaw)*0.15,-0.105,0.105));
     f32 hx=sin_small(camera_yaw); f32 hz=cos_small(camera_yaw);
-    f32 sx=player_x(); f32 sz=player_z();
-    f32 goal=if (in_car) { 8.4 } else { 7.0 };
+    f32 goal=blend(7.0,8.4,rig);
     f32 dist=clear_boom(sx,sz,-hx,-hz,blend(camera_boom,goal,0.13),0);
     camera_boom=dist;
     camera_x=sx-dist*hx;
     camera_z=sz-dist*hz;
     f32 camera_deck=if (stage==MissionStage::crossing || stage==MissionStage::docked || stage==MissionStage::disembarking || stage==MissionStage::delivered) { board_height } else { 0.0 };
     f32 open_boom=clamp((dist-2.9)/0.9,0.0,1.0);
-    f32 camera_base=blend(2.35,if (in_car) { 4.2 } else { 3.9 },open_boom);
-    f32 aim_pitch=clamp(blend(-0.48,if (in_car) { -0.29 } else { -0.25 },open_boom)+orbit_pitch,-0.83,-0.06);
+    f32 camera_base=blend(2.35,blend(3.9,4.2,rig),open_boom);
+    f32 aim_pitch=clamp(blend(-0.48,blend(-0.25,-0.29,rig),open_boom)+orbit_pitch,-0.83,-0.06);
     f32 eye_y=camera_deck+camera_base;
     f32 clear_height=pier_marquee_floor-0.64;
     bool close_to_marquee=abs_f(sz-pier_marquee_z)<10.0 && sx>pier_marquee_x-10.0 && sx<pier_marquee_x+pier_marquee_width+10.0;
@@ -2465,6 +2499,7 @@ unit(i32) reset = fn(mode) {
     vx=0.0; vz=0.0; brake_mark=0.0; car_roll=0.0; wheel_phase=0.0;
     foot_x=2.1; foot_z=-4.6; foot_speed=0.0; foot_yaw=0.0;
     camera_x=2.1; camera_z=-11.6; camera_y=3.9; camera_yaw=0.0; camera_pitch=-0.25; orbit_yaw=0.0; orbit_pitch=0.0; camera_boom=7.0;
+    camera_anchor_x=foot_x; camera_anchor_z=foot_z; camera_in_car=false; camera_handoff_t=1.0; camera_rig=0.0;
     ferry_z=berth_z; board_time=0.0; board_height=0.01;
     reset_props(0); snapshot();
     render_moving(1.0); render_frame(1.0);

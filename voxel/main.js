@@ -466,7 +466,7 @@ function generate(seed) {
   if (!atlas.data || previousMesh === terrainVersion || previousWater === layers.water.version) {
     throw new Error("The engine did not return geometry for the new island.");
   }
-  try { localStorage.setItem("wosy-voxel-seed-preview", String(seed)); } catch {}
+  try { localStorage.setItem("wosy-voxel-seed", String(seed)); } catch {}
   if (seedInput) seedInput.value = String(seed);
 }
 
@@ -477,7 +477,7 @@ async function boot() {
   }
   try {
     prepareGraphics();
-    const response = await fetch(new URL("./engine.wasm?v=beacon-expedition-vista-v2-earshot1", import.meta.url));
+    const response = await fetch(new URL("./engine.wasm?v=beacon-camera-handoff-v4", import.meta.url));
     if (!response.ok) throw new Error(`Engine not found (HTTP ${response.status}).`);
     const bytes = await response.arrayBuffer();
     const api = {
@@ -510,7 +510,7 @@ async function boot() {
     if (gl.isContextLost()) loseGraphics();
     engine._start();
     let stored = null;
-    try { stored = localStorage.getItem("wosy-voxel-seed-preview"); } catch {}
+    try { stored = localStorage.getItem("wosy-voxel-seed"); } catch {}
     generate(readSeed(stored, false) ?? engine.default_seed());
     loaded = true;
     if (gl.isContextLost()) loseGraphics();

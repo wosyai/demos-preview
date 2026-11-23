@@ -124,6 +124,7 @@ bool ground_contact_dirty = false;
 bool jump_pending = false;
 f32 vertical_speed = 0.0;
 bool third_person = false;
+f32 boom_mix = 0.0;
 f32 boom_distance = 0.0;
 bool boom_initialized = false;
 bool avatar_visible = false;
@@ -1691,6 +1692,9 @@ i32(bool) start_harbor = fn(expedition) {
 	camera_pose.x = 24.5;
 	camera_pose.y = 5.0 + player_feet;
 	camera_pose.z = 42.5;
+	boom_mix = if (third_person) { 1.0 } else { 0.0 };
+	boom_distance = 0.0;
+	boom_initialized = false;
 	camera_pose.yaw = 0.0;
 	camera_pose.pitch = -0.10;
 	orientation_dirty = true;
@@ -1964,6 +1968,7 @@ unit() spawn_player = fn {
 		flying = true;
 		grounded = false;
 	};
+	boom_mix = if (third_person) { 1.0 } else { 0.0 };
 	boom_distance = 0.0;
 	boom_initialized = false;
 	ground_contact_dirty = false;
@@ -2509,8 +2514,6 @@ RayHit() current_view_target = fn {
 
 i32() cycle_camera = fn {
 	third_person = !third_person;
-	boom_distance = 0.0;
-	boom_initialized = false;
 	if (third_person) { 1 } else { 0 }
 };
 
@@ -2728,7 +2731,11 @@ f32(f32, f32, f32, f32, f32, f32, f32, f32, f32) chase_terrain_limit = fn(ox, oy
 };
 
 unit(RayHit, f32, f32, f32) publish_play_frame = fn(hit, dt, advance_x, advance_z) {
-	if (!third_person) {
+	f32 direction = if (third_person) { 1.0 } else { -1.0 };
+	boom_mix = clamp_f(boom_mix + direction * (dt / 0.32), 0.0, 1.0);
+	if (boom_mix == 0.0) {
+		boom_distance = 0.0;
+		boom_initialized = false;
 		publish_avatar(false);
 		center_aim();
 		publish_frame(camera_pose.x, camera_pose.y, camera_pose.z, sin_yaw, cos_yaw, sin_pitch, cos_pitch, camera_pose.pitch, hit);
@@ -2765,9 +2772,15 @@ unit(RayHit, f32, f32, f32) publish_play_frame = fn(hit, dt, advance_x, advance_
 		f32 blended = if (!boom_initialized || limit < boom_distance) { limit } else {
 			clamp_f(boom_distance + (predicted - boom_distance) * time / (1.0 + time * 0.5), 0.0, limit)
 		};
-		f32 distance = if (hit.face < 0 || blended == limit || camera_sees_target(hit.position.x, hit.position.y, hit.position.z, camera_pose.x + dx * blended,
-			camera_pose.y + dy * blended, camera_pose.z + dz * blended, tx, ty, tz)) { blended } else { limit };
-		boom_distance = distance;
+		f32 eased = boom_mix * boom_mix * (3.0 - 2.0 * boom_mix);
+		f32 candidate = blended * eased;
+		f32 distance = if (hit.face < 0 || candidate == limit || camera_sees_target(hit.position.x, hit.position.y, hit.position.z, camera_pose.x + dx * candidate,
+			camera_pose.y + dy * candidate, camera_pose.z + dz * candidate, tx, ty, tz)) { candidate } else {
+			if (boom_mix == 1.0) { limit } else {
+				find_visible_boom(hit.position.x, hit.position.y, hit.position.z, dx, dy, dz, tx, ty, tz, 0.0, candidate, 5)
+			}
+		};
+		boom_distance = if (boom_mix == 1.0) { distance } else { blended };
 		boom_initialized = true;
 		f32 depth = clamp_f(aim_distance + back * distance, 0.16, 9.0);
 		f32 projected = view_scale * distance / depth;

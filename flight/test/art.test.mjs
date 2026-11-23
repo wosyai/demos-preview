@@ -27,7 +27,7 @@ async function art() {
   }).exports;
   engine._start();
   return {
-    sample(course) { engine.reset(course); engine.tick(0, 0, 1.4); return { world, plane, state }; },
+    sample(course, aspect = 1.4) { engine.reset(course); engine.tick(0, 0, aspect); return { world, plane, state }; },
     view(mode, aspect) { engine.select_view(mode); engine.tick(0, 0, aspect); return { world, plane, state }; },
     step(input, aspect) { engine.tick(1 / 30, input, aspect); return { world, plane, state }; },
   };
@@ -155,7 +155,9 @@ test("the Wasm cockpit swaps the exterior aircraft for its own near geometry wit
   ]) {
     demo.sample(course);
     const outside = demo.view(0, aspect);
-    const inside = demo.view(1, aspect);
+    const pending = demo.view(1, aspect);
+    assert.deepEqual(pending.state, outside.state, "a paused switch does not skip the authored easing");
+    const inside = demo.sample(course, aspect);
     assert.notDeepEqual(inside.state.slice(0,16), outside.state.slice(0,16));
     assert(inside.state.slice(0,16).every(Number.isFinite));
     assert.deepEqual(inside.state.slice(16), outside.state.slice(16), "camera mode cannot change flight state or instruments");
@@ -174,8 +176,9 @@ test("the Wasm cockpit swaps the exterior aircraft for its own near geometry wit
       assert.equal(exteriorGuide.length, count, "the independent world guide exists");
       assert.deepEqual(vertices(inside.plane, guide), exteriorGuide, "camera switch retains identical world guidance");
     }
-    const returned = demo.view(0, aspect);
-    assert.deepEqual(returned.state, outside.state, "returning to chase restores the same complete frame");
+    demo.view(0, aspect);
+    const returned = demo.sample(course, aspect);
+    assert.deepEqual(returned.state, outside.state, "the authored chase endpoint is unchanged");
     assert.deepEqual(returned.plane, outside.plane);
   }
 });
@@ -187,24 +190,28 @@ test("banked cockpit horizon follows the actual left and right exterior wings", 
     [1, .68, [.96, .96, .86]],
   ]) {
     for (const [control, sign] of [[1, 1], [2, -1]]) {
-      demo.view(0, aspect);
-      demo.sample(course);
-      for (let n = 0; n < 59; n++) demo.step(20, aspect);
-      for (let n = 0; n < 21; n++) demo.step(control | 4, aspect);
-      const outside = demo.view(0, aspect);
+      const replayIn = (view) => {
+        demo.view(view, aspect);
+        demo.sample(course,aspect);
+        for (let n = 0; n < 59; n++) demo.step(20, aspect);
+        let pose;
+        for (let n = 0; n < 21; n++) pose = demo.step(control | 4, aspect);
+        return pose;
+      };
+      const outside = replayIn(0);
       assert.equal(outside.state[20], 7, "ordinary takeoff and bank stay in supply approach");
       assert.equal(outside.state[22], 0);
       assert(outside.state[19] > 2);
       const [left, right] = vertices(outside.plane, wing);
       const span = right.map((coordinate, axis) => coordinate - left[axis]);
       assert(sign * span[1] > 1, "commanded bank visibly raises the correct exterior wing");
-      const inside = demo.view(1, aspect);
+      const inside = replayIn(1);
       assert.equal(Math.sign(inside.state[4]), sign, "the cockpit right basis follows the exterior wing");
       const vertical = span[0] * inside.state[1] + span[1] * inside.state[5] + span[2] * inside.state[9];
       const horizontal = span[0] * inside.state[0] + span[1] * inside.state[4] + span[2] * inside.state[8];
       assert(Math.abs(vertical) < .08 && horizontal > 6, "the banked wings are level in their own cockpit basis");
       assert.deepEqual(inside.state.slice(16), outside.state.slice(16));
-      assert.deepEqual(demo.view(0, aspect).state, outside.state);
+      assert.deepEqual(replayIn(0).state, outside.state);
     }
   }
 });
