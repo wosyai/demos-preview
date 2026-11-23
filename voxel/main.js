@@ -4,7 +4,7 @@ const canvas = get("scene");
 const enter = get("enter");
 const missionStart = get("mission-start"), missionRetry = get("mission-retry");
 const missionHud = get("mission-hud"), missionResult = get("mission-result");
-const missionReadouts = get("mission-readouts"), flameMeter = get("flame");
+const missionReadouts = get("mission-readouts");
 const tideLevel = get("tide-level"), bridgeStock = get("bridge-stock"), relayGoal = get("relay-goal");
 const guideHint = get("guide-hint"), guideText = get("guide-hint-text"), guideHintIcon = get("guide-hint-icon");
 const guideMarker = get("guide-marker"), guideMarkerIcon = get("guide-marker-icon");
@@ -56,7 +56,7 @@ let engine, memory, gpu, playing = false, loaded = false, failed = false, contex
 let pointerLook = null, stick = null, axes = 0, toastTimer = 0, previous = 0, raf = 0;
 let displayedMaterial, displayedFlight, displayedGrounded;
 let aimX = 0, aimY = 0, terrainVersion = 0;
-let beaconState = 0, shownFlame = -1, shownTide = -1, shownWood = -1, shownRelay = -1;
+let beaconState = 0, shownTide = -1, shownWood = -1, shownRelay = -2, shownParts = -2;
 
 const vertex = `#version 300 es
 layout(location=0) in vec3 position;
@@ -77,6 +77,8 @@ in vec3 point;
 uniform vec3 eye;
 uniform vec3 fog;
 uniform int pass;
+uniform int adventure;
+uniform vec3 streamOwner;
 uniform sampler2D terrainAtlas;
 out vec4 pixel;
 void main() {
@@ -97,8 +99,26 @@ void main() {
     col=mix(water,fog,0.72*fresnel);
     alpha=mix(0.55+0.37*fresnel,1.0,haze);
   } else if (pass==0) {
+    if (adventure!=0) {
+      float radial=smoothstep(19.0,23.75,distance(streamOwner.xz,point.xz));
+      float lattice=fract(52.9829189*fract(dot(gl_FragCoord.xy,vec2(0.06711056,0.00583715))));
+      if (radial>lattice) discard;
+      haze=max(haze,radial);
+    }
     if (rgb.z > 1.0) {
-      col = rgb.z > 1.5 ? vec3(1.0,0.83,0.30) : vec3(0.88,0.39,0.09);
+      vec3 material;
+      if (abs(rgb.z-1.31)<0.02) material=vec3(0.23,0.94,1.0);
+      else if (abs(rgb.z-1.45)<0.02) material=vec3(1.0,0.79,0.21);
+      else if (abs(rgb.z-1.64)<0.02) material=vec3(1.0,0.43,0.73);
+      else material=vec3(0.0);
+      if (material.r>0.0) {
+        vec3 normal=normalize(cross(dFdx(point),dFdy(point))) * (gl_FrontFacing ? 1.0 : -1.0);
+        vec3 key=normalize(vec3(-.48,.78,.39));
+        vec3 view=normalize(eye-point);
+        float diffuse=0.5+0.5*dot(normal,key);
+        float glint=pow(max(dot(normal,normalize(key+view)),0.0),14.0);
+        col=material*(0.58+0.37*diffuse)+vec3(.76,.9,1.0)*(.16*glint);
+      } else col=rgb.z>1.5?vec3(1.0,0.83,0.30):vec3(0.88,0.39,0.09);
     } else {
       vec3 texel=texture(terrainAtlas,rgb.xy).rgb;
       float macro=sin(point.x*.33+sin(point.z*.44))*sin(point.z*.29-point.y*.41);
@@ -228,7 +248,7 @@ function newGraphics() {
     water: waterGeometry(),
     outline: geometry(layers.outline.data, gl.DYNAMIC_DRAW),
     player: geometry(layers.player.data, gl.DYNAMIC_DRAW),
-    main: locations(world, ["projection", "eye", "fog", "pass", "terrainAtlas"]),
+    main: locations(world, ["projection", "eye", "fog", "pass", "adventure", "streamOwner", "terrainAtlas"]),
     background: locations(sky, ["skyProjection", "fog"]),
   };
 }
@@ -273,10 +293,12 @@ function bindLayer(name, stride) {
   };
 }
 
-function bindMesh(pointer, count, id) {
-  if (!Number.isInteger(id) || id < 0 || id >= 64 || !Number.isInteger(count) || count < 0 || count > 55296 || count % 3 !== 0) {
+function bindMesh(pointer, count, chunkX, chunkZ) {
+  if (!Number.isInteger(chunkX) || chunkX !== (chunkX | 0) ||
+      !Number.isInteger(chunkZ) || chunkZ !== (chunkZ | 0) || !Number.isInteger(count) || count < 0 || count > 55296 || count % 3 !== 0) {
     throw new Error("The engine returned an invalid terrain chunk.");
   }
+  const id = `${chunkX},${chunkZ}`;
   terrainVersion++;
   if (count === 0) {
     terrainChunks.delete(id);
@@ -410,7 +432,7 @@ async function boot() {
   }
   try {
     prepareGraphics();
-    const response = await fetch(new URL("./engine.wasm?v=beacon-art-v1", import.meta.url));
+    const response = await fetch(new URL("./engine.wasm?v=beacon-expedition-parts-art-v1", import.meta.url));
     if (!response.ok) throw new Error(`Engine not found (HTTP ${response.status}).`);
     const bytes = await response.arrayBuffer();
     const api = {
@@ -433,7 +455,7 @@ async function boot() {
     memory = engine.memory;
     const required = [
       "_start", "generate", "control", "pulse_control", "clear_controls", "look", "tick", "edit_control",
-      "select_material", "cycle_material", "cycle_camera", "start_beacon", "leave_beacon",
+      "select_material", "cycle_material", "cycle_camera", "start_archipelago_lighthouse", "leave_beacon",
       "seed_begin", "seed_code_unit", "seed_end", "default_seed",
     ];
     if (!(memory instanceof WebAssembly.Memory) || required.some((name) => typeof engine[name] !== "function")) {
@@ -474,7 +496,7 @@ function renderControls(flight, grounded, material) {
   flightTouch.setAttribute("aria-pressed", String(flight));
 }
 
-function renderMission(state, flame, tide, stock, relay) {
+function renderMission(state, tide, stock, parts, nextPart) {
   if (state !== beaconState) {
     beaconState = state;
     shell.classList.toggle("beacon", state !== 0);
@@ -490,14 +512,13 @@ function renderMission(state, flame, tide, stock, relay) {
     }
   }
   if (state !== 1) return;
-  if (shownRelay !== relay) {
-    shownRelay = relay;
-    relayGoal.textContent = ["Cross to the north watchfire", "Light the west watchfire", "Climb to the lighthouse"][relay];
-  }
-  const flamePercent = Math.round(flame * 100);
-  if (shownFlame !== flamePercent) {
-    shownFlame = flamePercent;
-    flameMeter.value = flamePercent / 100;
+  if (shownRelay !== nextPart || shownParts !== parts) {
+    shownRelay = nextPart;
+    shownParts = parts;
+    const names = ["Lens", "Regulator", "Igniter"];
+    const collected = names.filter((_, bit) => (parts & (1 << bit)) !== 0).length;
+    const goal = nextPart === -1 ? "Return to the lighthouse" : "Find the " + names[nextPart].toLowerCase();
+    relayGoal.textContent = goal + " · " + collected + "/3 parts";
   }
   const stage = tide <= 0 ? 0 : tide >= 1 ? 2 : 1;
   if (shownTide !== stage) {
@@ -557,8 +578,8 @@ function renderObjectiveBearing(frame) {
 
 function present(pointer, hit) {
   if (!gpu || contextLost || document.hidden) return;
-  const data = memoryFloats(pointer, 37);
-  renderMission(data[25], data[26], data[27], data[28], data[29]);
+  const data = memoryFloats(pointer, 44);
+  renderMission(data[25], data[27], data[28], data[39], data[40]);
   renderBeaconGuide(data);
   renderObjectiveBearing(data);
   if (playing) renderControls(data[22] === 1, data[23] === 1, data[24]);
@@ -582,6 +603,8 @@ function present(pointer, hit) {
   gl.activeTexture(gl.TEXTURE0);
   gl.bindTexture(gl.TEXTURE_2D, gpu.terrainAtlas);
   gl.uniform1i(gpu.main.terrainAtlas, 0);
+  gl.uniform1i(gpu.main.adventure, data[25] > 0 ? 1 : 0);
+  gl.uniform3f(gpu.main.streamOwner, data[37], 0, data[38]);
   gl.uniform1i(gpu.main.pass, 0);
   for (const [id, { count }] of terrainChunks) {
     gl.bindVertexArray(gpu.terrain.get(id).vao);
@@ -732,6 +755,7 @@ function sendEdit(mode, state) {
     }
     if (result === -5) toast("Pick up the loose wood before building here.");
     if (result === -6) toast("Too much loose wood. Pick some up before mining again.");
+    if (result === -7) toast("This world has reached its edit limit. Existing edits are safe.");
   } catch (e) { fail("The engine could not update the island.", e); }
 }
 
@@ -812,7 +836,7 @@ function playBeacon(restart) {
     const restarted = restart || beaconState !== 1;
     if (restarted) {
       clearInputs();
-      engine.start_beacon();
+      engine.start_archipelago_lighthouse();
     }
     startPlaying(restarted);
   } catch (e) { fail("The engine could not start Beacon Run.", e); }

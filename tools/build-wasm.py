@@ -9,7 +9,7 @@ clang = os.environ.get("CLANG", "clang")
 linker = os.environ.get("WASM_LD", "wasm-ld")
 names = ("_start", "generate", "rebuild", "edit", "pick", "control", "clear_controls",
          "look", "reset_camera", "tick", "edit_view", "select_material", "cycle_material", "place_selected",
-         "seed_begin", "seed_code_unit", "seed_end", "default_seed", "pulse_control", "edit_control", "cycle_camera", "start_beacon", "leave_beacon")
+         "seed_begin", "seed_code_unit", "seed_end", "default_seed", "pulse_control", "edit_control", "cycle_camera", "start_beacon", "leave_beacon", "terrain_material", "terrain_ray_face", "start_lighthouse", "start_archipelago_lighthouse")
 sources = ((partition, "main.o"), (start, "start.o"), (runtime, "runtime.o"))
 objects = []
 for source, name in sources:

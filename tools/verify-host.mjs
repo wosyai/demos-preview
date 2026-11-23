@@ -152,7 +152,7 @@ async function loadHost(caseId, startsLost = false, stored = null, mobile = fals
     devicePixelRatio: 1,
     fetch(url) {
       assert(url.pathname.endsWith('/voxel/engine.wasm'));
-      assert.equal(url.search, '?v=beacon-art-v1');
+      assert.equal(url.search, '?v=beacon-expedition-parts-art-v1');
       return fetchResponse.promise;
     },
     requestAnimationFrame(fn) { frames.set(++frameId, fn); return frameId; },
@@ -197,9 +197,17 @@ async function loadHost(caseId, startsLost = false, stored = null, mobile = fals
           showcase.atlas(6144,caseId === "invalid-atlas" ? 64 : 128,caseId === "invalid-atlas" ? 32 : 16);
         }
         showcase.water(0, 6);
-        showcase.mesh(256, 3, 0);
+        showcase.mesh(256, 3, 0, 0);
+        if (caseId === 'signed-chunks') {
+          const vertices = new Float32Array(memory.buffer, 256, 18);
+          for (const [x, z, marker] of [[-1, 0, 0.25], [7, -1, 0.5], [-1, -1, 0.75]]) {
+            vertices.fill(marker);
+            showcase.mesh(256, 3, x, z);
+          }
+          showcase.mesh(256, 0, -1, 0);
+        }
       },
-      start_beacon() { mission = 1; counters.missionStarts = (counters.missionStarts || 0) + 1; },
+      start_archipelago_lighthouse() { mission = 1; counters.missionStarts = (counters.missionStarts || 0) + 1; },
       leave_beacon() { mission = 0; counters.missionLeaves = (counters.missionLeaves || 0) + 1; },
       look(x, y) { counters.looks.push([x,y]); },
       cycle_camera() {
@@ -224,9 +232,9 @@ async function loadHost(caseId, startsLost = false, stored = null, mobile = fals
           showcase.outline(1024, 2);
         }
         if (mission && counters.missionOverride !== undefined) mission = counters.missionOverride;
-        new Float32Array(memory.buffer, 512, 37).set([
+        new Float32Array(memory.buffer, 512, 44).set([
           +counters.flying, +counters.grounded, counters.picked, mission, mission === 3 ? 0 : .75, .50, 5, counters.relay ?? 0,
-          counters.guide ?? 0, 0, 0, 0, 0, ...(counters.bearing ?? [0, 0])
+          counters.guide ?? 0, 0, 0, 0, 0, ...(counters.bearing ?? [0, 0]), 0, 0, mission ? (counters.parts ?? 0) : -1, counters.nextPart ?? 0, 0, 0, 0
         ], 22);
         showcase.frame(512, caseId === 'water-life' && active ? 1 : -1);
       },
@@ -237,7 +245,7 @@ async function loadHost(caseId, startsLost = false, stored = null, mobile = fals
         if (state === 0) return 0;
         counters.edits.push(mode === 1 ? counters.picked : 0);
         new Float32Array(memory.buffer,256,18).fill(0.25);
-        showcase.mesh(256,3,0);
+        showcase.mesh(256, 3, 0, 0);
         return 1;
       },
     };
@@ -273,6 +281,18 @@ async function loadHost(caseId, startsLost = false, stored = null, mobile = fals
 function disabled(host, state) {
   for (const button of host.controls) assert.equal(button.disabled, state);
 }
+
+const signedChunks = await loadHost('signed-chunks');
+signedChunks.lostEvent();
+await signedChunks.resolveFetch();
+signedChunks.restoredEvent();
+assert.equal(signedChunks.status.textContent, 'Wosy · engine ready');
+const retainedTerrain = signedChunks.counters.uploads.filter((vertices) => vertices.length === 18);
+assert.equal(retainedTerrain.length, 3, 'restore keeps three independently keyed terrain chunks');
+assert(retainedTerrain.some((vertices) => vertices.every((v) => v === 0.5)),
+  'retiring (-1,0) must not erase (7,-1), though their old flat IDs would collide');
+assert(retainedTerrain.some((vertices) => vertices.every((v) => v === 0.75)), 'the diagonally negative chunk survives restore');
+assert(!retainedTerrain.some((vertices) => vertices.every((v) => v === 0.25)), 'the negative X chunk retires exactly');
 
 const pending = await loadHost('lost-pending');
 pending.lostEvent();
@@ -393,7 +413,7 @@ creative.node('flight-touch').dispatch('click');
 creative.frame();
 assert.equal(creative.node('flight-touch')['aria-pressed'], 'false', 'physical F suppresses a concurrent touch toggle');
 creative.doc.dispatch('keyup', { code: 'KeyF' });
-console.log('Creative host smoke passed: 37-float HUD, Wosy material authority, keyboard/wheel/touch inputs, and selected placement.');
+console.log('Creative host smoke passed: 44-float HUD, Wosy material authority, keyboard/wheel/touch inputs, and selected placement.');
 
 const accessible = await loadHost('accessible');
 await accessible.resolveFetch();
@@ -555,7 +575,7 @@ const page = await readFile(new URL('../voxel/index.html', import.meta.url), 'ut
 assert.match(page, /<html lang="en">/);
 assert.match(page, /<title>Pocket Island • Wosy<\/title>/);
 assert.match(page, /href="\.\/style\.css\?v=beacon-bearing-v1-arcade-ui4-single1"/);
-assert.match(page, /src="\.\/main\.js\?v=beacon-art-v1-arcade-ui4-single1"/);
+assert.match(page, /src="\.\/main\.js\?v=beacon-expedition-parts-art-v1-arcade-ui4-single1-depth1"/);
 assert.match(page, /id="move-stick"/);
 assert.doesNotMatch(page, /class="dpad"|data-move="Key[WASD]"/);
 assert.match(page, /title="Dirt · 2"/);
@@ -714,10 +734,9 @@ assert.equal(beacon.counters.missionStarts, 1);
 assert.equal(beacon.node('mission-start').textContent, 'Resume Beacon Run');
 assert.equal(beacon.node('mission-result').hidden, true);
 assert.equal(beacon.node('mission-hud').hidden, false);
-assert.equal(beacon.node('flame').value, .75);
 assert.equal(beacon.node('tide-level').textContent, 'Rising tide');
 assert.equal(beacon.node('bridge-stock').textContent, '5');
-assert.equal(beacon.node('relay-goal').textContent, 'Cross to the north watchfire');
+assert.equal(beacon.node('relay-goal').textContent, 'Find the lens · 0/3 parts');
 const bearing = beacon.node('objective-bearing');
 beacon.counters.bearing = [1, 0];
 beacon.frame();
@@ -732,14 +751,16 @@ beacon.frame();
 assert.equal(bearing.hidden, true, 'Wosy suppresses the bearing while its edit cue is active');
 beacon.counters.guide = 0;
 beacon.counters.bearing = [0, 1];
-beacon.counters.relay = 1;
+beacon.counters.parts = 1;
+beacon.counters.nextPart = 1;
 beacon.frame();
-assert.equal(beacon.node('relay-goal').textContent, 'Light the west watchfire');
+assert.equal(beacon.node('relay-goal').textContent, 'Find the regulator · 1/3 parts');
 assert.equal(bearing.hidden, false);
 assert.equal(bearing.style.transform, 'rotate(0deg)');
-beacon.counters.relay = 2;
+beacon.counters.parts = 7;
+beacon.counters.nextPart = -1;
 beacon.frame();
-assert.equal(beacon.node('relay-goal').textContent, 'Climb to the lighthouse');
+assert.equal(beacon.node('relay-goal').textContent, 'Return to the lighthouse · 3/3 parts');
 beacon.node('pause').dispatch('click');
 beacon.node('mission-start').dispatch('click');
 beacon.grantLock();

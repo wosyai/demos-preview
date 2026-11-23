@@ -20,6 +20,7 @@ let frame, missionFlameFloor = 1;
 let mesh;
 const absentMeshChunk = Object.freeze({ count: 0, hash: "", lantern: Object.freeze([]) });
 const meshChunks = Array(64).fill(absentMeshChunk);
+const signedMeshChunks = new Map();
 const meshPublications = [];
 let water;
 let outline;
@@ -60,14 +61,17 @@ engine = new WebAssembly.Instance(binary, {
       assert.equal(new Set(tileHashes).size, 8, 'surface material tiles must be distinct');
       atlasCount++;
     },
-    mesh(pointer, count, chunk) {
-      assert(Number.isInteger(chunk) && chunk >= 0 && chunk < 64, 'valid terrain chunk id');
+    mesh(pointer, count, chunkX, chunkZ) {
+      assert(Number.isInteger(chunkX) && chunkX >= -32 && chunkX < 40, 'valid signed terrain X chunk');
+      assert(Number.isInteger(chunkZ) && chunkZ >= -32 && chunkZ < 40, 'valid signed terrain Z chunk');
+      const fixed = chunkX >= 0 && chunkX < 8 && chunkZ >= 0 && chunkZ < 8;
+      const chunk = fixed ? chunkX + 8 * chunkZ : `${chunkX},${chunkZ}`;
       const current = layer(pointer, count, 3, 55296);
       const data = view(pointer, count * 6);
       const lantern = new Set();
       for (let i = 0; i < data.length; i += 6) {
-        assert(data[i] >= (chunk % 8) * 12 && data[i] <= (chunk % 8 + 1) * 12);
-        assert(data[i + 2] >= Math.floor(chunk / 8) * 12 && data[i + 2] <= (Math.floor(chunk / 8) + 1) * 12);
+        assert(data[i] >= chunkX * 12 && data[i] <= (chunkX + 1) * 12);
+        assert(data[i + 2] >= chunkZ * 12 && data[i + 2] <= (chunkZ + 1) * 12);
         assert(data[i + 3] > 0 && data[i + 3] < 1, 'baked atlas U outside bounds');
         assert(data[i + 4] > 0 && data[i + 4] < 1, 'baked atlas V outside bounds');
         const light = data[i + 5];
@@ -75,8 +79,11 @@ engine = new WebAssembly.Instance(binary, {
           'baked light outside ordinary light or beacon signal bounds');
         if (light > 1) lantern.add(light);
       }
-      meshChunks[chunk] = count === 0 ? absentMeshChunk : { ...current, lantern: Array.from(lantern) };
-      meshPublications.push({ chunk, count, hash: current.hash });
+      if (count === 0) signedMeshChunks.delete(`${chunkX},${chunkZ}`);
+      else signedMeshChunks.set(`${chunkX},${chunkZ}`, current);
+      assert(signedMeshChunks.size <= 29, 'stream residency is bounded, including a mode-transition overlap');
+      if (fixed) meshChunks[chunk] = count === 0 ? absentMeshChunk : { ...current, lantern: Array.from(lantern) };
+      meshPublications.push({ chunk, chunkX, chunkZ, count, hash: current.hash });
       mesh = { pointer, count: meshChunks.reduce((sum, part) => sum + part.count, 0),
         hash: meshChunks.map((part) => part.hash).join(':') };
     },
@@ -96,7 +103,7 @@ engine = new WebAssembly.Instance(binary, {
   wasi_snapshot_preview1: { proc_exit(code) { assert.fail('Wosy exited: ' + code); } },
 }).exports;
 
-const { _start, generate, rebuild, edit, pick, control, clear_controls, look, reset_camera, tick, edit_view, select_material, cycle_material, place_selected, seed_begin, seed_code_unit, seed_end, default_seed, pulse_control, edit_control, cycle_camera, start_beacon, leave_beacon, memory } = engine;
+const { _start, generate, rebuild, edit, pick, control, clear_controls, look, reset_camera, tick, edit_view, select_material, cycle_material, place_selected, seed_begin, seed_code_unit, seed_end, default_seed, pulse_control, edit_control, cycle_camera, start_beacon, leave_beacon, terrain_material, terrain_ray_face, memory } = engine;
 assert(memory instanceof WebAssembly.Memory);
 for (const fn of [_start, generate, rebuild, edit, pick, control, clear_controls, look, reset_camera, tick, edit_view, select_material, cycle_material, place_selected, seed_begin, seed_code_unit, seed_end, default_seed, pulse_control, edit_control, cycle_camera, start_beacon, leave_beacon]) {
   assert.equal(typeof fn, 'function');
@@ -569,9 +576,10 @@ function enterLighthouse() {
   jumpNorth(7.16, 'jump up one deck to the lighthouse entry');
   moveOn(0, 2, 5.95, -1, 'carry the lantern through the lighthouse door');
 }
-function lightWatchfires() {
+function lightWatchfires(whenNorth = null) {
   assert.equal(frame.values[29], 1, 'the first watchfire must be visited on the far shore');
   moveOn(0, 2, 9.45, -1, 'follow the high-bank trail past the tower approach');
+  if (whenNorth) whenNorth();
   moveOn(2, 0, 9.42, -1, 'reach the west watchfire');
   assert.equal(frame.values[29], 2, 'the west watchfire is a required second milestone');
   moveOn(3, 0, 24.40, 1, 'return to the high tower approach');
@@ -582,13 +590,24 @@ function lightWatchfires() {
 generate(726);
 assert(pick(38.5, 15.5, 38.5, 0, -1, 0) >= 0, 'creative terrain extends well beyond the old world');
 edit(42, 14, 42, 5);
-assert((pick(42.5, 15.5, 42.5, 0, -1, 0) & 63) === 42, 'far-end editable block survives ray encoding');
+assert.equal(pick(42.5, 15.5, 42.5, 0, -1, 0), 42 + (14 << 6) + (42 << 10) + (3 << 16),
+  'first hit retains legacy x, y, z, and top face');
 select_material(4);
 rebuild();
 const editedSandbox = mesh;
 assert(start_beacon() > 0);
 tick(0, 1, 1);
 const freshMission = mesh, freshWater = water, spawn = coords();
+assert.equal(pick(65.5, -0.5, 67.5, 0, 1, 0), 1 + (3 << 10) + (2 << 16) + (1 << 19) + (1 << 20),
+  'Beacon hit retains both high coordinate bits and the bottom face');
+assert.equal(terrain_ray_face(-383.5, 15.5, -383.5, 0, 0, 1), -1,
+  'the ray traverses the actual empty top layer along the underwater taper without stale hit state');
+assert.equal(terrain_ray_face(-120.5, 16.5, -120.5, 0, -1, 0), 3,
+  'a real ray hits the top surface outside the old packed coordinate range');
+assert.equal(pick(-120.5, 16.5, -120.5, 0, -1, 0), -1,
+  'the packed legacy ray ABI does not alias outside cells');
+assert.equal(pick(480.5, -0.5, 67.5, 0, 1, 0), -1, 'a ray beyond the playable extent still misses');
+assert(terrain_material(96, 0, 67) > 0, 'the authored world edge is no longer a terrain edge');
 assert.equal(freshWater.count, 7776, 'Beacon updates the extended sea without truncating far waters');
 assert.equal(freshWater.pointer, initialSea.pointer, 'both modes reuse the same packed vertex buffer');
 assert.deepEqual(missionHUD(), [1, 1, 0, 12, 0]);
@@ -732,7 +751,34 @@ assert(Math.abs(coords()[2] - 24.3) < .05, 'second ridge rise blocks walking');
 jumpNorth(23.52, 'jump the second ridge rise');
 moveOn(0, 2, 16.40, -1, 'come off the ridge onto the north bank');
 moveOn(2, 0, 24.54, -1, 'approach the north watchfire from the ridge');
-lightWatchfires();
+lightWatchfires(() => {
+  const owner = '2,-2';
+  const original = signedMeshChunks.get(owner).hash;
+  const x = 24, z = -13;
+  const seabed = terrain_material(x, 0, z);
+  assert(seabed > 0);
+  const airY = Array.from({ length: 16 }, (_, y) => y).find((y) => y > 0 && terrain_material(x + 1, y, z) === 0);
+  assert(Number.isInteger(airY));
+  const firstEdit = meshPublications.length;
+  assert.equal(edit(x, 0, z, 0), 1, 'mine the signed exterior bottom cell through the game edit export');
+  assert.equal(edit(x + 1, airY, z, 5), 1, 'place into exterior air through the same edit path');
+  assert.equal(terrain_material(x, 0, z), 0);
+  assert.equal(terrain_material(x + 1, airY, z), 5);
+  const rebuilt = meshPublications.slice(firstEdit).map(({ chunkX, chunkZ }) => [chunkX, chunkZ].join(','));
+  for (const key of ['2,-2', '1,-2', '2,-1']) assert(rebuilt.includes(key), `invalidate seam mesh ${key}`);
+  const changed = signedMeshChunks.get(owner).hash;
+  assert.notEqual(changed, original, 'the signed edit appears in the actual mesh');
+  moveOn(1, 2, 13.25, 1, 'step south to evict the edited exterior chunk');
+  assert(!signedMeshChunks.has(owner), 'actual render retirement occurred');
+  assert.equal(terrain_material(x, 0, z), 0, 'the air edit still exists where no render chunk is resident');
+  moveOn(0, 2, 9.45, -1, 'return north to stream the edited chunk');
+  assert.equal(signedMeshChunks.get(owner).hash, changed, 'real eviction and re-entry preserve exact edited mesh bytes');
+  assert.equal(terrain_material(x + 1, airY, z), 5, 'placed material also survives eviction');
+  assert.equal(edit(x, 0, z, seabed), 1, 'restore the original seabed');
+  assert.equal(edit(x + 1, airY, z, 0), 1, 'restore the original air');
+  assert.equal(signedMeshChunks.get(owner).hash, original, 'restored cells reproduce the exact generated mesh');
+  assert.equal(edit(x, 0, z, 0), 1, 'retain a final edit to check retry isolation');
+});
 
 assert(lanternColor().length > 0 && lanternColor().every(c => Math.abs(c - 1.85) < .001),
   'the finished lighthouse and both watchfires emit the brighter signal');
@@ -740,12 +786,16 @@ assert(Math.abs(coords()[1] - 7.62) < .02 && frame.values[23] === 1);
 const beaconOnly = meshChunks.flatMap((chunk, id) =>
   chunk.count > 0 && (id % 8 >= 4 || Math.floor(id / 8) >= 4) ? [id] : []);
 assert(beaconOnly.length > 0, 'the completed Beacon view still has genuinely resident outer slots');
+const beyondFixed = [...signedMeshChunks.keys()].filter((key) => key.split(',').some((part) => Number(part) < 0 || Number(part) > 7));
+assert(beyondFixed.some((key) => key.split(',').some((part) => Number(part) < 0)),
+  'ordinary movement streams actual mesh on a negative world seam');
 const beforeCreative = meshPublications.length;
 assert(leave_beacon() > 0);
 tick(0, 1, 1);
 assert.equal(phase(), 0);
-assert.deepEqual(meshPublications.slice(beforeCreative).filter(({ count }) => count === 0)
+assert.deepEqual(meshPublications.slice(beforeCreative).filter(({ count, chunk }) => count === 0 && typeof chunk === 'number')
   .map(({ chunk }) => chunk), beaconOnly, 'the generator explicitly retires the actual outer slots exactly once');
+for (const key of beyondFixed) assert(!signedMeshChunks.has(key), 'restore retires each signed adventure slot');
 for (const id of beaconOnly) assert.equal(meshChunks[id], absentMeshChunk);
 assert.deepEqual(mesh, editedSandbox, 'return to sandbox restores the expanded terrain and exact far-side edits');
 assert.deepEqual(water, initialSea, 'return to Creative restores exact original water geometry in the short buffer');
@@ -923,3 +973,36 @@ assert.deepEqual(bodyAxis(), pinnedHover);
 assert.equal(avatarUploads,pinnedUploads,'blocked flight does not keep submitting avatar meshes');
 control(2, 0);
 console.log('Verified actual-motion flight lean, signed banking, eased hover and avatar publication.');
+
+const survey = (seedValue) => {
+  generate(seedValue);
+  start_beacon();
+  const profile = [];
+  let mountains = 0, basins = 0, caves = 0;
+  for (let z = -210; z <= -24; z += 2) {
+    for (let x = -210; x <= -24; x += 2) {
+      let height = -1;
+      let airBelowRoof = false;
+      for (let y = 0; y < 16; y++) {
+        const material = terrain_material(x, y, z);
+        if (!material && height >= 0) airBelowRoof = true;
+        if (material) {
+          if (airBelowRoof) { caves++; airBelowRoof = false; }
+          height = y;
+        }
+      }
+      profile.push(height);
+      if (height >= 12) mountains++;
+      if (height < 3) basins++;
+    }
+  }
+  assert(mountains > 10 && basins > 10 && caves > 10,
+    'procedural terrain at far negative coordinates contains mountains, flooded basins, and caves');
+  assert.equal(terrain_material(-384, 1, -24), 0, 'world extent tapers underwater, not into an abrupt cliff');
+  assert.equal(terrain_material(-385, 0, -24), 0, 'sampling enforces the configured playable envelope');
+  return profile;
+};
+const seededAdventure = survey(726);
+assert(terrain_material(24, 0, -13) > 0, 'new adventure resets the previous overlay');
+assert.deepEqual(survey(726), seededAdventure, 'same seed reproduces the same terrain beyond the authored world');
+assert.notDeepEqual(survey(726 + 16381), seededAdventure, 'old modulo aliases no longer alias in the adventure terrain');

@@ -9,7 +9,7 @@ for (const aspect of [.56, 1.67]) {
     showcase: {
       atlas() {}, mesh() {}, water() {}, outline() {}, aim() {},
       frame(pointer, target) {
-        frame = new Float32Array(game.memory.buffer, pointer, 37).slice();
+        frame = new Float32Array(game.memory.buffer, pointer, 44).slice();
         hit = target;
       },
       player(pointer, count) {

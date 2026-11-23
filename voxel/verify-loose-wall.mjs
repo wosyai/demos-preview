@@ -13,12 +13,12 @@ const unpack = (hit) => {
 };
 for (const aspect of [.56, 1.67]) {
   let game, hud, hit, draw, yaw = 0, meshWrites = 0, drawnTail = new Float32Array();
-  const chunk = 26;
+  const chunkX = 2, chunkZ = 3;
   game = new WebAssembly.Instance(wasm, {
     showcase: {
       aim() {}, atlas() {}, outline() {}, player() {}, water() {},
-      mesh(pointer, count, id) {
-        if (id !== chunk) return;
+      mesh(pointer, count, x, z) {
+        if (x !== chunkX || z !== chunkZ) return;
         meshWrites++;
         const mesh = new Float32Array(game.memory.buffer, pointer, count * 6);
         draw = createHash('sha256').update(new Uint8Array(mesh.buffer, mesh.byteOffset, mesh.byteLength)).digest('hex');
