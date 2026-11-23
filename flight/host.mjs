@@ -298,10 +298,10 @@ function updateBatch(gl, item, source, memory) {
 export function bootFlight(win, doc) {
   const get = (name) => doc.getElementById(name);
   const shell = get("game"), canvas = get("view"), menu = get("menu"), hud = get("hud");
-  const status = get("engine"), problem = get("problem"), keys = get("keys"), touch = get("touch");
+  const status = get("engine"), problem = get("problem"), touch = get("touch");
   const summary = get("summary"), summaryTitle = get("summary-title"), summaryDetail = get("summary-detail");
   const summaryKicker = get("summary-kicker"), again = get("again"), choose = get("choose");
-  const summarySettings = get("flight-dialog-settings");
+  const summarySettings = get("flight-dialog-settings"), flightStats = get("flight-stats");
   const callout = get("callout"), flightCue = get("flight-cue"), buttons = Array.from(doc.querySelectorAll("[data-course]"));
   const actionButtons = Array.from(doc.querySelectorAll("[data-action]"));
   const stick = get("flight-stick"), viewToggle = get("view-toggle");
@@ -314,7 +314,6 @@ export function bootFlight(win, doc) {
   let loading = true, error = false, lost = false, hudTick = 0, dirty = true;
   let cockpit = false;
   const dropButton = actionButtons.find((button) => button.dataset.action === "drop");
-  const dropKey = get("drop-key");
   let activeStick = null, analogInput = false, dropPending = false, dropAvailable = false;
 
   function syncButtons() {
@@ -357,12 +356,11 @@ export function bootFlight(win, doc) {
     viewToggle.setAttribute("aria-pressed", String(cockpit));
     menu.hidden = mode !== "menu";
     hud.hidden = mode === "menu";
-    keys.hidden = touch.hidden = !active;
+    touch.hidden = !active;
     if (dropButton) {
       dropButton.hidden = !active || !dropAvailable;
       dropButton.disabled = !active || !dropAvailable;
     }
-    if (dropKey) dropKey.hidden = !active || !dropAvailable;
     if (!active) { callout.hidden = true; setText(flightCue, ""); }
     hud.inert = Boolean(modal);
   }
@@ -416,14 +414,9 @@ export function bootFlight(win, doc) {
     return framePointer === null ? null : memoryRange(memory, framePointer, frameLength, Float32Array);
   }
   function updateHud(frame) {
-    setText(instruments[0], clockText(frame[17]));
     setText(instruments[2], roundText(frame[18], "m/s"));
     setText(instruments[3], roundText(frame[19], "m"));
-    const gateCount = frame[32];
     const gateFeedback = frame[35] === 1;
-    setText(instruments[5], gateFeedback ? `${gateCount}/3 · +80`
-      : frame[33] < 3 && frame[34] > 0 ? `${gateCount}/3 · ${Math.ceil(frame[34])}s` : `${gateCount}/3`);
-    setText(instruments[4], frame[23] > 0 ? clockText(frame[23]) : "—");
     const phase = frame[20], dropStatus = frame[21], route = frame[25];
     dropAvailable = phase === 1 || phase === 9 || phase === 11;
     if (dropButton) {
@@ -434,7 +427,6 @@ export function bootFlight(win, doc) {
       if (dropButton.getAttribute("aria-label") !== action) dropButton.setAttribute("aria-label", action);
       dropButton.classList.toggle("drop-ready", phase === 9 || dropStatus === 9);
     }
-    if (dropKey) dropKey.hidden = !dropAvailable;
     const meters = roundText(frame[27], "m");
     let label, cue;
     if (phase === 6 || phase === 10) {
@@ -481,6 +473,13 @@ export function bootFlight(win, doc) {
     clearInput();
     capability();
     summary.hidden = false;
+    const snapshot = frame ?? state();
+    if (snapshot) {
+      setText(instruments[0], clockText(snapshot[17]));
+      setText(instruments[5], `${snapshot[32]}/3`);
+      setText(instruments[4], snapshot[23] > 0 ? clockText(snapshot[23]) : "—");
+    }
+    get("restart").hidden = type !== "pause";
     if (type === "pause") {
       setText(summaryKicker, "FLIGHT CONTROL");
       setText(summaryTitle, "Flight paused");
@@ -501,6 +500,7 @@ export function bootFlight(win, doc) {
     modal = null;
     summary.hidden = true;
     summarySettings.open = false;
+    if (flightStats) flightStats.open = false;
     previous = null;
     capability();
   }
@@ -759,7 +759,7 @@ export function bootFlight(win, doc) {
     if (!gl) { failure("This game needs WebGL 2. Try a current browser with hardware acceleration enabled."); return; }
     try {
       gpu = graphics(gl);
-      const wasm = await win.fetch(new URL("./flight.wasm?v=paris-postal-stencil-flight-v10", import.meta.url));
+      const wasm = await win.fetch(new URL("./flight.wasm?v=paris-quay-quarter-flight-v11", import.meta.url));
       if (!wasm.ok) throw new Error("The flight engine could not be downloaded.");
       const { instance } = await win.WebAssembly.instantiate(await wasm.arrayBuffer(), imports);
       engine = instance.exports;

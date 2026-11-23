@@ -6,8 +6,8 @@
   <meta name="theme-color" content="#162b31">
   <title>Flying Low · Wosy Arcade</title>
   <meta name="description" content="Fly two pioneering aircraft on crop patrol and an aerial mail delivery. An original Wosy browser game.">
-  <link rel="stylesheet" href="./style.css?v=paris-postal-stencil-flight-v10-arcade-ui4">
-  <script type="module" src="./host.mjs?v=paris-postal-stencil-flight-v10-arcade-ui4-space1"></script>
+  <link rel="stylesheet" href="./style.css?v=paris-quay-quarter-flight-v11-hud1">
+  <script type="module" src="./host.mjs?v=paris-quay-quarter-flight-v11-space1-hud1"></script>
   <link rel="stylesheet" href="../arcade/shell.css?v=4">
 </head>
 <body class="arcade-air">
@@ -51,23 +51,20 @@
     </section>
 
     <section id="hud" class="hud" aria-label="Flight instruments" hidden>
-      <h2 id="track" class="track">Crop Patrol</h2>
-      <dl class="instruments">
-        <div><dt>TIME</dt><dd id="time">0:00.00</dd></div>
-        <div><dt>MISSION</dt><dd id="mission-phase">Take off</dd></div>
-        <div><dt>SPEED</dt><dd id="speed">0</dd></div>
-        <div><dt>ALTITUDE</dt><dd id="altitude">0</dd></div>
-        <div class="record"><dt>BONUS GATES</dt><dd id="gates">0/3</dd></div>
-        <div class="record"><dt>BEST</dt><dd id="best">—</dd></div>
+      <div class="flight-next">
+        <strong id="mission-phase">Take off</strong>
+        <p id="callout" class="callout" aria-hidden="true" hidden></p>
+      </div>
+      <dl class="flight-readings">
+        <div><dt>Speed</dt><dd id="speed">0</dd></div>
+        <div><dt>Altitude</dt><dd id="altitude">0</dd></div>
       </dl>
       <div class="hud-actions">
-        <button id="view-toggle" type="button" aria-pressed="false" title="Change camera (V)">Cockpit</button>
-        <button id="restart" type="button">Restart</button>
-        <button id="pause" type="button">Pause</button>
+        <button id="view-toggle" type="button" aria-label="Switch camera view" aria-pressed="false" title="Switch camera view (V)"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="6" width="18" height="13" rx="2"/><circle cx="12" cy="12.5" r="3"/><path d="M8 6l1-2h6l1 2"/></svg></button>
+        <button id="pause" type="button" aria-label="Pause flight" title="Pause flight (Esc)"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 5v14m6-14v14"/></svg></button>
       </div>
     </section>
 
-    <p id="callout" class="callout" aria-hidden="true" hidden></p>
     <p id="flight-cue" class="sr-only" role="status"></p>
 
     <section id="summary" class="summary" role="dialog" aria-labelledby="summary-title" aria-modal="true" hidden>
@@ -76,8 +73,18 @@
       <p id="summary-detail">Fly again to beat your best time.</p>
       <div class="summary-actions">
         <button id="again" type="button" class="primary">Fly again</button>
+        <button id="restart" type="button" class="secondary" hidden>Restart</button>
         <button id="choose" type="button" class="secondary">Choose a mission</button>
       </div>
+      <details id="flight-stats" class="flight-stats">
+        <summary>Flight details</summary>
+        <p id="track">Crop Patrol</p>
+        <dl>
+          <div><dt>Time</dt><dd id="time">0:00.00</dd></div>
+          <div><dt>Bonus gates</dt><dd id="gates">0/3</dd></div>
+          <div><dt>Best</dt><dd id="best">—</dd></div>
+        </dl>
+      </details>
       <nav class="arcade-menu-tools" aria-label="Arcade menu">
         <details id="flight-dialog-settings" class="arcade-settings">
           <summary><svg class="arcade-tool-icon" aria-hidden="true" focusable="false"><use href="../arcade/icons.svg?v=2#settings"></use></svg> Controls</summary>
@@ -96,7 +103,6 @@
     <div id="touch" class="touch" aria-label="Touch flight controls" hidden>
       <div id="flight-stick" class="stick-zone" role="group" aria-label="Flight stick. Drag sideways to bank. Pull down to climb.">
         <span class="stick-base" aria-hidden="true"><span class="stick-knob"></span></span>
-        <span class="stick-label" aria-hidden="true">DRAG TO STEER</span>
       </div>
       <div class="throttle" aria-label="Throttle controls">
         <button type="button" data-action="drop" aria-label="Mission action" hidden>ACTION</button>
@@ -105,13 +111,6 @@
       </div>
     </div>
 
-    <footer id="keys" class="keys" hidden>
-      <span><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> / <kbd>↑</kbd><kbd>←</kbd><kbd>↓</kbd><kbd>→</kbd> flight stick</span>
-      <span><kbd>Q</kbd><kbd>E</kbd> power</span>
-      <span id="drop-key" hidden><kbd>Space</kbd> mission action</span>
-      <span><kbd>V</kbd> view</span>
-      <span><kbd>R</kbd> restart</span>
-    </footer>
     <noscript><p class="problem">Flying Low needs JavaScript to connect your controls to the flight engine.</p></noscript>
   </main>
 </body>

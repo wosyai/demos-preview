@@ -167,12 +167,33 @@ reset(1);
 assert.equal(worldUploads, 2, "changing course publishes new terrain");
 assert.notDeepEqual(world, farmWorld, "courses draw different scenery");
 if (!comparisonBaseline) {
-    const yard = [];
+    assert(world.length/6<32000,"the Paris quarter leaves space in the static mesh arena");
+    const yard = [], buoyTips = [], crossing = [], streets = [], awnings = [];
+    const approx=(a,b)=>Math.abs(a-b)<.001;
+    const riverBand=(x,z)=>z-(103.5+x*.49);
     for(let i=0;i<world.length;i+=6) {
-        const x=world[i], y=world[i+1], z=world[i+2];
+        const [x,y,z,r,g,b]=world.subarray(i,i+6);
+        const bank=riverBand(x,z);
+        if (x>=0 && x<88 && bank>12 && bank<60) {
+            assert(!(approx(y,.13) && ((approx(r,.23) && approx(g,.91)) || (approx(r,.98) && approx(g,.76)))),
+                "no obsolete solid route panel is left floating on the water");
+            if (approx(y,1.10) && ((approx(r,.28) && approx(g,.72)) || (approx(r,.83) && approx(g,.59))))
+                buoyTips.push([x,z]);
+        }
+        if (approx(y,.091) && approx(r,.92) && approx(g,.85) && approx(b,.69)) crossing.push([x,bank]);
+        if (((approx(y,.082) && approx(r,.39)) || (approx(y,.081) && approx(r,.42))) && approx(b,.39+(y<.0815?.03:0)))
+            streets.push(bank);
+        if (approx(y,2.79) && x>80 && x<122 && bank< -10 && bank> -21) awnings.push([x,bank]);
         if(x>=-92.86 && x<=-81.81 && y>=.143 && y<=.173 && z>=-27.11 && z<=4.81)
             yard.push(Array.from(world.subarray(i,i+6)));
     }
+    assert.equal(buoyTips.length,7,"the existing seven route hints are now compact buoy caps");
+    for(const [x,z] of [[8,143.7],[24,155.7],[41,167.7],[18,132.7],[40,147.7],[65,158.7],[84,174.7]])
+        assert(buoyTips.some(([bx,bz])=>approx(x,bx)&&approx(z,bz)),"every buoy preserves the old hint center");
+    assert.equal(crossing.length,72,"four street crossings each have three deliberate pale stripes");
+    assert(crossing.every(([,bank])=>bank > -28 && bank < -18),"crossings occupy the bank-side avenue, not the river");
+    assert(streets.some(bank=>bank< -18) && streets.some(bank=>bank>126),"paved avenues connect both banks");
+    assert.equal(awnings.length,12,"the four station bookstalls have pitched ends above the quay");
     const ofColor = (r,g,b) => yard.filter(v => Math.abs(v[3]-r)<.001 && Math.abs(v[4]-g)<.001 && Math.abs(v[5]-b)<.001);
     const stone = ofColor(.67,.60,.51);
     assert.equal(stone.length,6,"a single stone court links the real stop line to the post room");

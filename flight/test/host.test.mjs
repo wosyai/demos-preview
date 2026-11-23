@@ -61,9 +61,9 @@ function mock({ noGraphics = false, badMesh = false, initialLost = false, exitAt
   }
   const courses = [element("farm", {course: "0"}), element("paris", {course: "1"})];
   const controls = ["power", "brake", "drop"].map((value) => element(value, {action: value}));
-  for (const name of "game view menu hud engine problem keys touch flight-stick summary summary-title summary-detail summary-kicker again choose flight-dialog-settings flight-controls arcade-back callout flight-cue time mission-phase speed altitude best gates restart pause view-toggle track drop-key".split(" ")) element(name);
+  for (const name of "game view menu hud engine problem touch flight-stick summary summary-title summary-detail summary-kicker again choose flight-stats flight-dialog-settings flight-controls arcade-back callout flight-cue time mission-phase speed altitude best gates restart pause view-toggle track".split(" ")) element(name);
   const dialog = nodes.get("summary"), settings = nodes.get("flight-dialog-settings");
-  const dialogNodes = ["again", "choose", "flight-dialog-settings", "flight-controls", "arcade-back"].map((name) => nodes.get(name));
+  const dialogNodes = ["again", "restart", "choose", "flight-stats", "flight-dialog-settings", "flight-controls", "arcade-back"].map((name) => nodes.get(name));
   settings.open = false;
   dialog.querySelectorAll = () => dialogNodes.filter((node) => !node.disabled);
   for (const node of dialogNodes) {
@@ -384,14 +384,14 @@ test("the sky uses the live world camera projection before and after resize", as
   assert.notEqual(secondSky[2][0], firstSky[2][0]);
 });
 
-test("the Flight pause host has its own release token with matching v7 assets", async () => {
+test("the Flight minimal HUD updates both host assets and retains the same Wasm token", async () => {
   const sim = mock();
   await sim.ready;
   const html = await readFile(new URL("../index.html", import.meta.url), "utf8");
-  assert.match(html, /href="\.\/style\.css\?v=paris-postal-stencil-flight-v10-arcade-ui4"/);
-  assert.match(html, /src="\.\/host\.mjs\?v=paris-postal-stencil-flight-v10-arcade-ui4-space1"/);
+  assert.match(html, /href="\.\/style\.css\?v=paris-quay-quarter-flight-v11-hud1"/);
+  assert.match(html, /src="\.\/host\.mjs\?v=paris-quay-quarter-flight-v11-space1-hud1"/);
   assert.deepEqual(sim.called.requests.map((url) => [url.pathname.split("/").at(-1), url.search]),
-    [["flight.wasm", "?v=paris-postal-stencil-flight-v10"]]);
+    [["flight.wasm", "?v=paris-quay-quarter-flight-v11"]]);
 });
 
 test("view button and V toggle the engine camera without resetting a route", async () => {
@@ -605,16 +605,43 @@ test("ring feedback uses the engine flash, not a host timer or a count delta", a
   sim.courses[0].events("click");
   sim.rings(1, 1, 4, 0);
   sim.frame(110);
-  assert.equal(sim.nodes.get("gates").textContent, "1/3 · 4s");
+  assert.equal(sim.nodes.get("gates").textContent, "");
   assert.doesNotMatch(sim.nodes.get("flight-cue").textContent, /Ring cleared/);
   sim.rings(1, 1, 4, 1);
   sim.frame(220);
-  assert.equal(sim.nodes.get("gates").textContent, "1/3 · +80");
+  assert.match(sim.nodes.get("callout").textContent, /Ring cleared · \+80/);
   assert.match(sim.nodes.get("flight-cue").textContent, /Ring cleared/);
   sim.rings(1, 1, 3, 0);
   sim.frame(330);
-  assert.equal(sim.nodes.get("gates").textContent, "1/3 · 3s");
+  assert.doesNotMatch(sim.nodes.get("callout").textContent, /Ring cleared/);
   assert.doesNotMatch(sim.nodes.get("flight-cue").textContent, /Ring cleared/);
+});
+
+test("only next action, speed and altitude occupy the live HUD; stats and restart sit behind pause", async () => {
+  const html = await readFile(new URL("../index.html", import.meta.url), "utf8");
+  const hudMarkup = html.match(/<section id="hud"[\s\S]*?<\/section>/)?.[0];
+  assert.ok(hudMarkup);
+  for (const id of ["mission-phase", "callout", "speed", "altitude", "view-toggle", "pause"]) assert.match(hudMarkup, new RegExp(`id="${id}"`));
+  for (const id of ["gates", "time", "best", "track", "restart", "keys"]) assert.doesNotMatch(hudMarkup, new RegExp(`id="${id}"`));
+  const sim = mock({inputVersion: 1});
+  await sim.ready;
+  sim.courses[1].events("click");
+  const get = (id) => sim.nodes.get(id);
+  sim.rings(2, 2, 4, 0);
+  sim.frame(110);
+  get("pause").events("click");
+  assert.equal(get("gates").textContent, "2/3");
+  assert.equal(get("restart").hidden, false);
+  assert.equal(get("hud").inert, true);
+  get("flight-stats").open = true;
+  get("again").events("click");
+  assert.equal(get("flight-stats").open, false);
+  assert.equal(get("hud").inert, false);
+  get("pause").events("click");
+  const resetCount = sim.called.reset.length;
+  get("restart").events("click");
+  assert.equal(sim.called.reset.length, resetCount + 1);
+  assert.equal(get("summary").hidden, true);
 });
 
 test("only the exact mission frame ABI is accepted", async () => {

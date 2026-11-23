@@ -411,10 +411,12 @@ unit(f32,f32,f32,i32,i32,i32) window_storeys = fn(x,z,height,face,floor,style) {
 unit(f32,f32,f32,i32,i32) street_walls = fn(x,z,h,face,style) {
 	if (face < 4) {
 		window_storeys(x,z,h,face,0,style);
-		facade_quad(x,z,face,0.85,0.9,0.57,h-1.15,0.90,0.77,0.60);
-		facade_quad(x,z,face,25.95,0.9,0.57,h-1.15,0.90,0.77,0.60);
-		facade_quad(x,z,face,1.6,h-0.65,24.0,0.48,0.86,0.71,0.56);
-		facade_quad(x,z,face,1.6,0.7,24.0,0.40,0.63,0.54,0.49);
+		if (x >= -175.0 && z >= -100.0) {
+			facade_quad(x,z,face,0.85,0.9,0.57,h-1.15,0.90,0.77,0.60);
+			facade_quad(x,z,face,25.95,0.9,0.57,h-1.15,0.90,0.77,0.60);
+			facade_quad(x,z,face,1.6,h-0.65,24.0,0.48,0.86,0.71,0.56);
+			facade_quad(x,z,face,1.6,0.7,24.0,0.40,0.63,0.54,0.49);
+		};
 		street_walls(x,z,h,face+1,style);
 	};
 };
@@ -666,6 +668,11 @@ unit() runway = fn {
 	runway_marks(0);
 };
 
+unit(f32,f32,f32,f32,f32) river_marker = fn(x,z,r,g,b) {
+	diamond(x,0.07,z,0.87,0.32,0.40,0.48,0.45);
+	diamond(x,0.35,z,0.43,0.75,r,g,b);
+};
+
 unit() mail_landmarks = fn {
 	f32 x = drop_x();
 	f32 z = drop_z();
@@ -676,13 +683,13 @@ unit() mail_landmarks = fn {
 	box(x+5.65,0.21,z-6.0,0.35,4.0,0.35,0.83,0.76,0.60);
 	box(x-6.0,4.30,z-6.0,2.1,0.95,0.14,0.97,0.62,0.24);
 	box(x+4.0,4.30,z-6.0,2.0,0.95,0.14,0.97,0.62,0.24);
-	ground_patch(4.0,142.0,8.0,3.4,0.13,0.23,0.91,0.95);
-	ground_patch(20.0,154.0,8.0,3.4,0.13,0.23,0.91,0.95);
-	ground_patch(37.0,166.0,8.0,3.4,0.13,0.23,0.91,0.95);
-	ground_patch(14.0,131.0,8.0,3.4,0.13,0.98,0.76,0.36);
-	ground_patch(36.0,146.0,8.0,3.4,0.13,0.98,0.76,0.36);
-	ground_patch(61.0,157.0,8.0,3.4,0.13,0.98,0.76,0.36);
-	ground_patch(80.0,173.0,8.0,3.4,0.13,0.98,0.76,0.36);
+	river_marker(8.0,143.7,0.28,0.72,0.75);
+	river_marker(24.0,155.7,0.28,0.72,0.75);
+	river_marker(41.0,167.7,0.28,0.72,0.75);
+	river_marker(18.0,132.7,0.83,0.59,0.25);
+	river_marker(40.0,147.7,0.83,0.59,0.25);
+	river_marker(65.0,158.7,0.83,0.59,0.25);
+	river_marker(84.0,174.7,0.83,0.59,0.25);
 };
 
 unit(f32,f32,i32) bank_details = fn(x,z,i) {
@@ -735,6 +742,63 @@ unit(i32) bridge_masonry = fn(course_stone) {
 };
 
 f32(f32) upstream_bank = fn(px) { -117.0+(px+450.0)*0.49 };
+
+unit(f32,f32,f32,f32,f32,f32,f32,f32) bank_band = fn(x0,x1,offset,width,y,r,g,b) {
+	f32 z0 = upstream_bank(x0)+offset;
+	f32 z1 = upstream_bank(x1)+offset;
+	quad(x0,y,z0,x1,y,z1,x1,y,z1+width,x0,y,z0+width,r,g,b);
+};
+
+unit(f32,f32) quay_lamp = fn(x,z) {
+	box(x-0.14,0.12,z-0.14,0.28,3.05,0.28,0.27,0.30,0.29);
+	box(x-0.28,3.17,z-0.28,0.56,0.38,0.56,0.95,0.76,0.46);
+	diamond(x,3.55,z,0.42,0.28,0.32,0.36,0.32);
+};
+
+unit(f32,f32,f32,f32,f32) bookstall = fn(x,z,r,g,b) {
+	box(x,0.14,z,4.4,0.74,2.0,0.57,0.42,0.27);
+	box(x+0.2,0.88,z+0.2,3.96,0.24,1.57,0.66,0.49,0.30);
+	box(x+0.18,1.12,z+0.24,0.15,1.30,0.15,0.38,0.35,0.28);
+	box(x+4.11,1.12,z+0.24,0.15,1.30,0.15,0.38,0.35,0.28);
+	quad(x-0.22,2.38,z-0.41,x+4.55,2.38,z-0.41,x+4.55,2.79,z+2.17,x-0.22,2.79,z+2.17,r,g,b);
+	quad(x-0.22,2.38,z-0.42,x+4.55,2.38,z-0.42,x+4.55,2.19,z-0.42,x-0.22,2.19,z-0.42,0.88,0.76,0.53);
+};
+
+unit(f32) street_crossing = fn(x) {
+	f32 b = upstream_bank(x);
+	ground_patch(x,b-32.5,4.2,21.8,0.085,0.73,0.67,0.55);
+	ground_patch(x+0.62,b-25.8,0.46,6.8,0.091,0.92,0.85,0.69);
+	ground_patch(x+1.85,b-25.8,0.46,6.8,0.091,0.92,0.85,0.69);
+	ground_patch(x+3.08,b-25.8,0.46,6.8,0.091,0.92,0.85,0.69);
+};
+
+unit() paris_quarter = fn {
+	bank_band(-39.0,149.0,-31.0,24.7,0.079,0.71,0.65,0.54);
+	bank_band(-39.0,149.0,-26.4,7.4,0.082,0.39,0.42,0.39);
+	bank_band(-39.0,149.0,-27.35,0.52,0.086,0.88,0.79,0.61);
+	bank_band(-39.0,149.0,-18.69,0.52,0.086,0.88,0.79,0.61);
+	bank_band(-37.0,12.0,108.8,34.4,0.073,0.66,0.63,0.53);
+	bank_band(13.0,151.0,108.8,26.8,0.073,0.66,0.63,0.53);
+	bank_band(-37.0,151.0,126.2,7.4,0.081,0.42,0.44,0.42);
+	bank_band(-26.0,18.0,110.7,13.1,0.087,0.48,0.56,0.42);
+	bank_band(75.0,127.0,-16.2,8.9,0.092,0.76,0.67,0.54);
+	street_crossing(-19.0);
+	street_crossing(22.0);
+	street_crossing(91.0);
+	street_crossing(131.0);
+	f32 west = upstream_bank(82.0);
+	f32 east = upstream_bank(107.0);
+	bookstall(82.0,west-13.3,0.52,0.26,0.23);
+	bookstall(92.0,upstream_bank(92.0)-13.3,0.30,0.43,0.35);
+	bookstall(104.0,upstream_bank(104.0)-13.2,0.65,0.46,0.25);
+	bookstall(117.0,upstream_bank(117.0)-13.25,0.43,0.32,0.29);
+	quay_lamp(78.0,west-11.9);
+	quay_lamp(107.0,east-8.1);
+	quay_lamp(125.0,upstream_bank(125.0)-8.0);
+	tree(-15.0,upstream_bank(-15.0)+115.0,1.56);
+	tree(4.0,upstream_bank(4.0)+115.5,1.78);
+	tree(18.0,upstream_bank(18.0)+117.0,1.61);
+};
 
 unit(i32) quay_steps = fn(station) {
 	if (station < 8) {
@@ -924,6 +988,7 @@ unit() render_land = fn {
 		bridge(158.0,221.0,12.0);
 		bridge_masonry(0);
 		quay_steps(0);
+		paris_quarter();
 		city(0);
 		tower();
 		mail_landmarks();
