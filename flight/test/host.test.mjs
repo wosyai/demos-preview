@@ -216,7 +216,7 @@ test("reports a result, stores only the active course, restores replay on retry 
   assert.match(sim.nodes.get("summary-detail").textContent, /250 points/);
   assert.equal(sim.nodes.get("touch").hidden, true);
   assert.equal(sim.data.size, 1);
-  assert.ok(sim.data.has("wosy-flying-low/missions-v7/1"));
+  assert.ok(sim.data.has("wosy-flying-low/missions-v8/1"));
   sim.complete(false);
   sim.nodes.get("again").events("click");
   assert.deepEqual(sim.called.replay, [3,4,255,-1]);
@@ -444,9 +444,9 @@ test("the Flight minimal HUD updates both host assets and retains the same Wasm 
   await sim.ready;
   const html = await readFile(new URL("../index.html", import.meta.url), "utf8");
   assert.match(html, /href="\.\/style\.css\?v=paris-quay-quarter-flight-v11-hud1"/);
-  assert.match(html, /src="\.\/host\.mjs\?v=flight-cinematics-v12-space1-hud2"/);
+  assert.match(html, /src="\.\/host\.mjs\?v=flight-overhead-mail-v13-space1-hud2"/);
   assert.deepEqual(sim.called.requests.map((url) => [url.pathname.split("/").at(-1), url.search]),
-    [["flight.wasm", "?v=flight-cinematics-v12"]]);
+    [["flight.wasm", "?v=flight-overhead-mail-v13"]]);
 });
 
 test("view button and V toggle the engine camera without resetting a route", async () => {
@@ -542,7 +542,7 @@ test("Paris impact guidance never marks a high or early release ready", async ()
   assert.equal(drop.classes.has("drop-ready"), false);
   sim.cue({phase: 1, dropStatus: 8, route: 2});
   sim.frame(120);
-  assert.equal(callout.textContent, "Line up the blue impact marker with DROP");
+  assert.equal(callout.textContent, "Fly directly over the X");
   assert.equal(drop.classes.has("drop-ready"), false);
   sim.cue({phase: 1, dropStatus: 9, route: 2});
   sim.frame(220);
@@ -602,8 +602,9 @@ test("the Paris drop control supports quick taps and keyboard without swallowing
 
 test("mission replay storage isolates both courses and other replay namespaces", () => {
   const prefix = "wosy-flying-low/";
-  const active = prefix + "missions-v7/";
+  const active = [prefix + "missions-v7/0",prefix + "missions-v8/1"];
   const preserved = new Map([
+    [prefix + "missions-v7/1",btoa("legacy v7 directional Paris")],
     [prefix + "v1/1", btoa("legacy race binary")],
     [prefix + "missions-v4/0", btoa("v4 Wright")],
     [prefix + "missions-v4/1", btoa("v4 Paris")],
@@ -619,7 +620,7 @@ test("mission replay storage isolates both courses and other replay namespaces",
     setItem(key, value) { writes.push(key); data.set(key, value); },
   }));
   const wright = Uint8Array.of(87, 70, 7, 0, 255);
-  const paris = Uint8Array.of(87, 70, 7, 1, 0);
+  const paris = Uint8Array.of(87, 70, 8, 1, 0);
   const wrightRecord = String.fromCharCode(...wright);
   const parisRecord = String.fromCharCode(...paris);
   const store = open();
@@ -634,9 +635,9 @@ test("mission replay storage isolates both courses and other replay namespaces",
   const reopened = open();
   assert.equal(reopened.load(1), parisRecord);
   assert.equal(reopened.load(0), wrightRecord, "Paris save did not change Wright");
-  assert.deepEqual(writes, [active + "0", active + "1"]);
-  assert.deepEqual(reads, ["0", "1", "1", "0", "1", "0"].map((course) => active + course));
-  assert.deepEqual(data, new Map([...preserved, [active + "0", btoa(wrightRecord)], [active + "1", btoa(parisRecord)]]));
+  assert.deepEqual(writes, active);
+  assert.deepEqual(reads, [0,1,1,0,1,0].map((course) => active[course]));
+  assert.deepEqual(data, new Map([...preserved, [active[0], btoa(wrightRecord)], [active[1], btoa(parisRecord)]]));
 });
 
 test("rough touchdown announces survivable rollout and keeps cargo unloaded", async () => {

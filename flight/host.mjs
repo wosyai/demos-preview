@@ -7,7 +7,7 @@ const KEYS = new Map([
   ["KeyE", STEER.power], ["KeyQ", STEER.brake],
 ]);
 const COURSES = ["Crop Patrol", "Paris Air Mail"];
-const STORAGE_KEY = "wosy-flying-low/missions-v7/";
+const replayKey = (course) => `wosy-flying-low/missions-v${course === 1 ? 8 : 7}/${course}`;
 const MISSION_FRAME_FLOATS = 41;
 const LANDING_CUES = [
   "Land in the marked strip", "Level wings and align with the strip", "Brake to slow down",
@@ -15,7 +15,7 @@ const LANDING_CUES = [
 ];
 const RELEASE_CUES = [
   "", "", "", "", "", "Descend to the drop window", "Climb to the drop window",
-  "Level out and align", "Line up the blue impact marker with DROP", "Drop here",
+  "", "Fly directly over the X", "Drop here",
 ];
 const FAILURE_CUES = [
   "", "", "You hit an obstacle. Give it more clearance.", "You left the flight area or ran out of time.",
@@ -83,7 +83,7 @@ export function replayStore(storage) {
   return {
     load(course) {
       try {
-        const encoded = storage()?.getItem(STORAGE_KEY + course);
+        const encoded = storage()?.getItem(replayKey(course));
         if (!encoded || encoded.length > Math.ceil(MAX_REPLAY / 3) * 4) return null;
         const decoded = atob(encoded);
         return decoded.length <= MAX_REPLAY ? decoded : null;
@@ -95,7 +95,7 @@ export function replayStore(storage) {
         let binary = "";
         for (let n = 0; n < bytes.length; n += 4096)
           binary += String.fromCharCode(...bytes.subarray(n, n + 4096));
-        storage()?.setItem(STORAGE_KEY + course, btoa(binary));
+        storage()?.setItem(replayKey(course), btoa(binary));
       } catch { /* Private/quota-restricted browsing still supports local play. */ }
     },
   };
@@ -781,7 +781,7 @@ export function bootFlight(win, doc) {
     if (!gl) { failure("This game needs WebGL 2. Try a current browser with hardware acceleration enabled."); return; }
     try {
       gpu = graphics(gl);
-      const wasm = await win.fetch(new URL("./flight.wasm?v=flight-cinematics-v12", import.meta.url));
+      const wasm = await win.fetch(new URL("./flight.wasm?v=flight-overhead-mail-v13", import.meta.url));
       if (!wasm.ok) throw new Error("The flight engine could not be downloaded.");
       const { instance } = await win.WebAssembly.instantiate(await wasm.arrayBuffer(), imports);
       engine = instance.exports;

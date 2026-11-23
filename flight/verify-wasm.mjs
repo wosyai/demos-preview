@@ -521,7 +521,7 @@ function sortie(course, mode = "normal") {
     let checkedPortraitDrop = false, checkedChaseDrop = false, checkedSupplyFrustum = false;
     let checkedPredictedImpact = false;
     let seenFalling=0, seenContact=0, returnedAfterContact=false, previousPouchHeight=Infinity;
-    let cockpitAtRelease=false, returnedCockpit=false;
+    let cockpitAtRelease=false, returnedCockpit=false, heldPouchXZ=null, releaseHeading=null;
     let craftStartX;
     let movingSeine = false;
     let cartStartZ, movingCart = false;
@@ -558,6 +558,11 @@ function sortie(course, mode = "normal") {
                 }
                 const pouch=marker([.88,.41,.19]);
                 assert.equal(pouch.length,6,"the cut renders the actual pouch");
+                const cx=(Math.min(...pouch.map(v=>v[0]))+Math.max(...pouch.map(v=>v[0])))/2;
+                const cz=pouch[0][2]-.29;
+                if(!heldPouchXZ) heldPouchXZ=[cx,cz];
+                assert(Math.abs(cx-heldPouchXZ[0])<.001 && Math.abs(cz-heldPouchXZ[1])<.001,
+                    "the released pouch falls without horizontal drift");
                 const y=Math.min(...pouch.map(v=>v[1]));
                 assert(y<=previousPouchHeight+.001,"the cinematic pouch falls continuously");
                 previousPouchHeight=y;
@@ -567,8 +572,12 @@ function sortie(course, mode = "normal") {
                 const impact=marker([.31,.82,.32]);
                 assert.equal(impact.length,24,"a marker is drawn at the counted impact");
                 if(seenContact===0) {
-                    assert(impact.some(([x,,z])=>(x-109)**2+(z-218)**2<144),
-                        "the impact marker is in the same postal target");
+                    for(const [axis,coordinate] of [[0,heldPouchXZ[0]],[2,heldPouchXZ[1]]]) {
+                        const values=impact.map(v=>v[axis]);
+                        assert(Math.abs((Math.min(...values)+Math.max(...values))/2-coordinate)<.001,
+                            "the marker confirms the pouch's exact vertical world impact point");
+                    }
+                    assert((heldPouchXZ[0]-109)**2+(heldPouchXZ[1]-218)**2<=90.26,"the point is inside the original postal target");
                 }
                 if(seenContact===2 && mode==="normal")
                     verifyCueProjection("mail impact framing", () => impact, .12,.04);
@@ -734,7 +743,7 @@ function sortie(course, mode = "normal") {
                 step(input);
                 continue;
             }
-            const target = p.z < 100 ? [-111,160] : [67,190];
+            const target = p.z < 100 ? [-111,160] : mode === "eastbound overhead" ? [67,221] : [67,190];
             const slope = mode === "cyan" && p.x >= 24 && p.x < 49 ? .23 : 0;
             const height = mode === "high" && p.z > 140 ? 19 :
                 mode === "strike" ? 7.9 :
@@ -782,7 +791,7 @@ function sortie(course, mode = "normal") {
                 assert(dropMarker.some(([x,y,z]) => Math.abs(x-109)<.001 && Math.abs(y-4.7)<.001 && Math.abs(z-218)<.001),
                     "the tip stays anchored to the actual mail target");
             }
-            input = pilot(p,Math.atan2(109-p.x,218-p.z),mode === "high" ? 20 : 11,0,32);
+            input = pilot(p,mode === "eastbound overhead" ? 1.5707963 : Math.atan2(109-p.x,218-p.z),mode === "high" ? 20 : 11,0,32);
             if (!comparisonBaseline && mode === "normal" && status === 9 && !checkedPredictedImpact) {
                 const impactColor = [.44,.84,1];
                 const observedImpact = marker(impactColor);
@@ -790,7 +799,8 @@ function sortie(course, mode = "normal") {
                 const tip = observedImpact.reduce((a,b) => a[1]<b[1] ? a : b);
                 assert((tip[0]-109)**2 + (tip[2]-218)**2 <= 90.26,
                     "the Wosy pipper points inside the same legal impact circle while release is ready");
-                verifyCueProjection("predicted mail impact", () => marker(impactColor), .10, .015);
+                assert(Math.abs(tip[1]-.28)<.001 && Math.hypot(tip[0]-frame[37],tip[2]-frame[39])<1.53,
+                    "the guide is at surface height directly beneath the aircraft, with at most one interpolated step of lag");
                 checkedPredictedImpact = true;
             }
             if (!comparisonBaseline && mode === "early" && status === 8) {
@@ -813,7 +823,21 @@ function sortie(course, mode = "normal") {
                 observer?.finish("invalid release");
                 return {result:"invalid release"};
             }
-            if (status === 9) input |= 128;
+            if (status === 9) {
+                releaseHeading = p.angle;
+                if (mode === "eastbound overhead") {
+                    assert(Math.abs(difference(releaseHeading,.80))>.53,
+                        "this real eastbound heading is outside the removed alignment gate");
+                    step(input|128);
+                    assert.equal(frame[20],5,"a valid overhead release succeeds outside the old heading window");
+                    const groundPoint=[frame[37],frame[39]];
+                    for(let k=0;k<70 && frame[20]===5;k++) step(pilot(aircraftPose(),releaseHeading,11,0,32));
+                    assert.equal(frame[31],1,"the eastbound parcel counts on impact through real gameplay");
+                    assert.equal(frame[20],2);
+                    return {result:"eastbound delivered",heading:releaseHeading,groundPoint};
+                }
+                input |= 128;
+            }
         }
         if (phase === 5 || phase === 2) {
             if (!comparisonBaseline && course === 1 && mode === "normal") {
@@ -846,7 +870,7 @@ function sortie(course, mode = "normal") {
     if (!comparisonBaseline && course === 1 && (mode === "normal" || mode === "cyan"))
         assert(movingSeine,"ordinary Paris controls observe a real moving market boat and wake");
     if (mode === "riverside" || mode === "county") return {result: frame[22], phase:frame[20], position: aircraftPose(), surveyCruise, surveyEast};
-    return {result:frame[22], course, visited, time:frame[17], data:packet, actions:frame[31], gates:frame[32], route:frame[25]};
+    return {result:frame[22], course, visited, time:frame[17], data:packet, actions:frame[31], gates:frame[32], route:frame[25], releaseHeading};
 }
 const goodFarm = sortie(0), goodParis = sortie(1), cyanParis = sortie(1,"cyan");
 assert.equal(goodFarm.gates,3,"Crop Patrol confirms all three rings on a real flight");
@@ -950,6 +974,10 @@ assert.equal(sortie(1,"high").result,"invalid release");
 if (!comparisonBaseline) {
     assert.equal(sortie(1,"early").result,"early release rejected");
     assert.equal(sortie(1,"cockpit mail").result,1,"capturing the same mail shot restores an independently selected cockpit");
+    const side=sortie(1,"eastbound overhead");
+    assert.equal(side.result,"eastbound delivered");
+    assert(Math.abs(difference(side.heading,goodParis.releaseHeading))>.25,
+        "two distinct real approach headings can complete the same vertical delivery");
 }
 for (const {course, visited, result, time, data, actions, gates} of [goodFarm,goodParis,cyanParis]) {
     assert.equal(result,1,"complete delivery plus final stop earns a successful sortie");
@@ -957,7 +985,12 @@ for (const {course, visited, result, time, data, actions, gates} of [goodFarm,go
     assert.equal(actions,course?1:3);
     assert(gates>0 && gates<=3,"timed gate score is earned by a real flight path");
     reset(1-course); reset(course);
-    assert.equal(data[2],7);
+    assert.equal(data[2],course === 1 && !comparisonBaseline ? 8 : 7);
+    if(course===1 && !comparisonBaseline) {
+        const legacy=data.slice(); legacy[2]=7;
+        load(legacy); tick(0,0);
+        assert.equal(frame[23],0,"a v7 Paris packet cannot enter the changed overhead rules");
+    }
     assert.equal(data.length,6+2*(data[4]+data[5]*256));
     const noActions = data.slice();
     for (let i=6;i<noActions.length;i+=2) noActions[i] &= 127;

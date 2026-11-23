@@ -6,7 +6,7 @@
 <meta name="theme-color" content="#102726">
 <meta name="description" content="Last Ferry, a playable third-person seaside game made in Wosy.">
 <title>Last Ferry | Wosy Arcade</title>
-<link rel="stylesheet" href="./style.css?v=ferry-navigation-v2">
+<link rel="stylesheet" href="./style.css?v=ferry-free-orbit-v1">
   <link rel="stylesheet" href="../arcade/shell.css?v=4">
 </head>
 <body class="arcade-city">
@@ -34,7 +34,6 @@
     <div id="trip" class="trip"><svg class="icon" aria-hidden="true"><use href="#icon-route" id="bearing"/></svg><strong id="objective">Answer the phone</strong><span id="status"></span></div>
     <div id="departure" class="departure" hidden><svg class="icon" aria-hidden="true"><use href="#icon-time"/></svg><strong id="clock" aria-label="Time remaining">--:--</strong></div>
     <div class="deck-actions">
-      <button id="camera-view" type="button" class="quiet" aria-label="Switch camera view" title="Switch camera view (C)" disabled><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="6" width="18" height="13" rx="2"/><circle cx="12" cy="12.5" r="3"/><path d="M8 6l1-2h6l1 2"/></svg></button>
       <button id="pause" type="button" class="quiet" aria-label="Pause game" disabled><svg class="icon" aria-hidden="true"><use href="#icon-pause"/></svg></button>
     </div>
     <details id="city-map" class="city-map" hidden>
@@ -62,7 +61,7 @@
       <details class="arcade-settings">
         <summary><svg class="arcade-tool-icon" aria-hidden="true" focusable="false"><use href="../arcade/icons.svg?v=2#settings"></use></svg> Controls</summary>
         <div class="arcade-settings-body">
-          <strong>Driving controls</strong><div class="keys"><p id="guide">WASD or arrows to move, Space to brake or sprint, E to interact, C to switch camera, Esc to pause.</p><p>On touch: steer with the stick, and hold Gas, Reverse or Brake. On foot, use the stick and Sprint.</p></div>
+          <strong>Driving controls</strong><div class="keys"><p id="guide">WASD or arrows to move, Space to brake or sprint, E to interact, I/J/K/L to look, C to recenter, Esc to pause.</p><p>On touch: steer with the stick, and hold Gas, Reverse or Brake. On foot, use the stick and Sprint. Drag the scene to look around (touch or mouse). Double-tap the scene to recenter on touch.</p></div>
         </div>
       </details>
     </nav>
@@ -76,6 +75,6 @@
   </section>
   <span id="announce" class="sr-only" aria-live="polite"></span>
 </main>
-<script type="module" src="./host.mjs?v=ferry-wide-lens-v1-navigation-v2"></script>
+<script type="module" src="./host.mjs?v=ferry-free-orbit-v1-navigation-v2"></script>
 </body>
 </html>

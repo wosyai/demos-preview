@@ -1,7 +1,8 @@
-export const ENGINE_PATH = "./ferry.wasm?v=ferry-wide-lens-v1";
+export const ENGINE_PATH = "./ferry.wasm?v=ferry-free-orbit-v1";
 const INPUTS = new Map([
   ["KeyA","left"],["ArrowLeft","left"],["KeyD","right"],["ArrowRight","right"],
   ["KeyW","up"],["ArrowUp","up"],["KeyS","down"],["ArrowDown","down"],["Space","brake"],
+  ["KeyJ","lookLeft"],["KeyL","lookRight"],["KeyI","lookUp"],["KeyK","lookDown"],
 ]);
 const ACTIONS = ["","Enter car","Exit car","Collect tape","Board ferry","Leave ferry","Answer phone","Park & walk","Mark waterfront","Mark avenue"];
 const ACTION_ICONS = ["","enter","exit","tape","board","exit","phone","exit","waterfront","avenue"];
@@ -18,9 +19,9 @@ export function axes(x,y,radius) {
 export function inputState() {
   const keys = new Map(), buttons = new Map();
   return {
-    keys, buttons, stick: null, action: false, camera: false,
-    clear() { keys.clear(); buttons.clear(); this.stick=null; this.action=false; this.camera=false; },
-    sample() {
+    keys, buttons, stick: null, action: false, center: false, drag: null, tap: null, lookX: 0, lookY: 0,
+    clear() { keys.clear(); buttons.clear(); this.stick=null; this.action=false; this.center=false; this.drag=null; this.tap=null; this.lookX=0; this.lookY=0; },
+    sample(dt=0) {
       const keyboard=Array.from(keys.values());
       const held=(key)=>keyboard.includes(key);
       const horizontal=held("left")||held("right");
@@ -28,10 +29,13 @@ export function inputState() {
       const pedal=Array.from(buttons.values());
       const steer=horizontal ? Number(held("right"))-Number(held("left")) : (this.stick?.axis[0]??0);
       const drive=vertical ? Number(held("up"))-Number(held("down")) : pedal.includes("reverse") ? -1 : pedal.includes("power") ? 1 : (this.stick?.axis[1]??0);
-      const flags=Number(held("brake")||pedal.includes("brake")) | (this.action ? 2 : 0) | (this.camera ? 4 : 0);
+      const flags=Number(held("brake")||pedal.includes("brake")) | (this.action ? 2 : 0) | (this.center ? 4 : 0);
       this.action=false;
-      this.camera=false;
-      return [steer,drive,flags];
+      this.center=false;
+      const lookX=Math.max(-3.2,Math.min(3.2,this.lookX+2.4*dt*(Number(held("lookRight"))-Number(held("lookLeft")))));
+      const lookY=Math.max(-3.2,Math.min(3.2,this.lookY+1.25*dt*(Number(held("lookDown"))-Number(held("lookUp")))));
+      this.lookX=0; this.lookY=0;
+      return [steer,drive,flags,lookX,lookY];
     },
   };
 }
@@ -334,7 +338,7 @@ function fit(canvas,pixelRatio) {
 export async function boot(env=globalThis,createGraphics=graphics) {
   const {document,window,WebAssembly,performance}=env;
   const get=(id)=>document.getElementById(id);
-  const canvas=get("view"), wheel=get("wheel"), thumb=get("thumb"), pause=get("pause"), cameraView=get("camera-view");
+  const canvas=get("view"), wheel=get("wheel"), thumb=get("thumb"), pause=get("pause");
   const panel=get("panel"), start=get("start"), roam=get("roam"), power=get("power"), reverse=get("reverse"), brake=get("brake"), action=get("action");
   const objective=get("objective"), stats=get("status"), clock=get("clock"), hint=get("hint"), summary=get("summary"), announce=get("announce");
   const actionCaption=get("action-caption"), brakeCaption=get("brake-caption"), playHud=get("play-hud");
@@ -351,6 +355,7 @@ export async function boot(env=globalThis,createGraphics=graphics) {
     thumb.style.setProperty("--y",`${y}px`);
   };
   function clear() {
+    if (input.drag && canvas.hasPointerCapture(input.drag.id)) canvas.releasePointerCapture(input.drag.id);
     if (input.stick && wheel.hasPointerCapture(input.stick.id)) wheel.releasePointerCapture(input.stick.id);
     for(const [id,name] of input.buttons) {
       const node=get(name);
@@ -377,7 +382,6 @@ export async function boot(env=globalThis,createGraphics=graphics) {
     const available=ready&&!lost;
     start.disabled=!available; roam.disabled=!available;
     pause.disabled=!available||!playing;
-    cameraView.disabled=pause.disabled;
     playHud.hidden=pause.disabled;
     map.hidden=pause.disabled||!chart;
     label(summary,lost&&!failed ? "Graphics interrupted. Waiting for the browser to restore the scene." : menuText);
@@ -428,7 +432,7 @@ export async function boot(env=globalThis,createGraphics=graphics) {
   }
   function syncAspect(next) {
     aspect=next;
-    engine.tick(0,0,0,0,aspect);
+    engine.tick(0,0,0,0,aspect,0,0);
     show();
   }
   function show() {
@@ -490,7 +494,32 @@ export async function boot(env=globalThis,createGraphics=graphics) {
   start.addEventListener("click",()=>engage(paused ? mode : 0));
   roam.addEventListener("click",()=>{ if(ready&&!lost) { paused=false;engage(1); } });
   pause.addEventListener("click",suspend);
-  cameraView.addEventListener("click",()=>{ if(playing) input.camera=true; });
+  canvas.addEventListener("pointerdown",(e)=>{
+    if(!playing||input.drag||e.button!==0) return;
+    canvas.setPointerCapture(e.pointerId);
+    input.drag={id:e.pointerId,x:e.clientX,y:e.clientY,distance:0,started:e.timeStamp};
+    e.preventDefault();
+  });
+  canvas.addEventListener("pointermove",(e)=>{
+    const drag=input.drag;
+    if(!playing||drag?.id!==e.pointerId) return;
+    const dx=e.clientX-drag.x,dy=e.clientY-drag.y;
+    drag.distance+=Math.abs(dx)+Math.abs(dy);
+    input.lookX+=dx*.009;
+    input.lookY+=dy*.007;
+    drag.x=e.clientX; drag.y=e.clientY;
+  });
+  for(const name of ["pointerup","pointercancel","lostpointercapture"]) canvas.addEventListener(name,(e)=>{
+    if(input.drag?.id!==e.pointerId) return;
+    const drag=input.drag;
+    input.drag=null;
+    if(name!=="pointerup") { input.lookX=0; input.lookY=0; input.tap=null; return; }
+    if(e.pointerType!=="touch"||drag.distance>8||!(e.timeStamp-drag.started<230)) { input.tap=null; return; }
+    const tap=input.tap;
+    if(tap && e.timeStamp-tap.time<320 && Math.hypot(drag.x-tap.x,drag.y-tap.y)<24) {
+      input.tap=null; input.center=true;
+    } else input.tap={x:drag.x,y:drag.y,time:e.timeStamp};
+  });
   function updateStick(event) {
     const held=input.stick;
     const x=event.clientX-held.x,y=event.clientY-held.y;
@@ -538,7 +567,7 @@ export async function boot(env=globalThis,createGraphics=graphics) {
     e.preventDefault();
     if(e.repeat) return;
     if(e.code==="KeyE") input.action=true;
-    else if(e.code==="KeyC") input.camera=true;
+    else if(e.code==="KeyC") input.center=true;
     else input.keys.set(e.code,INPUTS.get(e.code));
   });
   window.addEventListener("keyup",(e)=>input.keys.delete(e.code));
@@ -609,7 +638,9 @@ export async function boot(env=globalThis,createGraphics=graphics) {
           if(playing) {
             aspect=next;
             if(input.action&&frame?.[16]===1&&(frame[20]===2||frame[20]===7)) releasePedals(true);
-            engine.tick(last ? Math.min((now-last)/1000,.05) : 0,...input.sample(),aspect);
+            const dt=last ? Math.min((now-last)/1000,.05) : 0;
+            const [steer,drive,flags,lookX,lookY]=input.sample(dt);
+            engine.tick(dt,steer,drive,flags,aspect,lookX,lookY);
             last=now;
             show();
           } else if(next!==aspect) {

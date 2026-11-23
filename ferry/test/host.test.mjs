@@ -18,22 +18,23 @@ test("pedals and one-shot action coexist with analog steering; keyboard axis pre
   control.buttons.set(2,"power");
   control.buttons.set(3,"brake");
   control.action=true;
-  assert.deepEqual(control.sample(),[.75,1,3]);
-  assert.deepEqual(control.sample(),[.75,1,1]);
+  assert.deepEqual(control.sample(),[.75,1,3,0,0]);
+  assert.deepEqual(control.sample(),[.75,1,1,0,0]);
   control.keys.set("KeyA","left");
   control.keys.set("KeyS","down");
-  assert.deepEqual(control.sample(),[-1,-1,1]);
+  assert.deepEqual(control.sample(),[-1,-1,1,0,0]);
   control.clear();
-  assert.deepEqual(control.sample(),[0,0,0]);
+  assert.deepEqual(control.sample(),[0,0,0,0,0]);
 });
 
 test("loader agrees with shell version, WebAssembly triangle shape, and 30-float engine frame",async()=>{
   const html=await readFile(new URL("../index.html",import.meta.url),"utf8");
   const version=html.match(/host\.mjs\?v=([^"]+)/)?.[1];
-  assert.equal(version,"ferry-wide-lens-v1-navigation-v2");
-  assert(html.includes('style.css?v=ferry-navigation-v2"'));
-  assert.equal(ENGINE_PATH,"./ferry.wasm?v=ferry-wide-lens-v1");
-  assert.match(html,/<div id="play-hud" class="play-hud" hidden>[\s\S]*?<header[^>]*>[\s\S]*?id="objective"[\s\S]*?id="status"[\s\S]*?id="camera-view"[\s\S]*?id="city-map"[\s\S]*?id="hint"[\s\S]*?<\/header>/);
+  assert.equal(version,"ferry-free-orbit-v1-navigation-v2");
+  assert(html.includes('style.css?v=ferry-free-orbit-v1"'));
+  assert.equal(ENGINE_PATH,"./ferry.wasm?v=ferry-free-orbit-v1");
+  assert.doesNotMatch(html,/id="camera-view"/);
+  assert.match(html,/<div id="play-hud" class="play-hud" hidden>[\s\S]*?<header[^>]*>[\s\S]*?id="objective"[\s\S]*?id="status"[\s\S]*?id="city-map"[\s\S]*?id="hint"[\s\S]*?<\/header>/);
   assert.match(html,/id="action-icon"[\s\S]*?<span id="action-caption">Interact<\/span>/);
   assert.match(html,/<button id="reverse"[^>]*>[\s\S]*?Reverse<\/button>/);
   assert(html.includes('lang="en"')&&html.includes('id="roam"'));
@@ -155,7 +156,7 @@ test("context loss during fetch does not enable menu or hide interruption until 
   canvas.emit("webglcontextrestored");
   assert(!start.disabled&&!roam.disabled);
   assert.deepEqual(app.uploads.map(([name])=>name),["world","moving"]);
-  assert.deepEqual(app.ticks,[[0,0,0,0,2]]);
+  assert.deepEqual(app.ticks,[[0,0,0,0,2,0,0]]);
 });
 
 test("restore before fetch completion also waits for a valid engine",async()=>{
@@ -165,7 +166,7 @@ test("restore before fetch completion also waits for a valid engine",async()=>{
   assert(app.get("start").disabled&&app.get("roam").disabled);
   app.finishFetch(); await app.started;
   assert(!app.get("start").disabled&&!app.get("roam").disabled);
-  assert.deepEqual(app.ticks,[[0,0,0,0,2]]);
+  assert.deepEqual(app.ticks,[[0,0,0,0,2,0,0]]);
 });
 
 test("partial exports never start, enable, or fail while clearing the loading menu",async()=>{
@@ -181,15 +182,15 @@ test("partial exports never start, enable, or fail while clearing the loading me
 
 test("menu and paused resizing synchronize camera once per aspect without advancing gameplay",async()=>{
   const app=shell(); await app.started;
-  assert.deepEqual(app.ticks,[[0,0,0,0,2]]);
+  assert.deepEqual(app.ticks,[[0,0,0,0,2,0,0]]);
   app.advance(); assert.equal(app.draws.length,1);
   const canvas=app.get("view");
   canvas.clientWidth=720; app.advance();
-  assert.deepEqual(app.ticks.at(-1),[0,0,0,0,1.5]);
+  assert.deepEqual(app.ticks.at(-1),[0,0,0,0,1.5,0,0]);
   app.get("start").emit("click"); app.advance(); app.advance();
   assert(app.ticks.at(-1)[0]>0);
   app.get("pause").emit("click"); canvas.clientWidth=480; app.advance(); app.advance();
-  assert.deepEqual(app.ticks.at(-1),[0,0,0,0,1]);
+  assert.deepEqual(app.ticks.at(-1),[0,0,0,0,1,0,0]);
   assert.equal(app.draws.length,5);
   const count=app.ticks.length;
   canvas.clientWidth=600; canvas.clientHeight=600; app.advance();
@@ -291,25 +292,45 @@ test("the phone prologue has one contextual action and no countdown",async()=>{
 });
 
 
-test("camera is a one-shot command, works with interact, and cannot queue during pause",async()=>{
+test("scene orbit is independent of movement, supports keyboard, and discards cancelled or paused drag",async()=>{
   const app=shell(); await app.started;
-  const camera=app.get("camera-view");
-  assert.equal(camera.disabled,true);
+  const view=app.get("view"), wheel=app.get("wheel"), gas=app.get("power");
   app.get("start").emit("click");
-  assert.equal(camera.disabled,false);
-  camera.emit("click");
+  app.mission({driving:true});
+  app.advance();
+  wheel.emit("pointerdown",{pointerId:1,clientX:0,clientY:0});
+  wheel.emit("pointermove",{pointerId:1,clientX:30,clientY:0});
+  gas.emit("pointerdown",{pointerId:2});
+  view.emit("pointerdown",{button:0,pointerId:3,clientX:100,clientY:100});
+  view.emit("pointermove",{pointerId:3,clientX:140,clientY:120});
+  view.emit("pointermove",{pointerId:2,clientX:280,clientY:320});
   app.window.emit("keydown",{code:"KeyE"});
-  app.advance(); assert.equal(app.ticks.at(-1)[3],6);
-  app.advance(); assert.equal(app.ticks.at(-1)[3],0);
-  app.window.emit("keydown",{code:"KeyC",repeat:true});
-  app.advance(); assert.equal(app.ticks.at(-1)[3],0);
+  app.advance();
+  const sample=app.ticks.at(-1);
+  assert(sample[1]>.25 && sample[2]===1 && sample[3]===2);
+  assert(Math.abs(sample[5]-.36)<.0001 && Math.abs(sample[6]-.14)<.0001);
+  view.emit("pointermove",{pointerId:3,clientX:165,clientY:145});
+  view.emit("pointercancel",{pointerId:3});
+  app.advance(); assert.deepEqual(app.ticks.at(-1).slice(5),[0,0]);
+  app.window.emit("keydown",{code:"KeyJ"});
+  app.advance(); assert(app.ticks.at(-1)[5]<0);
+  app.window.emit("keyup",{code:"KeyJ"});
   app.window.emit("keydown",{code:"KeyC"});
   app.advance(); assert.equal(app.ticks.at(-1)[3],4);
-  app.get("pause").emit("click");
-  assert.equal(camera.disabled,true);
-  camera.emit("click");
-  app.get("start").emit("click");
   app.advance(); assert.equal(app.ticks.at(-1)[3],0);
+  const tap=(id,time)=>{
+    view.emit("pointerdown",{button:0,pointerId:id,clientX:60,clientY:70,timeStamp:time});
+    view.emit("pointerup",{pointerId:id,pointerType:"touch",timeStamp:time+40});
+  };
+  tap(7,200);
+  app.advance(); assert.equal(app.ticks.at(-1)[3],0);
+  tap(8,350);
+  app.advance(); assert.equal(app.ticks.at(-1)[3],4);
+  app.get("pause").emit("click");
+  view.emit("pointerdown",{button:0,pointerId:4,clientX:0,clientY:0});
+  view.emit("pointermove",{pointerId:4,clientX:40,clientY:20});
+  app.get("start").emit("click");
+  app.advance(); assert.deepEqual(app.ticks.at(-1).slice(5),[0,0]);
 });
 
 

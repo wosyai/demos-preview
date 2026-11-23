@@ -43,7 +43,7 @@ engine = new WebAssembly.Instance(binary, { ferry: {
 }}).exports;
 
 const step = 1 / 60;
-const tick = (x=0,z=0,flags=0,dt=step,aspect=1.65) => engine.tick(dt,x,z,flags,aspect);
+const tick = (x=0,z=0,flags=0,dt=step,aspect=1.65,lookX=0,lookY=0) => engine.tick(dt,x,z,flags,aspect,lookX,lookY);
 const run = (n,x=0,z=0,flags=0,dt=step) => { for(let i=0;i<n;i++) tick(x,z,flags,dt); };
 const spot = () => [frame[26],frame[27]];
 const rawMoving = () => view(...moving,MOVING_FLOATS,18);
@@ -205,7 +205,7 @@ function cameraRoute(wide) {
   engine.reset(0);
   const observations=[];
   for(let i=0;i<120;i++) {
-    tick(0,0,wide && (i===0 || i===48) ? 4 : 0,step,i<48 ? .53 : 1.65);
+    tick(0,0,wide && i===48 ? 4 : 0,step,i<48 ? .53 : 1.65,wide&&i===0?1.1:0,wide&&i===0?-.14:0);
     observations.push({view:frame.slice(0,16),state:frame.slice(16),count:worldSends,
       moving:(i===23||i===119) ? rawMoving().slice() : null});
   }
@@ -217,38 +217,38 @@ for(let i=0;i<120;i++) {
   assert.equal(switchedView[i].count,1,"camera never republishes scenery");
   if(closeView[i].moving) assert.deepEqual(switchedView[i].moving,closeView[i].moving,"camera never changes actors");
 }
-assert(switchedView[23].view[15]-closeView[23].view[15]>1,"wide camera noticeably increases depth in portrait");
-assert(switchedView[47].view[15]-closeView[47].view[15]>1,"toggle persists after the one-shot flag");
+assert(Math.abs(switchedView[0].view[3]-closeView[0].view[3])<.34,"first orbit frame is smoothed");
+assert(switchedView[23].view[3]-closeView[23].view[3]>.5,"free orbit changes heading in portrait");
+assert(switchedView[47].view[3]-closeView[47].view[3]>.5,"look direction persists after drag release");
 assert(switchedView[119].view.every((v,i)=>Math.abs(v-closeView[119].view[i])<.0001),
-  "second independent toggle returns to the original close projection");
+  "manual recenter returns to the original projection");
 function cameraEye() {
   const v=frame;
   const right=v[0]**2+v[8]**2, up=v[1]**2+v[5]**2+v[9]**2;
   return [0,4,8].map(i=>-(v[12]*v[i]/right+v[13]*v[i+1]/up+v[15]*v[i+3]));
 }
-const cameraLens=()=>Math.hypot(frame[1],frame[5],frame[9]);
+const cameraHeading=()=>Math.atan2(frame[3],frame[11]);
 function framedWallFoot(wide) {
   engine.reset(0);
   for(const p of [[3.8,-4.6],[3.8,5.0],[9.5,5.0]]) walkTo(...p);
   for(let i=0;i<24;i++) tick(0,0,0,step,.53);
-  const before=cameraLens(), position=spot(), views=[];
+  const before=cameraHeading(), position=spot(), views=[];
   for(let i=0;i<44;i++) {
-    tick(i<18?.22:0,0,wide&&i===0?4:0,step,.53);
+    tick(i<18?.22:0,0,0,step,.53,wide&&i===0?.30:0,wide&&i===0?.09:0);
     const eye=cameraEye();
     assert(eye[2]>3.65 && eye[2]<frame[27]-.55,"walking camera remains in front of the actual north facade");
     assert(eye[1]>2.2 && eye[1]<2.6,"walking camera uses the constrained pose");
-    views.push({state:frame.slice(16),lens:cameraLens(), eye, route:guidePoints()});
+    views.push({state:frame.slice(16),heading:cameraHeading(), eye, route:guidePoints()});
   }
   assert(frame[26]>position[0]+.06,"the walking comparison includes real normal-input motion");
   return {before,views};
 }
 const tightFoot=framedWallFoot(false), wideFoot=framedWallFoot(true);
-assert(wideFoot.views[0].lens>wideFoot.before*.90,"one toggle does not snap the lens");
-assert(wideFoot.views[43].lens < tightFoot.views[43].lens*.79,"the wall-constrained walking camera still visibly switches lens");
+assert(Math.abs(wideFoot.views[0].heading-wideFoot.before)<.14,"drag does not snap the heading");
+assert(wideFoot.views[43].heading-tightFoot.views[43].heading>.24,"wall-constrained walking camera still visibly orbits");
 for(let i=0;i<44;i++) {
   assert.deepEqual(wideFoot.views[i].state,tightFoot.views[i].state,"foot map, mission and direction cue are not camera-dependent");
   assert.deepEqual(wideFoot.views[i].route,tightFoot.views[i].route);
-  assert(wideFoot.views[i].eye.every((v,j)=>Math.abs(v-tightFoot.views[i].eye[j])<.001),"lens distinction does not require putting the eye inside the wall");
 }
 
 engine.reset(1);
@@ -309,9 +309,14 @@ function checkPierView() {
   assert.equal(frame[20],4,"camera never changes the boarding action");
 }
 checkPierView();
-tick(0,0,4,step,.53);
+tick(0,0,0,step,.53,.16,.00);
 for(let i=0;i<32;i++) tick(0,0,0,step,.53);
 checkPierView();
+tick(0,0,0,step,.53,Math.PI-.16,0);
+for(let i=0;i<45;i++) tick(0,0,0,step,.53);
+assert(cameraEye()[2]>frame[27]+2 && cameraEye()[1]>3.45,
+  "orbit away from the actual marquee ray restores the ordinary camera height");
+assert.equal(frame[20],4,"looking away leaves the boarding cue available");
 tick(0,0,4,step,1.65);
 for(let i=0;i<32;i++) tick();
 checkPierView();
@@ -734,19 +739,19 @@ assert(Math.hypot(frame[26]-corner[0],frame[27]-corner[1])>1.7,"ordinary reverse
 function movingWallCar(wide) {
   engine.reset(1); mount();
   assert(driver([9,4.4],5,350).includes(5),"camera comparison starts at the real building corner");
-  const atContact=spot(), before=cameraLens(), views=[];
+  const atContact=spot(), before=cameraHeading(), views=[];
   for(let i=0;i<83;i++) {
-    tick(-.38,-.86,wide&&i===0?4:0,step,.53);
+    tick(-.38,-.86,0,step,.53,wide&&i===0?-.85:0,wide&&i===0?-.09:0);
     solidClear(cornerRect);
     const [x,,z]=cameraEye();
     assert(x<7.8 || x>23.8 || z< -10 || z>3.5,"car camera eye stays out of the tested building");
-    views.push({lens:cameraLens(), state:frame.slice(16), route:guidePoints()});
+    views.push({heading:cameraHeading(), state:frame.slice(16), route:guidePoints()});
   }
   assert(Math.hypot(frame[26]-atContact[0],frame[27]-atContact[1])>1.7,"the car comparison includes an ordinary reverse turn");
   return {before,views};
 }
 const tightCar=movingWallCar(false), wideCar=movingWallCar(true);
-assert(wideCar.views[82].lens < tightCar.views[82].lens*.79,"a camera tap visibly changes the moving car view");
+assert(Math.abs(normalAngle(wideCar.views[82].heading-tightCar.views[82].heading))>.7,"a drag visibly orbits a reversing car");
 for(let i=0;i<83;i++) {
   assert.deepEqual(wideCar.views[i].state,tightCar.views[i].state,"camera tap never changes car collision, speed or direction");
   assert.deepEqual(wideCar.views[i].route,tightCar.views[i].route);

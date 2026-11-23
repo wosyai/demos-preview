@@ -102,17 +102,36 @@ void main() {
     alpha=mix(0.55+0.37*fresnel,1.0,haze);
   } else if (pass==0 || pass==3) {
     if (adventure!=0) {
-      float range=distance(streamOwner.xz,point.xz);
-      float radial=smoothstep(19.0,23.75,range);
-      float lattice=fract(52.9829189*fract(dot(gl_FragCoord.xy,vec2(0.06711056,0.00583715))));
+      vec2 delta=point.xz-streamOwner.xz;
+      float range=length(delta);
+      vec2 chunkCenter=(floor(streamOwner.xz/12.0)+.5)*12.0;
+      vec2 local=abs(point.xz-chunkCenter);
+      float edge=max(local.x,local.y);
       if (pass==3) {
+        bool voxel=rgb.z>1.5;
         vec3 normal=normalize(cross(dFdx(point),dFdy(point))) * (gl_FrontFacing ? 1.0 : -1.0);
         float lit=max(dot(normal,${sunVector}),0.0);
-        if (range<18.5 || range>=82.0) discard;
-        alpha=1.0-smoothstep(64.0,82.0,range);
-        col=rgb*(.75+.44*lit);
-        haze=max(haze,.12+.88*smoothstep(29.0,82.0,range));
+        vec2 midLocal=abs(point.xz-chunkCenter+2.0);
+        float midEdge=max(midLocal.x,midLocal.y);
+        if (range<17.0 || range>=146.0 || (!voxel && midEdge<38.0)) discard;
+        if (voxel) {
+          vec2 plane=normal.y>.5?point.xz:vec2(abs(normal.x)>.5?point.z:point.x,point.y);
+          vec2 texel=(floor(fract(plane*.55)*16.0)+.5)/16.0;
+          col=texture(terrainAtlas,vec2((rgb.r+texel.x)/8.0,texel.y)).rgb;
+          float bands=sin(point.y*6.1 + .35*sin(point.x*1.2+point.z*.9));
+          col*=.79+.34*lit+.06*bands;
+          alpha=1.0-.3*smoothstep(38.0,40.0,midEdge);
+          haze=.10+.25*smoothstep(20.0,52.0,range);
+        } else {
+          float relief=sin(point.x*.23+sin(point.z*.18))*sin(point.z*.31);
+          col=rgb*(.76+.35*lit+.07*relief);
+          alpha=1.0-smoothstep(116.0,146.0,range);
+          haze=.25+.64*smoothstep(42.0,146.0,range);
+        }
       } else {
+        bool leaves=rgb.z<=1.0 && floor(rgb.x*8.0)==7.0;
+        float radial=adventure==2?smoothstep(leaves?24.5:26.0,leaves?26.5:29.75,edge):smoothstep(19.0,23.75,range);
+        float lattice=fract(52.9829189*fract(dot(gl_FragCoord.xy,vec2(0.06711056,0.00583715))));
         if (radial>lattice) discard;
         if (adventure==1) haze=max(haze,radial);
       }
@@ -162,6 +181,7 @@ precision highp float;
 in vec2 uv;
 uniform mat4 skyProjection;
 uniform vec3 fog;
+uniform int hasLand;
 out vec4 pixel;
 vec3 skyRay(mat4 matrix, vec2 screen) {
   vec3 right = vec3(matrix[0].x, matrix[1].x, matrix[2].x);
@@ -200,7 +220,7 @@ void main() {
   }
   col=mix(col,vec3(1.,.79,.48),.33*exp(-8.0*d));
   col=mix(col,vec3(1.,.96,.81),1.0-smoothstep(.018,.023,d));
-  if(ray.y<.065 && ray.y>-.035) {
+  if(hasLand==0 && ray.y<.065 && ray.y>-.035) {
     float angle=atan(ray.x,ray.z);
     float ridge=max(0.0,noise(vec2(angle*4.2,6.3))-.46);
     float edge=.005+ridge*.13;
@@ -266,7 +286,7 @@ function newGraphics() {
     outline: geometry(layers.outline.data, gl.DYNAMIC_DRAW),
     player: geometry(layers.player.data, gl.DYNAMIC_DRAW),
     main: locations(world, ["projection", "eye", "fog", "pass", "adventure", "streamOwner", "terrainAtlas"]),
-    background: locations(sky, ["skyProjection", "fog"]),
+    background: locations(sky, ["skyProjection", "fog", "hasLand"]),
   };
 }
 
@@ -452,7 +472,7 @@ async function boot() {
   }
   try {
     prepareGraphics();
-    const response = await fetch(new URL("./engine.wasm?v=beacon-expedition-horizon-v1", import.meta.url));
+    const response = await fetch(new URL("./engine.wasm?v=beacon-expedition-vista-v2", import.meta.url));
     if (!response.ok) throw new Error(`Engine not found (HTTP ${response.status}).`);
     const bytes = await response.arrayBuffer();
     const api = {
@@ -460,7 +480,7 @@ async function boot() {
         atlas: bindAtlas,
         mesh: bindMesh,
         water: bindWater,
-        horizon: bindLayer("horizon", 3, 5400),
+        horizon: bindLayer("horizon", 3, 11016),
         outline: bindLayer("outline", 2),
         player: bindLayer("player", 3),
         aim: positionAim,
@@ -615,6 +635,7 @@ function present(pointer, hit) {
   const projection = data.subarray(0, 16);
   gl.uniformMatrix4fv(gpu.background.skyProjection, false, projection);
   gl.uniform3fv(gpu.background.fog, fogColor);
+  gl.uniform1i(gpu.background.hasLand, adventure === 2 ? 1 : 0);
   gl.bindVertexArray(gpu.skyVao);
   gl.drawArrays(gl.TRIANGLES,0,3);
 

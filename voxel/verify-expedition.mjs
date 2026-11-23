@@ -11,7 +11,7 @@ const emission = [1.31, 1.45, 1.64];
 engine = new WebAssembly.Instance(wasm, {
   showcase: {
     horizon(pointer, count) {
-      assert(count <= 5400 && count % 6 === 0, 'coarse terrain has a fixed budget and whole tiles');
+      assert(count <= 11016 && count % 6 === 0, 'coarse terrain has a fixed budget and whole tiles');
       horizon = Array.from(new Float32Array(engine.memory.buffer, pointer, count * 6));
       horizonPublications++;
     },
@@ -86,20 +86,26 @@ const start = (seed) => {
   assert.equal(frame[25], 1);
   assert.equal(frame[39], 0);
   assert(resident.size <= 25, 'horizon does not grow the full-resolution terrain residency');
-  assert.equal(horizon.length, 5400 * 6);
+  assert(horizon.length < 11016 * 6 && horizon.length > 1500 * 6);
+  let far = 0, midSlopes = 0, distantLand = 0;
   const heights = new Set();
-  let far = 0, aboveTide = false;
-  for (let i = 0; i < horizon.length; i += 6) {
-    const [x, y, z] = horizon.slice(i, i + 3);
-    assert(Number.isFinite(y) && x % 6 === 0 && z % 6 === 0, 'horizon terrain uses the same world grid');
+  for (let i = 0; i < horizon.length; i += 18) {
+    const [x, y, z, r, , tag] = horizon.slice(i, i + 6);
+    const offset = tag === 2 ? 0 : 2;
+    const aligned = (v) => ((v - offset) % 4 + 4) % 4 === 0;
+    assert(Number.isFinite(y) && aligned(x) && aligned(z) && (tag === 2 || tag <= 1),
+      'horizon terrain is aligned to fixed world lattices');
+    assert(tag !== 2 || [0, 1, 3, 4].includes(r), 'mid-distance faces reuse terrain atlas materials');
     const distance = Math.hypot(x - frame[37], z - frame[38]);
     far = Math.max(distance, far);
-    if (distance >= 35 && distance <= 62) {
+    if (tag === 2 && distance >= 29 && distance <= 51) {
+      if (Math.abs(y - horizon[i + 7]) >= 1 || Math.abs(y - horizon[i + 13]) >= 1) midSlopes++;
       heights.add(Math.round(y));
-      if (y > 7) aboveTide = true;
     }
+    if (tag < 1 && distance > 100 && distance < 140 && y >= 7) distantLand++;
   }
-  assert(far > 80 && heights.size > 4 && aboveTide, 'real seeded land forms are present beyond mesh detail');
+  assert(far > 145 && distantLand > 10, 'seeded high ground extends beyond the old geometric range');
+  assert(midSlopes > 10 && heights.size > 3, 'readable terrace walls and terrain samples exist beyond the fine detail radius');
   const beforeStationary = horizonPublications;
   tick();
   tick();

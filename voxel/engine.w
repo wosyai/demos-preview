@@ -49,7 +49,9 @@ f32[6][24][24][24] blank_mesh_layer = [
 	blank_mesh_row, blank_mesh_row, blank_mesh_row, blank_mesh_row, blank_mesh_row, blank_mesh_row, blank_mesh_row, blank_mesh_row, blank_mesh_row, blank_mesh_row, blank_mesh_row, blank_mesh_row,
 	blank_mesh_row, blank_mesh_row, blank_mesh_row, blank_mesh_row, blank_mesh_row, blank_mesh_row, blank_mesh_row, blank_mesh_row, blank_mesh_row, blank_mesh_row, blank_mesh_row, blank_mesh_row
 ];
-f32[6][24][24][10] horizon_vertices = [
+f32[6][24][24][20] horizon_vertices = [
+	blank_mesh_row, blank_mesh_row, blank_mesh_row, blank_mesh_row, blank_mesh_row,
+	blank_mesh_row, blank_mesh_row, blank_mesh_row, blank_mesh_row, blank_mesh_row,
 	blank_mesh_row, blank_mesh_row, blank_mesh_row, blank_mesh_row, blank_mesh_row,
 	blank_mesh_row, blank_mesh_row, blank_mesh_row, blank_mesh_row, blank_mesh_row
 ];
@@ -1167,7 +1169,7 @@ i32(i32, i32) horizon_height = fn(x, z) {
 	}
 };
 
-i32(i32, i32) horizon_axis = fn(origin, i) { min_i(adventure_max(), origin + i * 6) };
+i32(i32, i32, i32) horizon_axis = fn(origin, i, step) { origin + i * step };
 
 i32[33] blank_horizon_row = [
 	0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0
@@ -1180,75 +1182,125 @@ i32[33][33] horizon_heights = [
 	blank_horizon_row
 ];
 
-unit(i32, i32, i32, i32, i32) sample_horizon_row = fn(ix, iz, origin_x, z, columns) {
-	if (ix <= columns) {
-		i32 end = adventure_max() - 1;
-		horizon_heights[index_of(iz)][index_of(ix)] = horizon_height(min_i(end, horizon_axis(origin_x, ix)), min_i(end, z));
-		sample_horizon_row(ix + 1, iz, origin_x, z, columns);
+struct copy HorizonGrid {
+	i32 x;
+	i32 z;
+	i32 count;
+	i32 step;
+	i32 offset;
+}
+
+unit(i32, i32, i32, HorizonGrid) sample_horizon_row = fn(ix, iz, z, grid) {
+	if (ix <= grid.count) {
+		i32 x = horizon_axis(grid.x, ix, grid.step) + grid.offset;
+		i32 low = adventure_min();
+		i32 high = adventure_max();
+		horizon_heights[index_of(iz)][index_of(ix)] = if (x >= low && x < high && z >= low && z < high) {
+			horizon_height(x, z)
+		} else { 0 };
+		sample_horizon_row(ix + 1, iz, z, grid);
 	};
 };
 
-unit(i32, i32, i32, i32, i32) sample_horizon = fn(iz, origin_x, origin_z, columns, rows) {
-	if (iz <= rows) {
-		sample_horizon_row(0, iz, origin_x, horizon_axis(origin_z, iz), columns);
-		sample_horizon(iz + 1, origin_x, origin_z, columns, rows);
+unit(i32, HorizonGrid) sample_horizon = fn(iz, grid) {
+	if (iz <= grid.count) {
+		sample_horizon_row(0, iz, horizon_axis(grid.z, iz, grid.step) + grid.offset, grid);
+		sample_horizon(iz + 1, grid);
 	};
 };
 
-unit(i32, i32, i32, i32) write_horizon_vertex = fn(at, x, z, top) {
+i32 horizon_write = 0;
+
+unit(i32, i32, i32, i32) horizon_vertex = fn(x, y, z, tile) {
+	i32 at = horizon_write;
 	u64 page = index_of(at / 576);
 	u64 row = index_of((at / 24) % 24);
 	u64 col = index_of(at % 24);
-	f32 h = core.sint_to_float<f32>(top);
-	f32 green = clamp_f((h - 5.0) * 0.65, 0.0, 1.0);
-	f32 stone = clamp_f((h - 10.0) * 0.31, 0.0, 1.0);
+	f32 h = core.sint_to_float<f32>(y);
+	f32 green = clamp_f((h - 4.0) * 0.34, 0.0, 1.0);
+	f32 stone = clamp_f((h - 10.0) * 0.28, 0.0, 1.0);
 	horizon_vertices[page][row][col][0] = core.sint_to_float<f32>(x);
-	horizon_vertices[page][row][col][1] = h + 0.82;
+	horizon_vertices[page][row][col][1] = h + 0.88;
 	horizon_vertices[page][row][col][2] = core.sint_to_float<f32>(z);
-	horizon_vertices[page][row][col][3] = 0.66 - green * 0.38 + stone * 0.12;
-	horizon_vertices[page][row][col][4] = 0.56 - green * 0.05 - stone * 0.08;
-	horizon_vertices[page][row][col][5] = 0.36 - green * 0.12 + stone * 0.22;
+	if (tile >= 0) {
+		horizon_vertices[page][row][col][3] = core.sint_to_float<f32>(tile);
+		horizon_vertices[page][row][col][4] = 0.0;
+		horizon_vertices[page][row][col][5] = 2.0;
+	} else {
+		horizon_vertices[page][row][col][3] = 0.73 - green * 0.49 + stone * 0.19;
+		horizon_vertices[page][row][col][4] = 0.61 + green * 0.01 - stone * 0.04;
+		horizon_vertices[page][row][col][5] = 0.37 - green * 0.12 + stone * 0.22;
+	};
+	horizon_write = at + 1;
 };
 
-unit(i32, i32, i32, i32, i32, i32) mesh_horizon_row = fn(ix, iz, origin_x, origin_z, columns, pos) {
-	if (ix < columns) {
-		i32 x = horizon_axis(origin_x, ix);
-		i32 z = horizon_axis(origin_z, iz);
-		i32 nx = horizon_axis(origin_x, ix + 1);
-		i32 nz = horizon_axis(origin_z, iz + 1);
-		u64 ux = index_of(ix);
-		u64 uz = index_of(iz);
-		i32 a = horizon_heights[uz][ux];
-		i32 b = horizon_heights[uz][ux + 1];
-		i32 c = horizon_heights[uz + 1][ux];
-		i32 d = horizon_heights[uz + 1][ux + 1];
-		write_horizon_vertex(pos, x, z, a);
-		write_horizon_vertex(pos + 1, x, nz, c);
-		write_horizon_vertex(pos + 2, nx, z, b);
-		write_horizon_vertex(pos + 3, nx, nz, d);
-		write_horizon_vertex(pos + 4, nx, z, b);
-		write_horizon_vertex(pos + 5, x, nz, c);
-		mesh_horizon_row(ix + 1, iz, origin_x, origin_z, columns, pos + 6);
+unit(i32, i32, i32, i32, i32, i32, i32, i32, i32) horizon_quad = fn(x, z, nx, nz, a, b, c, d, tile) {
+	horizon_vertex(x, a, z, tile);
+	horizon_vertex(x, c, nz, tile);
+	horizon_vertex(nx, b, z, tile);
+	horizon_vertex(nx, d, nz, tile);
+	horizon_vertex(nx, b, z, tile);
+	horizon_vertex(x, c, nz, tile);
+};
+
+unit(i32, i32, i32, i32, i32, i32, i32) horizon_cliff = fn(x, z, nx, nz, low, high, tile) {
+	if (low < high) {
+		horizon_vertex(x, low, z, tile);
+		horizon_vertex(x, high, z, tile);
+		horizon_vertex(nx, low, nz, tile);
+		horizon_vertex(nx, high, nz, tile);
+		horizon_vertex(nx, low, nz, tile);
+		horizon_vertex(x, high, z, tile);
 	};
 };
 
-unit(i32, i32, i32, i32, i32) mesh_horizon = fn(iz, origin_x, origin_z, columns, rows) {
-	if (iz < rows) {
-		mesh_horizon_row(0, iz, origin_x, origin_z, columns, iz * columns * 6);
-		mesh_horizon(iz + 1, origin_x, origin_z, columns, rows);
+unit(i32, i32, HorizonGrid) mesh_horizon_row = fn(ix, iz, grid) {
+	if (ix < grid.count) {
+		i32 x = horizon_axis(grid.x, ix, grid.step);
+		i32 z = horizon_axis(grid.z, iz, grid.step);
+		i32 nx = x + grid.step;
+		i32 nz = z + grid.step;
+		u64 ux = index_of(ix);
+		u64 uz = index_of(iz);
+		i32 a = horizon_heights[uz][ux];
+		if (grid.offset == 0) {
+			i32 b = horizon_heights[uz][ux + 1];
+			i32 c = horizon_heights[uz + 1][ux];
+			i32 d = horizon_heights[uz + 1][ux + 1];
+			if (max_i(max_i(a, b), max_i(c, d)) >= 3) { horizon_quad(x, z, nx, nz, a, b, c, d, -1); };
+		} else {
+			if (a >= 3) {
+				i32 near_tile = if (a >= 11) { 3 } else { if (a <= 4) { 4 } else { 0 } };
+				i32 cliff_tile = if (a >= 9) { 3 } else { if (a <= 4) { 4 } else { 1 } };
+				horizon_quad(x, z, nx, nz, a, a, a, a, near_tile);
+				if (ix > 0) { horizon_cliff(x, z, x, nz, horizon_heights[uz][ux - 1], a, cliff_tile); };
+				if (iz > 0) { horizon_cliff(nx, z, x, z, horizon_heights[uz - 1][ux], a, cliff_tile); };
+				if (ix + 1 < grid.count) { horizon_cliff(nx, nz, nx, z, horizon_heights[uz][ux + 1], a, cliff_tile); };
+				if (iz + 1 < grid.count) { horizon_cliff(x, nz, nx, nz, horizon_heights[uz + 1][ux], a, cliff_tile); };
+			};
+		};
+		mesh_horizon_row(ix + 1, iz, grid);
+	};
+};
+
+unit(i32, HorizonGrid) mesh_horizon = fn(iz, grid) {
+	if (iz < grid.count) {
+		mesh_horizon_row(0, iz, grid);
+		mesh_horizon(iz + 1, grid);
 	};
 };
 
 unit(i32, i32) rebuild_horizon = fn(x, z) {
 	i32 center_x = x * 12 + 6;
 	i32 center_z = z * 12 + 6;
-	i32 origin_x = max_i(adventure_min(), center_x - 90);
-	i32 origin_z = max_i(adventure_min(), center_z - 90);
-	i32 columns = (min_i(adventure_max(), center_x + 90) - origin_x) / 6;
-	i32 rows = (min_i(adventure_max(), center_z + 90) - origin_z) / 6;
-	sample_horizon(0, origin_x, origin_z, columns, rows);
-	mesh_horizon(0, origin_x, origin_z, columns, rows);
-	unsafe { host.horizon(core.pointer_cast<*?u8>(&?horizon_vertices[0][0][0][0]), rows * columns * 6); };
+	HorizonGrid far = { .x = center_x - 156; .z = center_z - 156; .count = 26; .step = 12; .offset = 0; };
+	HorizonGrid mid = { .x = center_x - 42; .z = center_z - 42; .count = 20; .step = 4; .offset = 2; };
+	horizon_write = 0;
+	sample_horizon(0, far);
+	mesh_horizon(0, far);
+	sample_horizon(0, mid);
+	mesh_horizon(0, mid);
+	unsafe { host.horizon(core.pointer_cast<*?u8>(&?horizon_vertices[0][0][0][0]), horizon_write); };
 };
 
 i32(i32) stream_min = fn(center) { max_i(adventure_min() / 12, center - 2) };

@@ -233,9 +233,10 @@ f32 old_camera_y = 4.1;
 f32 old_camera_z = -12.0;
 f32 old_camera_yaw = 0.0;
 f32 camera_pitch = -0.25;
-bool wide_camera = false;
-f32 camera_width = 0.0;
-f32 old_camera_width = 0.0;
+f32 orbit_yaw = 0.0;
+f32 orbit_pitch = 0.0;
+f32 camera_boom = 7.0;
+f32 old_camera_pitch = -0.25;
 f32 accumulator = 0.0;
 f32 viewport = 1.0;
 f32 seconds_left = 90.0;
@@ -494,6 +495,7 @@ f32 pier_marquee_x = 6.94;
 f32 pier_marquee_z = 75.10;
 f32 pier_marquee_floor = 3.69;
 f32 pier_marquee_width = 8.19;
+f32 pier_marquee_depth = 0.51;
 f32 pier_signal_x = 15.22;
 f32 pier_signal_z = 80.50;
 
@@ -511,8 +513,8 @@ unit() draw_landmarks = fn {
     box(7.18,0.02,75.25,0.21,4.04,0.21,0.34,0.28,0.37);
     box(14.64,0.02,75.25,0.21,4.04,0.21,0.34,0.28,0.37);
     box(7.02,3.72,75.13,8.03,1.40,0.45,0.40,0.30,0.45);
-    box(pier_marquee_x,5.14,pier_marquee_z,pier_marquee_width,0.10,0.51,0.48,0.83,0.83);
-    box(pier_marquee_x,pier_marquee_floor,pier_marquee_z,pier_marquee_width,0.10,0.51,0.90,0.46,0.62);
+    box(pier_marquee_x,5.14,pier_marquee_z,pier_marquee_width,0.10,pier_marquee_depth,0.48,0.83,0.83);
+    box(pier_marquee_x,pier_marquee_floor,pier_marquee_z,pier_marquee_width,0.10,pier_marquee_depth,0.90,0.46,0.62);
     neon_words(2,0,8.26,3.94,75.08,0.234,false,0.98,0.83,0.53);
 };
 
@@ -1621,29 +1623,40 @@ f32(f32,f32,f32,f32,f32,i32) clear_boom = fn(x,z,dx,dz,limit,i) {
     }
 };
 
+bool(f32,f32,f32,f32,f32,f32) marquee_boom = fn(x,z,dx,dz,dist,pad) {
+    f32 left=pier_marquee_x-pad; f32 right=pier_marquee_x+pier_marquee_width+pad;
+    f32 front=pier_marquee_z-pad; f32 back=pier_marquee_z+pier_marquee_depth+pad;
+    bool flat_x=abs_f(dx)<0.0001; bool flat_z=abs_f(dz)<0.0001;
+    if ((flat_x && (x<left || x>right)) || (flat_z && (z<front || z>back))) { false } else {
+        f32 u=if (flat_x) { -20.0 } else { min_f((left-x)/dx,(right-x)/dx) };
+        f32 v=if (flat_z) { -20.0 } else { min_f((front-z)/dz,(back-z)/dz) };
+        f32 end_x=if (flat_x) { 20.0 } else { max_f((left-x)/dx,(right-x)/dx) };
+        f32 end_z=if (flat_z) { 20.0 } else { max_f((front-z)/dz,(back-z)/dz) };
+        max_f(0.0,max_f(u,v))<=min_f(dist,min_f(end_x,end_z))
+    }
+};
+
 unit() camera_step = fn {
-    f32 aim=if (in_car) { car_yaw } else { 0.0 };
+    f32 aim=wrap((if (in_car) { car_yaw } else { 0.0 })+orbit_yaw);
     camera_yaw=wrap(camera_yaw+wrap(aim-camera_yaw)*0.15);
     f32 hx=sin_small(camera_yaw); f32 hz=cos_small(camera_yaw);
     f32 sx=player_x(); f32 sz=player_z();
-    camera_width=blend(camera_width,if (wide_camera) { 1.0 } else { 0.0 },0.14);
-    f32 goal=if (in_car) { blend(8.4,12.0,camera_width) } else { blend(7.0,10.5,camera_width) };
-    f32 dist=clear_boom(sx,sz,-hx,-hz,goal,0);
+    f32 goal=if (in_car) { 8.4 } else { 7.0 };
+    f32 dist=clear_boom(sx,sz,-hx,-hz,blend(camera_boom,goal,0.13),0);
+    camera_boom=dist;
     camera_x=sx-dist*hx;
     camera_z=sz-dist*hz;
     f32 camera_deck=if (stage==MissionStage::crossing || stage==MissionStage::docked || stage==MissionStage::disembarking || stage==MissionStage::delivered) { board_height } else { 0.0 };
-    f32 camera_base=if (dist<3.8) { 2.35 } else { blend(if (in_car) { 4.2 } else { 3.9 },6.1,camera_width) };
-    f32 aim_pitch=if (dist<3.8) { -0.48 } else { blend(if (in_car) { -0.29 } else { -0.25 },-0.35,camera_width) };
+    f32 open_boom=clamp((dist-2.9)/0.9,0.0,1.0);
+    f32 camera_base=blend(2.35,if (in_car) { 4.2 } else { 3.9 },open_boom);
+    f32 aim_pitch=clamp(blend(-0.48,if (in_car) { -0.29 } else { -0.25 },open_boom)+orbit_pitch,-0.83,-0.06);
     f32 eye_y=camera_deck+camera_base;
-    if (!in_car && sx>pier_marquee_x && sx<pier_marquee_x+pier_marquee_width &&
-        sz>pier_marquee_z-1.45 && camera_z<pier_marquee_z+1.15) {
-        f32 enters=clamp((sz-(pier_marquee_z-1.45))/0.85,0.0,1.0);
-        f32 clears=clamp(((pier_marquee_z+1.15)-camera_z)/0.62,0.0,1.0);
-        f32 underpass=min_f(enters,clears);
-        eye_y=blend(eye_y,min_f(eye_y,pier_marquee_floor-0.64),underpass);
-        if (dist>=3.8) { aim_pitch=blend(aim_pitch,-0.18,underpass*camera_width); };
-    };
-    camera_y=blend(camera_y,eye_y,0.38);
+    f32 clear_height=pier_marquee_floor-0.64;
+    bool close_to_marquee=abs_f(sz-pier_marquee_z)<10.0 && sx>pier_marquee_x-10.0 && sx<pier_marquee_x+pier_marquee_width+10.0;
+    bool near_marquee=close_to_marquee && marquee_boom(sx,sz,-hx,-hz,dist,0.70);
+    f32 near_height=if (near_marquee) { min_f(eye_y,clear_height) } else { eye_y };
+    camera_y=blend(camera_y,near_height,0.38);
+    if (near_marquee && marquee_boom(sx,sz,-hx,-hz,dist,0.18)) { camera_y=min_f(camera_y,clear_height); };
     camera_pitch=blend(camera_pitch,aim_pitch,0.22);
 };
 
@@ -1661,7 +1674,7 @@ unit() snapshot = fn {
     old_x=car_x; old_z=car_z; old_yaw=car_yaw;
     previous_wheel_phase=wheel_phase;
     old_foot_x=foot_x; old_foot_z=foot_z; old_foot_yaw=foot_yaw;
-    old_camera_width=camera_width;
+    old_camera_pitch=camera_pitch;
     old_camera_x=camera_x; old_camera_y=camera_y; old_camera_z=camera_z; old_camera_yaw=camera_yaw;
 };
 
@@ -1973,14 +1986,14 @@ unit(f32) render_moving = fn(alpha) {
 unit(f32) render_frame = fn(alpha) {
     f32 view_yaw=wrap(old_camera_yaw+alpha*wrap(camera_yaw-old_camera_yaw));
     f32 hx=sin_small(view_yaw); f32 hz=cos_small(view_yaw);
-    f32 ps=sin_small(camera_pitch); f32 pc=cos_small(camera_pitch);
+    f32 view_pitch=blend(old_camera_pitch,camera_pitch,alpha);
+    f32 ps=sin_small(view_pitch); f32 pc=cos_small(view_pitch);
     f32 fx=hx*pc; f32 fy=ps; f32 fz=hz*pc;
     f32 ux=-hx*ps; f32 uy=pc; f32 uz=-hz*ps;
     f32 ex=blend(old_camera_x,camera_x,alpha);
     f32 ey=blend(old_camera_y,camera_y,alpha);
     f32 ez=blend(old_camera_z,camera_z,alpha);
-    f32 lens=blend(1.0,0.76,blend(old_camera_width,camera_width,alpha));
-    f32 sy=lens*(if (viewport<0.85) { 1.16 } else { 1.48 });
+    f32 sy=if (viewport<0.85) { 1.16 } else { 1.48 };
     f32 sx=sy/viewport;
     f32 nf=1.000770;
     display[0]=hz*sx; display[1]=ux*sy; display[2]=fx*nf; display[3]=fx;
@@ -2041,15 +2054,20 @@ unit(i32) reset = fn(mode) {
     car_yaw=if (mode==1) { 0.0 } else { 3.14159265 };
     vx=0.0; vz=0.0; brake_mark=0.0; car_roll=0.0; wheel_phase=0.0;
     foot_x=2.1; foot_z=-4.6; foot_speed=0.0; foot_yaw=0.0;
-    camera_x=2.1; camera_z=-11.6; camera_y=3.9; camera_yaw=0.0; camera_pitch=-0.25; wide_camera=false; camera_width=0.0;
+    camera_x=2.1; camera_z=-11.6; camera_y=3.9; camera_yaw=0.0; camera_pitch=-0.25; orbit_yaw=0.0; orbit_pitch=0.0; camera_boom=7.0;
     ferry_z=berth_z; board_time=0.0; board_height=0.01;
     reset_props(0); snapshot();
     render_moving(1.0); render_frame(1.0);
 };
 
-unit(f32,f32,f32,i32,f32) tick = fn(dt,steer,drive,controls,aspect) {
+unit(f32,f32,f32,i32,f32,f32,f32) tick = fn(dt,steer,drive,controls,aspect,look_x,look_y) {
     if (aspect>=0.25 && aspect<=4.0) { viewport=aspect; };
-    if ((controls & 4)!=0) { wide_camera=!wide_camera; };
+    if ((controls & 4)!=0) {
+        orbit_yaw=0.0; orbit_pitch=0.0;
+    } else {
+        if (look_x>=-3.2 && look_x<=3.2) { orbit_yaw=wrap(orbit_yaw+look_x); };
+        if (look_y>=-3.2 && look_y<=3.2) { orbit_pitch=clamp(orbit_pitch+look_y,-0.30,0.28); };
+    };
     if ((controls & 2)!=0 && stage!=MissionStage::delivered && stage!=MissionStage::missed_departure && stage!=MissionStage::crossing && stage!=MissionStage::disembarking) {
         pending_action=true;
     };

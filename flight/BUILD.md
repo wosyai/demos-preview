@@ -32,7 +32,7 @@ and score in [24]. Mission-specific fields are:
 | Index | Meaning |
 | --- | --- |
 | 20 | Phase: 0 cross the Seine, 1 approach drop, 2 landing approach, 3 rollout, 5 falling pouch, 6 takeoff, 7 supply approach, 8 supply rollout, 9 cargo pickup, 10 cargo relaunch, 11 spray rows |
-| 21 | Delivery action window: 0 inactive, 5 high, 6 low, 7 misaligned, 8 not yet over target, 9 release |
+| 21 | Delivery action window: 0 inactive, 5 high, 6 low, 7 spray misaligned (Wright only), 8 not yet over target, 9 release |
 | 22 | End: 0 active, 1 complete, 2 obstacle, 3 bounds/time, 4 outside strip, 5 alignment, 6 speed, 7 delivery not completed, 8 bridge, 9 overrun, 10 descent, 11 lateral exit |
 | 25–26 | Route (0 none, 1 low, 2 wide) and last action status (12 premature cargo pickup, 13 rough but survivable touchdown) |
 | 27–28 | Distance to target (or rollout remaining) and signed normalized turn cue |
@@ -50,13 +50,15 @@ axes to ±7. Bit 7 is a one-shot contextual mission action (load, spray, or mail
 `cancel_drop()` clears a not-yet-consumed release when input is interrupted
 without changing the simulation clock or undoing a pouch already launched.
 
-Mission replay format uses magic bytes `WF`, version byte 7, mission byte, a
+Mission replay format uses magic bytes `WF`, version byte 7 (Wright) or 8
+(Paris overhead drop), mission byte, a
 little-endian 16-bit step count, then one little-endian canonical control word
 per step. The mission action is included in its original step. Only legally completed
 missions on the final step are admitted, up to 8,100 steps and 16,206 bytes.
-The browser stores v7 separately from v4/v5/v6 mission records and older race records.
-Older packets are not accepted under the changed course geometry and landing rules; the browser
-neither reads nor overwrites the earlier save keys.
+The browser preserves Wright's v7 key and uses a new v8 Paris key; old v7
+Paris records are not read or overwritten. The engine rejects old Paris packets
+rather than treating their different release inputs as current replays.
+Older mission and race save keys remain untouched.
 
 Touchdown and rollout use the same strip limits used to draw the markings.
 A touchdown beyond the suggested approach limits can still enter roll-out, but
@@ -83,9 +85,10 @@ chase view. Speed and altitude use the same Wosy instrument data in either.
 The WebAssembly export `select_view(1)` selects cockpit; zero selects chase.
 It changes presentation only: camera preference is not part of a v7 replay.
 
-In Paris, follow the amber DROP sign anchored above the mail target. The sign
-persists through approach, and the HUD says “Drop here” only when the real
-flight engine permits release. The cue is visual and leaves v7 replays valid.
+In Paris, fly directly over the amber X at 3–14 m. Heading and bank do not
+gate release. The blue mark shows the world point below the aircraft, and
+the pouch falls vertically at the same X/Z through the cinematic impact.
+The HUD says “Drop here” only while the actual release window is open.
 
 The next ring is dashed amber. A scored ring flashes bright green, then remains
 muted green. An expired unscored ring disappears. Replay v7 is unchanged.

@@ -8,7 +8,8 @@ button:disabled{opacity:.56;cursor:wait}
 a{color:var(--teal);text-underline-offset:.26em}
 [hidden]{display:none!important}
 .stage{position:relative;height:100vh;height:100dvh;isolation:isolate;overflow:hidden;background:linear-gradient(#9a5063,#e18f67 46%,#448a77 47%,#132638)}
-canvas{position:absolute;inset:0;width:100%;height:100%;display:block;pointer-events:none}
+canvas{position:absolute;inset:0;width:100%;height:100%;display:block;touch-action:none;cursor:grab}
+canvas:active{cursor:grabbing}
 .badge,.eyebrow,.departure span{font:750 .68rem system-ui,sans-serif;letter-spacing:.17em;color:var(--amber)}
 .badge,.eyebrow{display:flex;align-items:center;gap:.55rem}
 .badge i,.eyebrow i{display:block;background:var(--rust);width:8px;height:8px;transform:rotate(45deg);flex:none}
