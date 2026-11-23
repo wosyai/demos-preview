@@ -6,6 +6,7 @@ let engine, frame;
 const resident = new Map();
 engine = new WebAssembly.Instance(wasm, {
   showcase: {
+    horizon() {},
     aim() {}, atlas() {}, outline() {}, player() {}, water() {},
     mesh(pointer, count, x, z) {
       const key = `${x},${z}`;

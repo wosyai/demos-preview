@@ -9,6 +9,7 @@ for (const aspect of [.56, 1.67]) {
   const hashes = new Map(), counts = new Map();
   engine = new WebAssembly.Instance(module, {
     showcase: {
+      horizon() {},
       aim() {}, atlas() {}, outline() {}, player() {},
       water(pointer, count) { sea = { pointer, count }; },
       mesh(pointer, count, chunkX, chunkZ) {

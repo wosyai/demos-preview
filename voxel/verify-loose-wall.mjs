@@ -16,6 +16,7 @@ for (const aspect of [.56, 1.67]) {
   const chunkX = 2, chunkZ = 3;
   game = new WebAssembly.Instance(wasm, {
     showcase: {
+      horizon() {},
       aim() {}, atlas() {}, outline() {}, player() {}, water() {},
       mesh(pointer, count, x, z) {
         if (x !== chunkX || z !== chunkZ) return;

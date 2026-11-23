@@ -8,6 +8,7 @@ for (const aspect of [.56, 1.67]) {
   let game, hud, hit, yaw = 0;
   game = new WebAssembly.Instance(wasm, {
     showcase: {
+      horizon() {},
       aim() {}, atlas() {}, mesh() {}, outline() {}, player() {}, water() {},
       frame(pointer, target) {
         hud = Array.from(new Float32Array(game.memory.buffer, pointer, 35));

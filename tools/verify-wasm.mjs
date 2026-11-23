@@ -7,7 +7,7 @@ const file = process.argv[3] === '--binary'
   ? path : JSON.parse(readFileSync(path, 'utf8')).executable;
 const binary = new WebAssembly.Module(readFileSync(file));
 const imports = WebAssembly.Module.imports(binary);
-const graphics = ['aim', 'atlas', 'frame', 'mesh', 'outline', 'player', 'water'];
+const graphics = ['aim', 'atlas', 'frame', 'horizon', 'mesh', 'outline', 'player', 'water'];
 assert.deepEqual(imports.filter((item) => item.module === 'showcase').map((item) => item.name).sort(), graphics);
 for (const item of imports) {
   assert.equal(item.kind, 'function');
@@ -41,6 +41,7 @@ function layer(pointer, count, stride, maximum) {
 }
 engine = new WebAssembly.Instance(binary, {
   showcase: {
+    horizon() {},
     atlas(pointer, width, height) {
       assert.equal(width, 128);
       assert.equal(height, 16);
@@ -503,6 +504,29 @@ assert(edit(...obstruction, 3) === 1);
 tick(0, 1, 1);
 assert(cameraDistance(frame.values.slice(16, 19)) < 2.2, 'voxel behind player retracts camera');
 assert.equal(frame.hit, aimTarget, 'camera obstruction is not an edit target');
+const releaseBoom = (steps) => {
+  for (let k = 0; k < 20; k++) tick(.05, 1, 1);
+  const wallDistance = cameraDistance(frame.values.slice(16,19));
+  assert.equal(edit(...obstruction, 0), 1);
+  tick(0, 1, 1);
+  assert(Math.abs(cameraDistance(frame.values.slice(16,19)) - wallDistance) < .015,
+    'a zero-time paint never snaps the cleared boom outward');
+  let previous = wallDistance;
+  for (const dt of steps) {
+    tick(dt, 1, 1);
+    const distance = cameraDistance(frame.values.slice(16,19));
+    assert(distance > previous && distance - previous < .65, 'a cleared wall steadily eases the chase view out');
+    previous = distance;
+  }
+  assert.equal(edit(...obstruction, 3), 1);
+  tick(0, 1, 1);
+  assert(cameraDistance(frame.values.slice(16,19)) < 2.2 && cameraDistance(frame.values.slice(16,19)) < previous,
+    'new wall contact retracts immediately before the near plane can penetrate');
+  return previous - wallDistance;
+};
+const regular = releaseBoom(Array(12).fill(1 / 60));
+const irregular = releaseBoom([.015, .035, .012, .038, .019, .031, .014, .036]);
+assert(Math.abs(regular - irregular) < .025, 'equal time gives equivalent chase recovery at irregular cadence');
 assert.equal(edit_control(0, 2), 1, 'third-person controls break the outlined block');
 tick(0, 1, 1);
 assert.notEqual(frame.hit, aimTarget);
@@ -538,7 +562,7 @@ assert(Math.hypot(...frame.values.slice(16,19).map((v,i) => v-raisedEye[i])) < 1
 assert(Math.abs(aim[0]) < .3 && Math.abs(aim[1]) < .3, 'the retained target remains near the center of the shortened camera');
 assert.equal(avatar.count, 0, 'the avatar does not obscure a retracted camera');
 assert.equal(edit_control(0, 2), 1, 'the retracted camera shows the target being edited');
-tick(0, 1, 1);
+tick(.02, 1, 1);
 assert.notDeepEqual(frame.values.slice(16,19), raisedEye, 'chase view returns once the target is no longer occluded');
 assert.equal(cycle_camera(), 0);
 console.log('Verified exact Wosy chase camera, obstructed terrain, player mesh, projected reticle and player-origin editing.');

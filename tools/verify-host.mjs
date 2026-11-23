@@ -152,7 +152,7 @@ async function loadHost(caseId, startsLost = false, stored = null, mobile = fals
     devicePixelRatio: 1,
     fetch(url) {
       assert(url.pathname.endsWith('/voxel/engine.wasm'));
-      assert.equal(url.search, '?v=beacon-expedition-parts-art-v1');
+      assert.equal(url.search, '?v=beacon-expedition-horizon-v1');
       return fetchResponse.promise;
     },
     requestAnimationFrame(fn) { frames.set(++frameId, fn); return frameId; },
@@ -207,7 +207,14 @@ async function loadHost(caseId, startsLost = false, stored = null, mobile = fals
           showcase.mesh(256, 0, -1, 0);
         }
       },
-      start_archipelago_lighthouse() { mission = 1; counters.missionStarts = (counters.missionStarts || 0) + 1; },
+      start_archipelago_lighthouse() {
+        mission = 1;
+        counters.missionStarts = (counters.missionStarts || 0) + 1;
+        if (caseId === 'horizon-life') {
+          new Float32Array(memory.buffer, 8192, 18).fill(.5);
+          showcase.horizon(8192, 3);
+        }
+      },
       leave_beacon() { mission = 0; counters.missionLeaves = (counters.missionLeaves || 0) + 1; },
       look(x, y) { counters.looks.push([x,y]); },
       cycle_camera() {
@@ -575,7 +582,7 @@ const page = await readFile(new URL('../voxel/index.html', import.meta.url), 'ut
 assert.match(page, /<html lang="en">/);
 assert.match(page, /<title>Pocket Island • Wosy<\/title>/);
 assert.match(page, /href="\.\/style\.css\?v=beacon-bearing-v1-arcade-ui4-single1"/);
-assert.match(page, /src="\.\/main\.js\?v=beacon-expedition-parts-art-v1-arcade-ui4-single1-depth1"/);
+assert.match(page, /src="\.\/main\.js\?v=beacon-expedition-parts-art-v1-arcade-ui4-single1-depth1-horizon1"/);
 assert.match(page, /id="move-stick"/);
 assert.doesNotMatch(page, /class="dpad"|data-move="Key[WASD]"/);
 assert.match(page, /title="Dirt · 2"/);
@@ -713,6 +720,19 @@ assert.equal(ocean.counters.generations, 1, 'water restoration must not reset wa
 assert(ocean.counters.uploads.slice(staticUploads).some((upload) => upload.length === 36 &&
   upload.every((component, index) => component === latestWave[index])), 'restore must upload the newest water bytes even after memory growth');
 console.log('Verified water buffer reuse, coherent transparency order and restoration of the latest wave.');
+const horizon = await loadHost('horizon-life', false, null, true);
+await horizon.resolveFetch();
+horizon.node('mission-start').dispatch('click');
+horizon.frame();
+const drawHorizon = horizon.counters.draws.findLastIndex(([pass]) => pass === 3);
+assert(drawHorizon >= 0, 'the active expedition draws the donated coarse world layer');
+assert.deepEqual(horizon.counters.draws[drawHorizon], [3, 3, true]);
+assert.equal(horizon.counters.draws[drawHorizon - 1][0], 0, 'the coarse pass fills only after drawing near terrain');
+horizon.lostEvent();
+horizon.restoredEvent();
+assert(horizon.counters.uploads.some((v) => v.length === 18 && v.every((n) => n === .5)),
+  'the last static horizon mesh survives context restoration');
+
 
 const single = await loadHost('public-single-mode', false, '7');
 await single.resolveFetch();

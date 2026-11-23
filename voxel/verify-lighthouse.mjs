@@ -5,6 +5,7 @@ const wasm = new WebAssembly.Module(readFileSync(process.argv[2]));
 let engine, frame;
 engine = new WebAssembly.Instance(wasm, {
   showcase: {
+    horizon() {},
     aim() {}, atlas() {}, mesh() {}, outline() {}, player() {}, water() {},
     frame(pointer) { frame = Array.from(new Float32Array(engine.memory.buffer, pointer, 44)); },
   },

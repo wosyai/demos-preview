@@ -4,11 +4,17 @@ import { createHash } from 'node:crypto';
 
 const wasm = new WebAssembly.Module(readFileSync(process.argv[2]));
 let engine, frame;
+let horizon, horizonPublications = 0;
 const resident = new Map();
 const visibleParts = new Map();
 const emission = [1.31, 1.45, 1.64];
 engine = new WebAssembly.Instance(wasm, {
   showcase: {
+    horizon(pointer, count) {
+      assert(count <= 5400 && count % 6 === 0, 'coarse terrain has a fixed budget and whole tiles');
+      horizon = Array.from(new Float32Array(engine.memory.buffer, pointer, count * 6));
+      horizonPublications++;
+    },
     aim() {}, atlas() {}, outline() {}, player() {}, water() {},
     mesh(pointer, count, x, z) {
       const key = `${x},${z}`;
@@ -79,6 +85,25 @@ const start = (seed) => {
   tick(0);
   assert.equal(frame[25], 1);
   assert.equal(frame[39], 0);
+  assert(resident.size <= 25, 'horizon does not grow the full-resolution terrain residency');
+  assert.equal(horizon.length, 5400 * 6);
+  const heights = new Set();
+  let far = 0, aboveTide = false;
+  for (let i = 0; i < horizon.length; i += 6) {
+    const [x, y, z] = horizon.slice(i, i + 3);
+    assert(Number.isFinite(y) && x % 6 === 0 && z % 6 === 0, 'horizon terrain uses the same world grid');
+    const distance = Math.hypot(x - frame[37], z - frame[38]);
+    far = Math.max(distance, far);
+    if (distance >= 35 && distance <= 62) {
+      heights.add(Math.round(y));
+      if (y > 7) aboveTide = true;
+    }
+  }
+  assert(far > 80 && heights.size > 4 && aboveTide, 'real seeded land forms are present beyond mesh detail');
+  const beforeStationary = horizonPublications;
+  tick();
+  tick();
+  assert.equal(horizonPublications, beforeStationary, 'stationary frames do not regenerate or reupload coarse geometry');
   assert(frame[40] >= 0 && Math.hypot(frame[35], frame[36]) > 0);
   const [cave, summit, wreck] = frame.slice(41, 44).map(Math.floor);
   assert(cave <= -48 && summit >= 124 && wreck <= -48);
@@ -195,7 +220,9 @@ const finish = () => {
 
 const first = start(726);
 buildCrossing();
+const beforeWest = horizonPublications;
 recoverIgniter(first.wreck);
+assert(horizonPublications > beforeWest, 'crossing a world chunk updates the horizon');
 assert.equal(frame[39], 4);
 recoverLens(first.cave, true);
 assert.equal(frame[39], 5);

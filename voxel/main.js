@@ -30,7 +30,7 @@ const viewButtons = [get("camera-view"), get("view-touch")];
 const moveStick = get("move-stick");
 const materials = Array.from(document.querySelectorAll("[data-material]"));
 
-const gl = canvas.getContext("webgl2", { alpha: false, antialias: true });
+const gl = canvas.getContext("webgl2", { alpha: false, antialias: true, stencil: true });
 const fogColor = [0.66, 0.78, 0.83];
 const keyActions = new Map([
   ["KeyW",0], ["ArrowUp",0], ["KeyS",1], ["ArrowDown",1],
@@ -48,6 +48,7 @@ const atlas = { data: null, width: 0, height: 0 };
 const terrainChunks = new Map();
 const layers = {
   water: { pointer: 0, count: 0, version: 0 },
+  horizon: { data: null, count: 0, version: 0 },
   outline: { data: null, count: 0, version: 0 },
   player: { data: null, count: 0, version: 0 },
 };
@@ -98,12 +99,26 @@ void main() {
     water = mix(water,vec3(.33,.62,.64),crest*(.12+.25*fresnel));
     col=mix(water,fog,0.72*fresnel);
     alpha=mix(0.55+0.37*fresnel,1.0,haze);
-  } else if (pass==0) {
+  } else if (pass==0 || pass==3) {
     if (adventure!=0) {
-      float radial=smoothstep(19.0,23.75,distance(streamOwner.xz,point.xz));
+      float range=distance(streamOwner.xz,point.xz);
+      float radial=smoothstep(19.0,23.75,range);
       float lattice=fract(52.9829189*fract(dot(gl_FragCoord.xy,vec2(0.06711056,0.00583715))));
-      if (radial>lattice) discard;
-      haze=max(haze,radial);
+      if (pass==3) {
+        vec3 normal=normalize(cross(dFdx(point),dFdy(point))) * (gl_FrontFacing ? 1.0 : -1.0);
+        float lit=max(dot(normal,${sunVector}),0.0);
+        if (range<18.5 || range>=82.0) discard;
+        alpha=1.0-smoothstep(64.0,82.0,range);
+        col=rgb*(.75+.44*lit);
+        haze=max(haze,.12+.88*smoothstep(29.0,82.0,range));
+      } else {
+        if (radial>lattice) discard;
+        if (adventure==1) haze=max(haze,radial);
+      }
+    }
+    if (pass==3) {
+      pixel=vec4(mix(col,fog,pow(haze,1.08)*0.94),alpha);
+      return;
     }
     if (rgb.z > 1.0) {
       vec3 material;
@@ -246,6 +261,7 @@ function newGraphics() {
     world, sky, terrainAtlas, skyVao: gl.createVertexArray(),
     terrain: new Map(Array.from(terrainChunks, ([id, chunk]) => [id, geometry(chunk.data, gl.DYNAMIC_DRAW)])),
     water: waterGeometry(),
+    horizon: geometry(layers.horizon.data, gl.DYNAMIC_DRAW),
     outline: geometry(layers.outline.data, gl.DYNAMIC_DRAW),
     player: geometry(layers.player.data, gl.DYNAMIC_DRAW),
     main: locations(world, ["projection", "eye", "fog", "pass", "adventure", "streamOwner", "terrainAtlas"]),
@@ -278,9 +294,9 @@ function bindAtlas(pointer, width, height) {
   if (gpu && !contextLost) uploadAtlas(gpu.terrainAtlas);
 }
 
-function bindLayer(name, stride) {
+function bindLayer(name, stride, maximum = Infinity) {
   return (pointer, count) => {
-    if (!Number.isInteger(count) || count < 0 || count % stride !== 0) {
+    if (!Number.isInteger(count) || count < 0 || count > maximum || count % stride !== 0) {
       throw new Error("The engine returned invalid geometry.");
     }
     const layer = layers[name];
@@ -432,7 +448,7 @@ async function boot() {
   }
   try {
     prepareGraphics();
-    const response = await fetch(new URL("./engine.wasm?v=beacon-expedition-parts-art-v1", import.meta.url));
+    const response = await fetch(new URL("./engine.wasm?v=beacon-expedition-horizon-v1", import.meta.url));
     if (!response.ok) throw new Error(`Engine not found (HTTP ${response.status}).`);
     const bytes = await response.arrayBuffer();
     const api = {
@@ -440,6 +456,7 @@ async function boot() {
         atlas: bindAtlas,
         mesh: bindMesh,
         water: bindWater,
+        horizon: bindLayer("horizon", 3, 5400),
         outline: bindLayer("outline", 2),
         player: bindLayer("player", 3),
         aim: positionAim,
@@ -587,7 +604,9 @@ function present(pointer, hit) {
 
   gl.disable(gl.DEPTH_TEST);
   gl.disable(gl.CULL_FACE);
-  gl.clear(gl.DEPTH_BUFFER_BIT);
+  const adventure = data[25] > 0 ? (layers.horizon.count > 0 ? 2 : 1) : 0;
+  if (adventure === 2) gl.stencilMask(1);
+  gl.clear(adventure === 2 ? gl.DEPTH_BUFFER_BIT | gl.STENCIL_BUFFER_BIT : gl.DEPTH_BUFFER_BIT);
   gl.useProgram(gpu.sky);
   const projection = data.subarray(0, 16);
   gl.uniformMatrix4fv(gpu.background.skyProjection, false, projection);
@@ -603,12 +622,28 @@ function present(pointer, hit) {
   gl.activeTexture(gl.TEXTURE0);
   gl.bindTexture(gl.TEXTURE_2D, gpu.terrainAtlas);
   gl.uniform1i(gpu.main.terrainAtlas, 0);
-  gl.uniform1i(gpu.main.adventure, data[25] > 0 ? 1 : 0);
+  gl.uniform1i(gpu.main.adventure, adventure);
   gl.uniform3f(gpu.main.streamOwner, data[37], 0, data[38]);
+  if (adventure === 2) {
+    gl.enable(gl.STENCIL_TEST);
+    gl.stencilFunc(gl.ALWAYS, 1, 1);
+    gl.stencilOp(gl.KEEP, gl.KEEP, gl.REPLACE);
+  }
   gl.uniform1i(gpu.main.pass, 0);
   for (const [id, { count }] of terrainChunks) {
     gl.bindVertexArray(gpu.terrain.get(id).vao);
     gl.drawArrays(gl.TRIANGLES, 0, count);
+  }
+  if (adventure === 2) {
+    gl.stencilFunc(gl.EQUAL, 0, 1);
+    gl.stencilOp(gl.KEEP, gl.KEEP, gl.KEEP);
+    gl.enable(gl.BLEND);
+    gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
+    gl.uniform1i(gpu.main.pass, 3);
+    gl.bindVertexArray(gpu.horizon.vao);
+    gl.drawArrays(gl.TRIANGLES, 0, layers.horizon.count);
+    gl.disable(gl.BLEND);
+    gl.disable(gl.STENCIL_TEST);
   }
   if (layers.player.count > 0) {
     gl.uniform1i(gpu.main.pass, 2);

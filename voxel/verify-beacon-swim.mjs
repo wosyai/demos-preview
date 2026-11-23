@@ -7,6 +7,7 @@ for (const aspect of [.56, 1.67]) {
   let engine, hud, sea, avatar = new Float32Array(), uploads = 0;
   engine = new WebAssembly.Instance(wasm, {
     showcase: {
+      horizon() {},
       aim() {}, atlas() {}, mesh() {}, outline() {},
       water(pointer, count) { sea = { pointer, count }; },
       player(pointer, count) {

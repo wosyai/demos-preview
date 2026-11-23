@@ -5,6 +5,7 @@ host = extern wasm "showcase" {
 	unsafe unit(*?u8, i32) frame;
 	unsafe unit(*?u8, i32) outline;
 	unsafe unit(*?u8, i32) water;
+	unsafe unit(*?u8, i32) horizon;
 	unsafe unit(*?u8, i32) player;
 	unit(f32, f32) aim;
 };
@@ -47,6 +48,10 @@ f32[6][24][24] blank_mesh_row = [
 f32[6][24][24][24] blank_mesh_layer = [
 	blank_mesh_row, blank_mesh_row, blank_mesh_row, blank_mesh_row, blank_mesh_row, blank_mesh_row, blank_mesh_row, blank_mesh_row, blank_mesh_row, blank_mesh_row, blank_mesh_row, blank_mesh_row,
 	blank_mesh_row, blank_mesh_row, blank_mesh_row, blank_mesh_row, blank_mesh_row, blank_mesh_row, blank_mesh_row, blank_mesh_row, blank_mesh_row, blank_mesh_row, blank_mesh_row, blank_mesh_row
+];
+f32[6][24][24][10] horizon_vertices = [
+	blank_mesh_row, blank_mesh_row, blank_mesh_row, blank_mesh_row, blank_mesh_row,
+	blank_mesh_row, blank_mesh_row, blank_mesh_row, blank_mesh_row, blank_mesh_row
 ];
 f32[6][24][24] avatar_vertices = blank_mesh_row;
 f32[6][24][24][24][4] vertices = [
@@ -118,6 +123,7 @@ bool jump_pending = false;
 f32 vertical_speed = 0.0;
 bool third_person = false;
 f32 boom_distance = 0.0;
+bool boom_initialized = false;
 bool avatar_visible = false;
 f32 edit_pose_time = 0.0;
 bool edit_pose_place = false;
@@ -1149,6 +1155,102 @@ i32(i32) rebuild_chunks = fn(chunk) {
 	} else { 0 }
 };
 
+i32(i32, i32, i32) top_solid = fn(x, z, y) {
+	if (y == 0 || cell(x, y, z) != 0) { y } else { top_solid(x, z, y - 1) }
+};
+
+i32(i32, i32) horizon_height = fn(x, z) {
+	if (inside(x, 0, z)) { beacon_ground(x, z) } else {
+		if (cave_shelf_column(x, z) || summit_column(x, z)) { top_solid(x, z, 15) } else {
+			if (wreck_column(x, z)) { top_solid(x, z, 6) } else { archipelago_height(x, z) }
+		}
+	}
+};
+
+i32(i32, i32) horizon_axis = fn(origin, i) { min_i(adventure_max(), origin + i * 6) };
+
+i32[33] blank_horizon_row = [
+	0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0
+];
+i32[33][33] horizon_heights = [
+	blank_horizon_row, blank_horizon_row, blank_horizon_row, blank_horizon_row, blank_horizon_row, blank_horizon_row, blank_horizon_row, blank_horizon_row,
+	blank_horizon_row, blank_horizon_row, blank_horizon_row, blank_horizon_row, blank_horizon_row, blank_horizon_row, blank_horizon_row, blank_horizon_row,
+	blank_horizon_row, blank_horizon_row, blank_horizon_row, blank_horizon_row, blank_horizon_row, blank_horizon_row, blank_horizon_row, blank_horizon_row,
+	blank_horizon_row, blank_horizon_row, blank_horizon_row, blank_horizon_row, blank_horizon_row, blank_horizon_row, blank_horizon_row, blank_horizon_row,
+	blank_horizon_row
+];
+
+unit(i32, i32, i32, i32, i32) sample_horizon_row = fn(ix, iz, origin_x, z, columns) {
+	if (ix <= columns) {
+		i32 end = adventure_max() - 1;
+		horizon_heights[index_of(iz)][index_of(ix)] = horizon_height(min_i(end, horizon_axis(origin_x, ix)), min_i(end, z));
+		sample_horizon_row(ix + 1, iz, origin_x, z, columns);
+	};
+};
+
+unit(i32, i32, i32, i32, i32) sample_horizon = fn(iz, origin_x, origin_z, columns, rows) {
+	if (iz <= rows) {
+		sample_horizon_row(0, iz, origin_x, horizon_axis(origin_z, iz), columns);
+		sample_horizon(iz + 1, origin_x, origin_z, columns, rows);
+	};
+};
+
+unit(i32, i32, i32, i32) write_horizon_vertex = fn(at, x, z, top) {
+	u64 page = index_of(at / 576);
+	u64 row = index_of((at / 24) % 24);
+	u64 col = index_of(at % 24);
+	f32 h = core.sint_to_float<f32>(top);
+	f32 green = clamp_f((h - 5.0) * 0.65, 0.0, 1.0);
+	f32 stone = clamp_f((h - 10.0) * 0.31, 0.0, 1.0);
+	horizon_vertices[page][row][col][0] = core.sint_to_float<f32>(x);
+	horizon_vertices[page][row][col][1] = h + 0.82;
+	horizon_vertices[page][row][col][2] = core.sint_to_float<f32>(z);
+	horizon_vertices[page][row][col][3] = 0.66 - green * 0.38 + stone * 0.12;
+	horizon_vertices[page][row][col][4] = 0.56 - green * 0.05 - stone * 0.08;
+	horizon_vertices[page][row][col][5] = 0.36 - green * 0.12 + stone * 0.22;
+};
+
+unit(i32, i32, i32, i32, i32, i32) mesh_horizon_row = fn(ix, iz, origin_x, origin_z, columns, pos) {
+	if (ix < columns) {
+		i32 x = horizon_axis(origin_x, ix);
+		i32 z = horizon_axis(origin_z, iz);
+		i32 nx = horizon_axis(origin_x, ix + 1);
+		i32 nz = horizon_axis(origin_z, iz + 1);
+		u64 ux = index_of(ix);
+		u64 uz = index_of(iz);
+		i32 a = horizon_heights[uz][ux];
+		i32 b = horizon_heights[uz][ux + 1];
+		i32 c = horizon_heights[uz + 1][ux];
+		i32 d = horizon_heights[uz + 1][ux + 1];
+		write_horizon_vertex(pos, x, z, a);
+		write_horizon_vertex(pos + 1, x, nz, c);
+		write_horizon_vertex(pos + 2, nx, z, b);
+		write_horizon_vertex(pos + 3, nx, nz, d);
+		write_horizon_vertex(pos + 4, nx, z, b);
+		write_horizon_vertex(pos + 5, x, nz, c);
+		mesh_horizon_row(ix + 1, iz, origin_x, origin_z, columns, pos + 6);
+	};
+};
+
+unit(i32, i32, i32, i32, i32) mesh_horizon = fn(iz, origin_x, origin_z, columns, rows) {
+	if (iz < rows) {
+		mesh_horizon_row(0, iz, origin_x, origin_z, columns, iz * columns * 6);
+		mesh_horizon(iz + 1, origin_x, origin_z, columns, rows);
+	};
+};
+
+unit(i32, i32) rebuild_horizon = fn(x, z) {
+	i32 center_x = x * 12 + 6;
+	i32 center_z = z * 12 + 6;
+	i32 origin_x = max_i(adventure_min(), center_x - 90);
+	i32 origin_z = max_i(adventure_min(), center_z - 90);
+	i32 columns = (min_i(adventure_max(), center_x + 90) - origin_x) / 6;
+	i32 rows = (min_i(adventure_max(), center_z + 90) - origin_z) / 6;
+	sample_horizon(0, origin_x, origin_z, columns, rows);
+	mesh_horizon(0, origin_x, origin_z, columns, rows);
+	unsafe { host.horizon(core.pointer_cast<*?u8>(&?horizon_vertices[0][0][0][0]), rows * columns * 6); };
+};
+
 i32(i32) stream_min = fn(center) { max_i(adventure_min() / 12, center - 2) };
 i32(i32) stream_max = fn(center) { min_i(adventure_max() / 12 - 1, center + 2) };
 
@@ -1211,12 +1313,16 @@ i32(bool) sync_terrain = fn(force) {
 		terrain_window_active = true;
 		terrain_chunk_x = x;
 		terrain_chunk_z = z;
+		if (archipelago_hunt) { rebuild_horizon(x, z); } else {
+			if (force) { unsafe { host.horizon(core.pointer_cast<*?u8>(&?horizon_vertices[0][0][0][0]), 0); }; };
+		};
 		enter_terrain(stream_min(z), stream_min(x), stream_max(x), stream_max(z), force, old_x, old_z)
 	}
 };
 
 i32() rebuild = fn {
 	if (beacon_phase == BeaconPhase::sandbox) {
+		unsafe { host.horizon(core.pointer_cast<*?u8>(&?horizon_vertices[0][0][0][0]), 0); };
 		if (terrain_window_active) {
 			retire_terrain(stream_min(terrain_chunk_z), stream_min(terrain_chunk_x), stream_max(terrain_chunk_x), stream_max(terrain_chunk_z), 0, 0, false);
 			terrain_window_active = false;
@@ -1780,6 +1886,7 @@ unit() spawn_player = fn {
 		grounded = false;
 	};
 	boom_distance = 0.0;
+	boom_initialized = false;
 	ground_contact_dirty = false;
 	jump_pending = false;
 	vertical_speed = 0.0;
@@ -2292,6 +2399,7 @@ RayHit() current_view_target = fn {
 i32() cycle_camera = fn {
 	third_person = !third_person;
 	boom_distance = 0.0;
+	boom_initialized = false;
 	if (third_person) { 1 } else { 0 }
 };
 
@@ -2490,7 +2598,25 @@ f32(i32, i32, i32, f32, f32, f32, f32, f32, f32, f32, f32, i32) find_visible_boo
 	}
 };
 
-unit(RayHit, f32) publish_play_frame = fn(hit, dt) {
+f32(f32, f32, f32, f32, f32, f32, f32, f32, f32) chase_terrain_limit = fn(ox, oy, oz, dx, dy, dz, fx, fy, fz) {
+	f32 center = camera_boom_probe(ox, oy, oz, dx, dy, dz, 4.72);
+	f32 near_x = ox + fx * 0.16;
+	f32 near_y = oy + fy * 0.16;
+	f32 near_z = oz + fz * 0.16;
+	f32 half_height = 0.16 / view_scale;
+	f32 half_width = half_height * frame_values[20];
+	f32 ux = 0.0 - sin_yaw * sin_pitch * half_height;
+	f32 uy = cos_pitch * half_height;
+	f32 uz = cos_yaw * sin_pitch * half_height;
+	f32 sx = cos_yaw * half_width;
+	f32 sz = sin_yaw * half_width;
+	f32 corner0 = camera_corner(near_x, near_y, near_z, ux, uy, uz, sx, sz, dx, dy, dz, center);
+	f32 corner1 = camera_corner(near_x, near_y, near_z, ux, uy, uz, 0.0 - sx, 0.0 - sz, dx, dy, dz, corner0);
+	f32 corner2 = camera_corner(near_x, near_y, near_z, 0.0 - ux, 0.0 - uy, 0.0 - uz, sx, sz, dx, dy, dz, corner1);
+	camera_corner(near_x, near_y, near_z, 0.0 - ux, 0.0 - uy, 0.0 - uz, 0.0 - sx, 0.0 - sz, dx, dy, dz, corner2)
+};
+
+unit(RayHit, f32, f32, f32) publish_play_frame = fn(hit, dt, advance_x, advance_z) {
 	if (!third_person) {
 		publish_avatar(false);
 		center_aim();
@@ -2505,21 +2631,7 @@ unit(RayHit, f32) publish_play_frame = fn(hit, dt) {
 		f32 dz = 0.92 * cos_yaw + shoulder * sin_yaw;
 		f32 back = 0.92 * cos_pitch - dy * sin_pitch;
 		f32 lift = 0.92 * sin_pitch + dy * cos_pitch;
-		f32 center = camera_boom_probe(camera_pose.x, camera_pose.y, camera_pose.z, dx, dy, dz, 4.72);
-		f32 near_x = camera_pose.x + fx * 0.16;
-		f32 near_y = camera_pose.y + fy * 0.16;
-		f32 near_z = camera_pose.z + fz * 0.16;
-		f32 half_height = 0.16 / view_scale;
-		f32 half_width = half_height * frame_values[20];
-		f32 ux = 0.0 - sin_yaw * sin_pitch * half_height;
-		f32 uy = cos_pitch * half_height;
-		f32 uz = cos_yaw * sin_pitch * half_height;
-		f32 sx = cos_yaw * half_width;
-		f32 sz = sin_yaw * half_width;
-		f32 corner0 = camera_corner(near_x, near_y, near_z, ux, uy, uz, sx, sz, dx, dy, dz, center);
-		f32 corner1 = camera_corner(near_x, near_y, near_z, ux, uy, uz, 0.0 - sx, 0.0 - sz, dx, dy, dz, corner0);
-		f32 corner2 = camera_corner(near_x, near_y, near_z, 0.0 - ux, 0.0 - uy, 0.0 - uz, sx, sz, dx, dy, dz, corner1);
-		f32 terrain_limit = camera_corner(near_x, near_y, near_z, 0.0 - ux, 0.0 - uy, 0.0 - uz, 0.0 - sx, 0.0 - sz, dx, dy, dz, corner2);
+		f32 terrain_limit = chase_terrain_limit(camera_pose.x, camera_pose.y, camera_pose.z, dx, dy, dz, fx, fy, fz);
 		f32 aim_distance = if (hit.face < 0) { 5.0 } else {
 			clamp_f(ray_hit_distance(hit, camera_pose.x, camera_pose.y, camera_pose.z, fx, fy, fz), 0.0, 5.0)
 		};
@@ -2531,19 +2643,28 @@ unit(RayHit, f32) publish_play_frame = fn(hit, dt) {
 			camera_pose.y + dy * terrain_limit, camera_pose.z + dz * terrain_limit, tx, ty, tz)) { terrain_limit } else {
 			find_visible_boom(hit.position.x, hit.position.y, hit.position.z, dx, dy, dz, tx, ty, tz, 0.0, terrain_limit, 5)
 		};
-		f32 blended = if (dt == 0.0 || limit <= boom_distance) { limit } else {
-			boom_distance + (limit - boom_distance) * clamp_f(dt * 6.0, 0.0, 1.0)
+		f32 predicted = if (dt > 0.0 && (advance_x != 0.0 || advance_z != 0.0)) {
+			f32 ahead_x = clamp_f(advance_x * (0.22 / dt), -0.70, 0.70);
+			f32 ahead_z = clamp_f(advance_z * (0.22 / dt), -0.70, 0.70);
+			f32 next_limit = chase_terrain_limit(camera_pose.x + ahead_x, camera_pose.y, camera_pose.z + ahead_z, dx, dy, dz, fx, fy, fz);
+			clamp_f(next_limit, limit - 2.0, limit)
+		} else { limit };
+		f32 pace = if (predicted < boom_distance) { 11.0 } else { 5.0 };
+		f32 time = dt * pace;
+		f32 blended = if (!boom_initialized || limit < boom_distance) { limit } else {
+			clamp_f(boom_distance + (predicted - boom_distance) * time / (1.0 + time * 0.5), 0.0, limit)
 		};
 		f32 distance = if (hit.face < 0 || blended == limit || camera_sees_target(hit.position.x, hit.position.y, hit.position.z, camera_pose.x + dx * blended,
 			camera_pose.y + dy * blended, camera_pose.z + dz * blended, tx, ty, tz)) { blended } else { limit };
 		boom_distance = distance;
+		boom_initialized = true;
 		f32 depth = clamp_f(aim_distance + back * distance, 0.16, 9.0);
 		f32 projected = view_scale * distance / depth;
 		aim_was_offset = true;
 		host.aim(clamp_f(0.0 - shoulder * projected / frame_values[20], -0.94, 0.94),
 			clamp_f(0.0 - lift * projected, -0.94, 0.94));
 		f32 clearance_squared = (dx * dx + dy * dy + dz * dz) * distance * distance;
-		publish_avatar(clearance_squared >= 2.0164);
+		publish_avatar(clearance_squared >= (if (avatar_visible) { 2.0164 } else { 2.4025 }));
 		publish_frame(camera_pose.x + dx * distance, camera_pose.y + dy * distance, camera_pose.z + dz * distance,
 			sin_yaw, cos_yaw, sin_pitch, cos_pitch, camera_pose.pitch, hit);
 	};
@@ -2728,6 +2849,8 @@ unit(f32, f32, i32) tick = fn(dt, aspect, playing) {
 	clock_seconds = clock_seconds + step;
 	update_orientation();
 	if (playing != 0) {
+		f32 old_x = camera_pose.x;
+		f32 old_z = camera_pose.z;
 		if (beacon_phase == BeaconPhase::sandbox || beacon_phase == BeaconPhase::active) {
 			if (step > 0.0) {
 				if (beacon_phase == BeaconPhase::active) { update_tide(step); };
@@ -2747,7 +2870,7 @@ unit(f32, f32, i32) tick = fn(dt, aspect, playing) {
 		};
 		RayHit hit = if (beacon_phase == BeaconPhase::restored || beacon_phase == BeaconPhase::flooded) { no_hit } else { current_view_target() };
 		publish_outline(hit);
-		publish_play_frame(hit, step);
+		publish_play_frame(hit, step, camera_pose.x - old_x, camera_pose.z - old_z);
 	} else {
 		publish_outline(no_hit);
 		publish_avatar(false);

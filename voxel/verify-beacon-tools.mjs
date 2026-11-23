@@ -7,6 +7,7 @@ for (const aspect of [.56, 1.67]) {
   let game, frame, mesh, hit, uploads = 0;
   game = new WebAssembly.Instance(module, {
     showcase: {
+      horizon() {},
       atlas() {}, mesh() {}, water() {}, outline() {}, aim() {},
       frame(pointer, target) {
         frame = new Float32Array(game.memory.buffer, pointer, 44).slice();
