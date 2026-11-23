@@ -20,12 +20,12 @@ See the [build guide](flight/BUILD.md). Verify both missions and replay behavior
 
 ## Pocket Island
 
-Explore a seeded island in **Creative**, or carry a flame to two watchfires and then to the lighthouse in **Beacon Run**. Take the longer dry ridge, build across the channel, or risk the tidal cut. Waves affect buoyancy and drag, and the tide can submerge the flame. Your creative terrain is restored when you leave the mission.
+**Beacon Run** is an open-ended expedition across a seeded archipelago. Find the lens, regulator, and igniter in any order, then return to the lighthouse to light it. Pick your own route: explore the islands, swim between shores, or collect wood and place blocks to build a crossing. Waves affect buoyancy and drag, and the tide rises and falls while you explore.
 
 Wosy owns terrain, texture pixels, collisions, water geometry and swimming, camera and editable targets, and all mission rules. The browser only handles input and submits the meshes to WebGL 2.
 
-- Desktop: WASD or arrows to move, Space to jump or swim up, V to switch perspective, and F to toggle creative flight. In flight, Space and C rise and descend. Select with 1–6 or the wheel, and use Q/E to remove/place. With mouse capture, left/right click also break/place; hold either action to repeat. Drag to look when capture is unavailable.
-- Touch: drag the left joystick to move and the world on the right to look. Use the jump, view, and editing buttons with your other thumb. Flight is available in Creative. Pick a building material from the hotbar. To set a seed manually, pause and open World options.
+- Desktop: WASD or arrows to move, Space to jump or swim up, V to switch perspective, and Q/E to break/place. With mouse capture, left/right click also break/place; hold either action to repeat. Drag to look when capture is unavailable.
+- Touch: drag the left joystick to move and the world on the right to look. Tap Jump or hold it to swim up. Use the view, Break, and Place buttons with your other thumb.
 
 This is an experimental demo, not a claim that all game logic is statically verified.
 
@@ -53,7 +53,7 @@ FFmpeg, model, remote asset service, or JS audio library is needed to play.
 
 | Game | Quiet continuous sound | Gameplay cues |
 | --- | --- | --- |
-| Pocket Island | Surf only near the shore | Grounded footsteps; successful block break and placement; loose material and lighthouse-part pickup; entering the sea; lighthouse restored or run flooded |
+| Pocket Island | Surf only near the shore | Grounded footsteps; successful block break and placement; loose material and lighthouse-part pickup; entering the sea; lighthouse restored |
 | Flying Low | Throttle/speed-shaped motor and airflow | Bonus gate, cargo pickup, mail release and result, completed spray row, normal and rough touchdown, crash |
 | Last Ferry | Load-shaped car motor, quiet crossing bed | Grounded footsteps, car door, strong player impact, phone, tape pickup, ferry boarding, delivery or missed ferry |
 

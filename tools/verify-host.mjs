@@ -15,7 +15,11 @@ assert.match(markup, /<div class="entry-actions">\s*<button class="primary" id="
 
 const legacyControlIds = ['enter', 'seed', 'seed-form', 'apply-seed', 'random-seed'];
 for (const id of legacyControlIds) assert(!markup.includes(`id="${id}"`), id + ' is not a public control');
-assert.match(markup, /class="entry-keys"[\s\S]*?class="entry-touch"/);
+const entryKeys = markup.match(/<p class="entry-keys">([^\n]+)<\/p>/)?.[1];
+const entryTouch = markup.match(/<p class="entry-touch">([^\n]+)<\/p>/)?.[1];
+assert.match(entryKeys ?? '', /<kbd>Q<\/kbd> or left click: break.*<kbd>E<\/kbd> or right click: place wood/);
+assert.match(entryTouch ?? '', /Break wood, walk over it to pick it up, and use Place to build/);
+assert.doesNotMatch(entryKeys + entryTouch, /<kbd>F<\/kbd>|\b(?:fly|flight|select block|hotbar)\b/i);
 assert.match(markup, /<header class="top">[\s\S]*?id="mission-hud"[\s\S]*?class="top-actions"[\s\S]*?<\/header>/);
 assert.match(markup, /<h1 id="title">Pocket Island<\/h1>/);
 
