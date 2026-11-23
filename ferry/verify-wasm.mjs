@@ -5,7 +5,7 @@ const binary = new WebAssembly.Module(readFileSync(process.argv[2] ?? new URL("f
 assert.deepEqual(WebAssembly.Module.imports(binary).map(({ module, name }) => module+"."+name).sort(),
   ["ferry.frame", "ferry.moving", "ferry.world"]);
 assert.deepEqual(WebAssembly.Module.exports(binary).map(({ name }) => name).sort(),
-  ["_start", "cancel_action", "map_value", "memory", "reset", "route_selection", "route_value", "tick"]);
+  ["_start", "cancel_action", "map_value", "memory", "navigation_point", "navigation_update", "reset", "route_selection", "route_value", "tick"]);
 
 let engine, frame, world, moving, worldSends = 0;
 let walkingBearingSamples=0, drivingBearingSamples=0;
@@ -56,6 +56,15 @@ function guidePoints() {
   assert(length>=2&&length<=10);
   return Array.from({length},(_,i)=>[engine.route_value(key,i,0),engine.route_value(key,i,1)]);
 }
+function streetPath() {
+  const length=engine.navigation_update();
+  assert(length>=2&&length<=96,"objective has a bounded real route");
+  const points=Array.from({length},(_,i)=>[engine.navigation_point(i,0),engine.navigation_point(i,1)]);
+  assert(points.flat().every(Number.isFinite));
+  closePoint(points[0],spot());
+  assert.equal(engine.navigation_point(length,0),0);
+  return points;
+}
 function closePoint(actual,expected) {
   assert(actual, "expected a real route point");
   assert(Math.hypot(actual[0]-expected[0],actual[1]-expected[1])<.02);
@@ -85,6 +94,7 @@ function answerPhone() {
 function pickup() {
   answerPhone();
   const points=[[3.8,-4.6],[3.8,28.9],[-82,28.9],[-82,36.6]];
+  closePoint(streetPath().at(-1),[-82,36.6]);
   const first=guidePoints();
   assert.equal(first.length,4,"walking after the phone suggests the tested street corridor");
   first.forEach((point,i)=>closePoint(point,points[i]));
@@ -129,6 +139,9 @@ function ped(i) {
 
 engine._start();
 engine.reset(0);
+const phonePath=streetPath();
+closePoint(phonePath.at(-1),[3.8,-1.6]);
+assert(phonePath.length>=2);
 const roads=[
   [-111,25.35,110,7.65],[-111,54.5,112,7.6],[-65,-17,9,91.5],[-111,29.1,8,33.4],
   [-4.45,-20,8.9,94.4],[-18.8,-12,5.8,85.4],[-18.8,27.6,26.2,5.9],[-18.8,57,23.3,5.1],
@@ -136,7 +149,7 @@ const roads=[
   [-127,25.35,16,7.65],[-143,25.35,16,7.65],[-159,25.35,16,7.65],
   [-127,40,14,5.6],[-143,40,16,5.6],[-159,40,16,5.6],
   [-127,54.5,16,7.6],[-143,54.5,16,7.6],[-159,54.5,16,7.6],
-  [-127,27,5.4,33],[-143,27,5.4,33],[-159,27,5,33],[-113,40,5.5,5.6]
+  [-127,27,5.4,33],[-143,27,5.4,33],[-159,27,5,33],[-113,40,5.5,5.6],[-110.52,12.25,13.55,12.9]
 ];
 assert.equal(engine.map_value(-1,0),roads.length);
 for(const [row,road] of roads.entries()) {
@@ -500,6 +513,7 @@ mount();
 for(const [x,z,radius,speed] of [[-102.0,22.65,1.9,6.0],[-107.85,32.5,1.5,3.8],[-108.4,52.0,1.33,5.7],
   [-106.0,57.15,1.2,4],[-100.0,58.5,1.25,4],[-9.0,58.6,1.8,7.4],[-5.8,58.6,.85,2.6]]) {
   assert(Math.abs(frame[24]-x)<.02&&Math.abs(frame[25]-z)<.02,"each driven return turn is visibly guided");
+  closePoint(streetPath().at(-1),[x,z]);
   driveCourse([[frame[24],frame[25],radius,speed]]);
 }
 run(105,0,0,1);
@@ -511,6 +525,7 @@ assert.equal(frame[16],0);
 assert(frame[27]>bay[1]+1.2,"the passenger exits toward the marked footway, away from the travel lane");
 assert(Math.abs(frame[24]+4.55)<.01&&Math.abs(frame[25]-62.10)<.01,"guide starts the curbside footway");
 const parkPoints=guidePoints();
+closePoint(streetPath().at(-1),[frame[24],frame[25]]);
 assert.equal(parkPoints.length,4);
 parkPoints.forEach((point,i)=>closePoint(point,[[-4.55,62.10],[-4.55,73.55],[8.10,73.55],[11,83]][i]));
 walkTo(frame[24],frame[25]);
@@ -521,6 +536,7 @@ walkTo(frame[24],frame[25]);
 assert.equal(frame[24],11);
 assert.equal(frame[25],83);
 const pierPoints=guidePoints();
+closePoint(streetPath().at(-1),[frame[24],frame[25]]);
 assert.equal(pierPoints.length,2,"after reaching the harbor entrance keep the last leg on the map");
 closePoint(pierPoints[0],[8.10,73.55]);
 closePoint(pierPoints[1],[11,83]);
@@ -547,6 +563,7 @@ for(let k=prepared?6:0;k<avenue.length;k++) {
   const [x,z,speed]=avenue[k];
   const thisLeg=()=>Math.hypot(frame[24]-x,frame[25]-z)<.02;
   assert(thisLeg(),"avenue guide draws each legal turn in order");
+  closePoint(streetPath().at(-1),[x,z]);
   const points=guidePoints();
   assert.equal(points.length,avenue.length-Math.max(0,k-1));
   closePoint(points[k===0?0:1],[x,z]);
@@ -575,6 +592,7 @@ assert.equal(guidePoints().length,5);
 guidePoints().forEach((point,i)=>closePoint(point,avenueWalkPoints[i]));
 for(const [x,z] of avenueWalkPoints) {
   assert(Math.hypot(frame[24]-x,frame[25]-z)<.03,"avenue bay foot guidance avoids the building frontage");
+  closePoint(streetPath().at(-1),[x,z]);
   walkTo(frame[24],frame[25]);
 }
 assert.equal(frame[20],4);

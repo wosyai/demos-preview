@@ -30,9 +30,9 @@ test("pedals and one-shot action coexist with analog steering; keyboard axis pre
 test("loader agrees with shell version, WebAssembly triangle shape, and 30-float engine frame",async()=>{
   const html=await readFile(new URL("../index.html",import.meta.url),"utf8");
   const version=html.match(/host\.mjs\?v=([^"]+)/)?.[1];
-  assert.equal(version,"ferry-free-orbit-v1-navigation-v2");
+  assert.equal(version,"ferry-street-orbit-v1-navigation-v2");
   assert(html.includes('style.css?v=ferry-free-orbit-v1"'));
-  assert.equal(ENGINE_PATH,"./ferry.wasm?v=ferry-free-orbit-v1");
+  assert.equal(ENGINE_PATH,"./ferry.wasm?v=ferry-street-orbit-v1");
   assert.doesNotMatch(html,/id="camera-view"/);
   assert.match(html,/<div id="play-hud" class="play-hud" hidden>[\s\S]*?<header[^>]*>[\s\S]*?id="objective"[\s\S]*?id="status"[\s\S]*?id="city-map"[\s\S]*?id="hint"[\s\S]*?<\/header>/);
   assert.match(html,/id="action-icon"[\s\S]*?<span id="action-caption">Interact<\/span>/);
@@ -101,7 +101,7 @@ function shell({defer=false,missing="",cue=1}={}) {
   const memory=new WebAssembly.Memory({initial:1});
   const frames=[],ticks=[],draws=[],uploads=[],resets=[];
   let finishFetch,cancellations=0,wasmStarts=0,time=0;
-  let state=0,seconds=90,turn=0,selection=0,routeReads=0, player=[0,0],target=[0,0],heading=0,driving=false, routeSelections=0, exitOnAction=false, hit=0, hitSequence=0;
+  let state=0,seconds=90,turn=0,selection=0,routeReads=0, player=[0,0],target=[0,0],heading=0,driving=false, routeSelections=0, pathUpdates=0, path=[], exitOnAction=false, hit=0, hitSequence=0;
   const fetchGate=new Promise(resolve=>{finishFetch=resolve;});
   const env={
     window,document,devicePixelRatio:1,performance:{now:()=>time},
@@ -123,7 +123,8 @@ function shell({defer=false,missing="",cue=1}={}) {
           cancel_action(){cancellations++;},
           map_value(row,column){ return row===-1 ? 1 : [-1,2,3,4][column]; },
           route_selection(){ routeSelections++; return selection; },
-          route_value(key,row,column){ routeReads++; return row===-1 ? 3 : [[-1,2],[-1,4],[2,4]][row][column]; },
+          navigation_update(){pathUpdates++;return path.length;},
+          navigation_point(row,column){routeReads++;return path[row][column];},
         };
         if(missing)delete exports[missing];
         return {instance:{exports}};
@@ -134,8 +135,9 @@ function shell({defer=false,missing="",cue=1}={}) {
   return {
     get,window,document,ticks,draws,uploads,resets,started,finishFetch,mapPaint,roadPaint,
     advance(delta=16){ const frame=frames.shift(); assert(frame,"animation callback was scheduled");frame(time+=delta); },
-    mission(next){({state,seconds,turn,cue,selection,player,target,heading,driving,exitOnAction,hit,hitSequence}={state,seconds,turn,cue,selection,player,target,heading,driving,exitOnAction,hit,hitSequence,...next});},
+    mission(next){({state,seconds,turn,cue,selection,player,target,heading,driving,exitOnAction,hit,hitSequence,path}={state,seconds,turn,cue,selection,player,target,heading,driving,exitOnAction,hit,hitSequence,path,...next});},
     get routeSelections(){return routeSelections;},
+    get pathUpdates(){return pathUpdates;},
     get routeReads(){return routeReads;},
     get wasmStarts(){return wasmStarts;},
     get cancellations(){return cancellations;},
@@ -383,50 +385,62 @@ test("touch action caption follows the same Wosy cue as its accessible name",asy
   assert.equal(hud.hidden,true);
 });
 
-test("the minimap paints Wosy turns and reads path points only on selection changes",async()=>{
+test("minimap paints exactly Wosy's connected route and never invents a shortcut",async()=>{
   const app=shell(); await app.started;
   app.get("start").emit("click");
-  app.mission({state:1,selection:65,player:[0,3],target:[-1,4]});
+  const path=[[0,3],[0,4],[2,4]];
+  app.mission({state:1,selection:65,player:path[0],target:[-1,4],path});
   app.advance();
-  assert.equal(app.routeReads,0,"the closed map has no path work");
+  assert.equal(app.pathUpdates,0,"closed map performs no routing");
   const map=app.get("city-map");
   map.open=true; map.emit("toggle");
-  assert.equal(app.routeReads,7);
-  const starts=app.mapPaint.filter(row=>row[0]==="route-start");
+  assert.equal(app.pathUpdates,1);
+  assert.equal(app.routeReads,6);
+  const [start]=app.mapPaint.filter(row=>row[0]==="route-start");
   const legs=app.mapPaint.filter(row=>row[0]==="route-leg");
-  assert.equal(legs.length,3);
-  assert.equal(legs[0][2],starts[0][2],"future route follows the road turn");
-  assert.deepEqual(legs[1].slice(1),starts[2].slice(1),"dotted connector reaches the active segment");
-  assert.equal(legs[2][1],starts[2][1],"current leg stays on the engine's vertical segment");
-  assert(app.mapPaint.some(([kind,color,dash])=>kind==="stroke"&&color==="#ffcd87"&&dash.length===2));
-  assert(app.mapPaint.some(([kind,color,dash])=>kind==="stroke"&&color==="#ffcd87"&&dash.length===0));
+  assert.equal(legs.length,2);
+  assert.equal(legs[0][1],start[1],"start spans the first canonical street");
+  assert.equal(legs[1][2],legs[0][2],"the corner stays intact");
+  assert.deepEqual(app.mapPaint.find(row=>row[0]==="dot").slice(1,3),legs.at(-1).slice(1),"next stop is the path end supplied by Wosy");
   const firstPaint=app.mapPaint.length, firstSelection=app.routeSelections;
   app.advance(); app.advance();
-  assert.equal(app.routeSelections,firstSelection,"does not read the route key each RAF");
+  assert.equal(app.routeSelections,firstSelection,"no key polling at RAF rate");
   app.advance(72);
-  assert.equal(app.mapPaint.length,firstPaint,"unchanged map is not repainted at a poll");
-  assert.equal(app.routeReads,7,"unchanged legs keep cached route points");
+  assert.equal(app.mapPaint.length,firstPaint,"unchanged map is not repainted");
+  assert.equal(app.pathUpdates,1,"unchanged route avoids an engine graph query");
   assert.equal(app.roadPaint.length,1);
   app.mission({selection:66,driving:true,heading:Math.PI/2});
   app.mapPaint.length=0;
   app.advance(72);
-  assert.equal(app.routeReads,14,"same-phase route key changes are detected");
-  assert.equal(app.roadPaint.length,1,"pose/heading changes reuse a static projection");
+  assert.equal(app.pathUpdates,2,"same-phase route key changes are detected");
+  assert.equal(app.roadPaint.length,1,"pose/heading changes reuse the road projection");
   assert.equal(app.mapPaint.filter(row=>row[0]==="close-shape").length,1,"car gets a heading glyph");
   const direction=app.mapPaint.filter(row=>row[0]==="route-start").at(-1);
   const sides=app.mapPaint.filter(row=>row[0]==="route-leg").slice(-3);
   assert(sides.every(([,x])=>direction[1]>x),"eastbound heading points right");
-  app.mapPaint.length=0;
-  app.mission({selection:0,driving:false});
+  app.mission({player:[.15,3]});
   app.advance(72);
-  const guide=app.mapPaint.filter(([kind,color])=>kind==="stroke"&&color==="#ffcd87");
-  assert.equal(guide.length,1);
-  assert.deepEqual(guide[0][2],[3,5],"without a selected route only a dotted cue is displayed");
-  assert(!app.mapPaint.some(row=>row[0]==="close-shape"),"frame does not expose heading on foot");
+  assert.equal(app.pathUpdates,2,"small motion does not trigger graph work");
   app.mapPaint.length=0;
-  app.mission({state:5});
+  app.mission({player:[.9,3],path:[]});
+  app.advance(72);
+  assert.equal(app.pathUpdates,3,"movement re-anchors path to the car");
+  assert(!app.mapPaint.some(([kind,color])=>kind==="stroke"&&color==="#ffcd87"),"no legitimate path means no invented shortcut");
+  app.mission({heading:Math.PI-.02});
   app.advance();
-  assert.deepEqual(app.mapPaint.filter(row=>row[0]==="fill"),[["fill","#fff5e1"]],"phase transition paints immediately");
+  assert.equal(app.pathUpdates,3,"heading observes the same bounded cadence as movement");
+  app.advance(72);
+  assert.equal(app.pathUpdates,4,"turning in place can require a different approach");
+  app.mission({heading:-Math.PI+.02});
+  app.advance(72);
+  assert.equal(app.pathUpdates,4,"crossing the angle wrap only counts the actual small turn");
+  app.mission({heading:-Math.PI+.27});
+  app.advance(72);
+  assert.equal(app.pathUpdates,5,"small changes accumulate against the last planned heading");
+  app.mapPaint.length=0;
+  app.mission({state:5,driving:false});
+  app.advance();
+  assert.deepEqual(app.mapPaint.filter(row=>row[0]==="fill"),[["fill","#fff5e1"]],"crossing removes guidance immediately");
 });
 
 

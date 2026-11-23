@@ -519,8 +519,8 @@ unit() draw_landmarks = fn {
 };
 
 i32 annex_middle_road = 23;
-i32 map_road_count = 24;
-f32[4][24] map_roads = [
+i32 map_road_count = 25;
+f32[4][25] map_roads = [
     [-111.0,25.35,110.0,7.65],
     [-111.0,54.5,112.0,7.6],
     [-65.0,-17.0,9.0,91.5],
@@ -536,7 +536,8 @@ f32[4][24] map_roads = [
     [-127.0,40.0,14.0,5.6],[-143.0,40.0,16.0,5.6],[-159.0,40.0,16.0,5.6],
     [-127.0,54.5,16.0,7.6],[-143.0,54.5,16.0,7.6],[-159.0,54.5,16.0,7.6],
     [-127.0,27.0,5.4,33.0],[-143.0,27.0,5.4,33.0],[-159.0,27.0,5.0,33.0],
-    [-113.0,40.0,5.5,5.6]
+    [-113.0,40.0,5.5,5.6],
+    [-110.52,12.25,13.55,12.90]
 ];
 
 f32(i32) road_z = fn(row) {
@@ -786,7 +787,7 @@ unit() render_world = fn {
     draw_palms(0);
     paint_road(0);
     crosswalk(0);
-    ground(-110.52,12.25,13.55,12.90,0.021,0.30,0.31,0.39);
+    ground(map_roads[24][0],road_z(24),map_roads[24][2],map_roads[24][3],0.021,0.30,0.31,0.39);
     ground(-110.29,13.00,0.17,9.35,0.032,0.96,0.68,0.41);
     ground(-107.3,13.35,6.1,0.16,0.032,0.96,0.68,0.41);
     ground(-103.75,15.1,1.30,0.25,0.036,0.99,0.76,0.48);
@@ -1537,6 +1538,389 @@ f32(i32,i32,i32) route_value = fn(key,row,column) {
         }
     }
 };
+
+i32 nav_node_count = 50;
+f32[2][50] nav_nodes = [
+    [0.0, -14.25],[-60.3, -14.25],[-60.3, 22.65],[-82.0, 22.65],[-102.0, 22.65],[-107.85, 32.5],
+    [-108.4, 52.0],[-106.0, 57.15],[-100.0, 58.5],[-60.3, 58.6],[-15.9, 58.6],[-5.8, 58.6],
+    [0.0, 58.6],[0.0, 29.15],[-15.9, 29.15],[-36.5, 27.05],[-59.0, 26.9],[-60.3, 29.15],
+    [-82.0, 29.15],[-107.85, 29.15],[-107.7, 20.8],[-108.0, 17.1],[-104.5, 14.85],[-100.6, 17.65],
+    [-98.5, 22.0],[-9.5, 26.0],[-62.8, 22.65],[-64.8, 29.15],[-64.8, 58.6],[-9.0, 58.6],
+    [0.0, -5.0],[3.8, -1.6],[3.8, -4.6],[3.8, 28.9],[-82.0, 28.9],[-82.0, 36.6],
+    [-64.8, 38.4],[-64.8, 73.45],[8.1, 73.55],[11.0, 83.0],[-4.55, 62.1],[-4.55, 73.55],
+    [-9.5, 30.2],[3.9, 30.2],[3.9, 70.7],[-64.8, 73.55],[0.0, 73.55],[-80.0, 36.6],
+    [-60.3, 36.6],[-10.5, 29.15]
+];
+i32 nav_edges = 136;
+i32[3][68] nav_links = [
+    [0, 1, 1],[1, 2, 1],[2, 26, 1],[26, 3, 1],[3, 4, 1],[4, 20, 1],
+    [20, 21, 1],[21, 22, 1],[22, 23, 1],[23, 24, 1],[24, 3, 1],[20, 19, 1],
+    [19, 5, 1],[5, 6, 1],[6, 7, 1],[7, 8, 1],[8, 28, 1],[28, 9, 1],
+    [9, 10, 1],[10, 29, 1],[29, 11, 1],[11, 12, 1],[12, 13, 1],[13, 49, 1],
+    [49, 14, 1],[14, 15, 1],[15, 16, 1],[16, 17, 1],[17, 27, 1],[27, 18, 1],
+    [18, 19, 1],[16, 26, 1],[17, 2, 1],[17, 48, 1],[48, 9, 1],[28, 27, 1],
+    [14, 10, 1],[25, 15, 1],[25, 49, 1],[0, 30, 1],[30, 13, 1],[30, 32, 0],
+    [32, 31, 0],[32, 33, 0],[33, 34, 0],[34, 35, 0],[35, 47, 0],[47, 36, 0],
+    [36, 37, 0],[36, 48, 0],[37, 45, 0],[45, 41, 0],[41, 46, 0],[46, 38, 0],
+    [38, 39, 0],[12, 46, 0],[11, 40, 0],[40, 41, 0],[25, 42, 0],[42, 43, 0],
+    [43, 44, 0],[44, 38, 0],[13, 33, 0],[33, 43, 0],[34, 18, 0],[36, 27, 0] , [4,19,1],[4,5,1]
+];
+struct copy NavEdgeState {
+    i32 closed;
+    i32 drive;
+    i32 walk;
+    i32 next;
+    f32 cost;
+}
+NavEdgeState nav_empty = { .closed=0; .drive=0; .walk=0; .next= -1; .cost=0.0; };
+NavEdgeState[136] nav_edge = [
+    nav_empty,nav_empty,nav_empty,nav_empty,nav_empty,nav_empty,nav_empty,nav_empty,nav_empty,nav_empty,nav_empty,
+    nav_empty,nav_empty,nav_empty,nav_empty,nav_empty,nav_empty,nav_empty,nav_empty,nav_empty,nav_empty,nav_empty,
+    nav_empty,nav_empty,nav_empty,nav_empty,nav_empty,nav_empty,nav_empty,nav_empty,nav_empty,nav_empty,nav_empty,
+    nav_empty,nav_empty,nav_empty,nav_empty,nav_empty,nav_empty,nav_empty,nav_empty,nav_empty,nav_empty,nav_empty,
+    nav_empty,nav_empty,nav_empty,nav_empty,nav_empty,nav_empty,nav_empty,nav_empty,nav_empty,nav_empty,nav_empty,
+    nav_empty,nav_empty,nav_empty,nav_empty,nav_empty,nav_empty,nav_empty,nav_empty,nav_empty,nav_empty,nav_empty,
+    nav_empty,nav_empty,nav_empty,nav_empty,nav_empty,nav_empty,nav_empty,nav_empty,nav_empty,nav_empty,nav_empty,
+    nav_empty,nav_empty,nav_empty,nav_empty,nav_empty,nav_empty,nav_empty,nav_empty,nav_empty,nav_empty,nav_empty,
+    nav_empty,nav_empty,nav_empty,nav_empty,nav_empty,nav_empty,nav_empty,nav_empty,nav_empty,nav_empty,nav_empty,
+    nav_empty,nav_empty,nav_empty,nav_empty,nav_empty,nav_empty,nav_empty,nav_empty,nav_empty,nav_empty,nav_empty,
+    nav_empty,nav_empty,nav_empty,nav_empty,nav_empty,nav_empty,nav_empty,nav_empty,nav_empty,nav_empty,nav_empty,
+    nav_empty,nav_empty,nav_empty,nav_empty,nav_empty,nav_empty,nav_empty,nav_empty,nav_empty,nav_empty,nav_empty,
+    nav_empty,nav_empty,nav_empty,nav_empty
+];
+i32 nav_limit = 96;
+f32[2] nav_point = [0.0,0.0];
+f32[2][96] nav_points = [
+    nav_point,nav_point,nav_point,nav_point,nav_point,nav_point,
+    nav_point,nav_point,nav_point,nav_point,nav_point,nav_point,
+    nav_point,nav_point,nav_point,nav_point,nav_point,nav_point,
+    nav_point,nav_point,nav_point,nav_point,nav_point,nav_point,
+    nav_point,nav_point,nav_point,nav_point,nav_point,nav_point,
+    nav_point,nav_point,nav_point,nav_point,nav_point,nav_point,
+    nav_point,nav_point,nav_point,nav_point,nav_point,nav_point,
+    nav_point,nav_point,nav_point,nav_point,nav_point,nav_point,
+    nav_point,nav_point,nav_point,nav_point,nav_point,nav_point,
+    nav_point,nav_point,nav_point,nav_point,nav_point,nav_point,
+    nav_point,nav_point,nav_point,nav_point,nav_point,nav_point,
+    nav_point,nav_point,nav_point,nav_point,nav_point,nav_point,
+    nav_point,nav_point,nav_point,nav_point,nav_point,nav_point,
+    nav_point,nav_point,nav_point,nav_point,nav_point,nav_point,
+    nav_point,nav_point,nav_point,nav_point,nav_point,nav_point,
+    nav_point,nav_point,nav_point,nav_point,nav_point,nav_point
+];
+i32 nav_goal = -1;
+i32 nav_mode = -1;
+i32 nav_count = 0;
+f32 nav_radius = 2.42;
+f32 nav_far = 1000000.0;
+
+i32(i32) nav_a = fn(e) { nav_links[ix(e/2)][ix(e%2)] };
+i32(i32) nav_b = fn(e) { nav_links[ix(e/2)][ix(1-e%2)] };
+f32(i32) nav_x = fn(n) { nav_nodes[ix(n)][0] };
+f32(i32) nav_z = fn(n) { nav_nodes[ix(n)][1] };
+f32(i32,i32) nav_distance = fn(a,b) { length(nav_x(b)-nav_x(a),nav_z(b)-nav_z(a)) };
+
+bool(f32,f32,i32) nav_road = fn(x,z,i) {
+    if (i>=map_road_count) { false } else {
+        u64 n=ix(i);
+        f32 rx=map_roads[n][0]; f32 rz=road_z(i);
+        if (x>=rx-0.26 && x<=rx+map_roads[n][2]+0.26 &&
+            z>=rz-0.26 && z<=rz+map_roads[n][3]+0.26) { true }
+        else { nav_road(x,z,i+1) }
+    }
+};
+
+bool(f32,f32,i32) nav_footway = fn(x,z,i) {
+    if (i>=nav_edges/2) { false } else {
+        if (nav_links[ix(i)][2]==0) {
+            i32 a=nav_a(i*2); i32 b=nav_b(i*2);
+            f32 ax=nav_x(a); f32 az=nav_z(a);
+            f32 dx=nav_x(b)-ax; f32 dz=nav_z(b)-az;
+            f32 t=clamp(((x-ax)*dx+(z-az)*dz)/(sq(dx)+sq(dz)),0.0,1.0);
+            if (sq(x-ax-dx*t)+sq(z-az-dz*t)<=2.25) { true } else { nav_footway(x,z,i+1) }
+        } else { nav_footway(x,z,i+1) }
+    }
+};
+bool(f32,f32,f32,f32,f32,bool,bool,i32) nav_segment = fn(x,z,ux,uz,span,drive,street,i) {
+    f32 d=min_f(span,0.45*float_i(i));
+    f32 sx=x+ux*d; f32 sz=z+uz*d;
+    bool blocked=if (drive) { car_hit(sx,sz,ux,uz)!=0 || (street && !nav_road(sx,sz,0)) }
+    else { static_hit(sx,sz,0.35,false)!=0 || (!street && !nav_road(sx,sz,0) && !nav_footway(sx,sz,0)) };
+    if (blocked) { false } else { if (d>=span) { true } else { nav_segment(x,z,ux,uz,span,drive,street,i+1) } }
+};
+bool(f32,f32,f32,f32,bool,bool) nav_line = fn(ax,az,bx,bz,drive,street) {
+    f32 dx=bx-ax; f32 dz=bz-az;
+    f32 span=length(dx,dz); f32 div=max_f(span,0.001);
+    nav_segment(ax,az,dx/div,dz/div,span,drive,street,0)
+};
+unit(f32,f32) nav_add = fn(x,z) {
+    if (nav_count<nav_limit) {
+        nav_points[ix(nav_count)][0]=x; nav_points[ix(nav_count)][1]=z;
+        nav_count=nav_count+1;
+    };
+};
+bool(f32,f32,f32,f32,f32,f32,f32,bool,i32) nav_curve = fn(cx,cz,ax,az,ux,uz,angle,draw,i) {
+    f32 t=angle*float_i(i)/12.0;
+    f32 s=sin_small(t); f32 c=cos_small(t);
+    f32 x=cx+ax*c-az*s; f32 z=cz+ax*s+az*c;
+    if (draw) { nav_add(x,z); };
+    if (car_hit(x,z,ux*c-uz*s,ux*s+uz*c)!=0 || !nav_road(x,z,0)) { false }
+    else { if (i>=12) { true } else { nav_curve(cx,cz,ax,az,ux,uz,angle,draw,i+1) } }
+};
+bool(f32,f32,f32,f32,f32,f32,f32,f32,bool) nav_turn = fn(x,z,ux,uz,ou,ov,in_span,out_span,draw) {
+    f32 dot=ux*ou+uz*ov; f32 cross=ux*ov-uz*ou;
+    if (dot< -0.94) { false } else {
+        if (abs_f(cross)<0.01) { true } else {
+            f32 trim=nav_radius*abs_f(cross)/(1.0+dot);
+            if (trim>in_span || trim>out_span) { false } else {
+                f32 sign=if (cross>0.0) { 1.0 } else { -1.0 };
+                f32 ex=x-ux*trim; f32 ez=z-uz*trim;
+                f32 ax=uz*nav_radius*sign; f32 az= -ux*nav_radius*sign;
+                nav_curve(ex-ax,ez-az,ax,az,ux,uz,bearing(cross,dot),draw,0)
+            }
+        }
+    }
+};
+bool(i32,i32,bool) nav_junction = fn(before,after,draw) {
+    i32 a=nav_a(before); i32 b=nav_b(before); i32 c=nav_b(after);
+    f32 l=nav_distance(a,b); f32 r=nav_distance(b,c);
+    f32 x=nav_x(b); f32 z=nav_z(b);
+    nav_turn(x,z,(x-nav_x(a))/l,(z-nav_z(a))/l,(nav_x(c)-x)/r,(nav_z(c)-z)/r,l*0.5,r*0.5,draw)
+};
+bool(i32,bool) nav_edge_clear = fn(e,drive) {
+    u64 id=ix(e);
+    if (drive && nav_links[ix(e/2)][2]==0) { false } else {
+        i32 known=if (drive) { nav_edge[id].drive } else { nav_edge[id].walk };
+        if (known!=0) { known==1 } else {
+            i32 a=nav_a(e); i32 b=nav_b(e);
+            bool clear=nav_line(nav_x(a),nav_z(a),nav_x(b),nav_z(b),drive,true);
+            i32 result=if (clear) { 1 } else { -1 };
+            if (drive) { nav_edge[id].drive=result; } else { nav_edge[id].walk=result; };
+            clear
+        }
+    }
+};
+unit(i32,i32,bool) nav_seed = fn(i,goal,drive) {
+    if (i<nav_edges) {
+        nav_edge[ix(i)].closed=0;
+        nav_edge[ix(i)].next= -1;
+        nav_edge[ix(i)].cost=if (nav_b(i)==goal && nav_edge_clear(i,drive)) { nav_distance(nav_a(i),goal) } else { nav_far };
+        nav_seed(i+1,goal,drive);
+    };
+};
+i32(i32,i32,f32) nav_lowest = fn(i,best,low) {
+    if (i>=nav_edges) { best } else {
+        f32 c=nav_edge[ix(i)].cost;
+        if (nav_edge[ix(i)].closed==0 && c<low) { nav_lowest(i+1,i,c) } else { nav_lowest(i+1,best,low) }
+    }
+};
+unit(i32,i32,bool) nav_relax = fn(i,after,drive) {
+    if (i<nav_edges) {
+        if (nav_b(i)==nav_a(after) && nav_edge[ix(i)].closed==0 && nav_edge_clear(i,drive)) {
+            f32 cost=nav_edge[ix(after)].cost+nav_distance(nav_a(i),nav_b(i));
+            if (cost<nav_edge[ix(i)].cost && (!drive || nav_junction(i,after,false))) {
+                nav_edge[ix(i)].cost=cost;
+                nav_edge[ix(i)].next=after;
+            };
+        };
+        nav_relax(i+1,after,drive);
+    };
+};
+unit(bool) nav_search = fn(drive) {
+    i32 id=nav_lowest(0,-1,nav_far);
+    if (id>=0) {
+        nav_edge[ix(id)].closed=1;
+        nav_relax(0,id,drive);
+        nav_search(drive);
+    };
+};
+
+struct copy NavApproach {
+    f32 x;
+    f32 z;
+    f32 dx;
+    f32 dz;
+    f32 ux;
+    f32 uz;
+    f32 ou;
+    f32 ov;
+    bool street;
+}
+NavApproach nav_approach = { .x=0.0; .z=0.0; .dx=0.0; .dz=0.0; .ux=0.0; .uz=0.0; .ou=0.0; .ov=0.0; .street=true; };
+f32 nav_entry_score = 0.0;
+
+bool(NavApproach,bool,i32) nav_splice = fn(path,draw,i) {
+    f32 t=float_i(i)/32.0;
+    f32 t2=t*t; f32 t3=t2*t;
+    f32 p=3.0*t2-2.0*t3; f32 a=t3-2.0*t2+t; f32 b=t3-t2;
+    f32 x=path.x+path.dx*p+path.ux*a+path.ou*b;
+    f32 z=path.z+path.dz*p+path.uz*a+path.ov*b;
+    f32 pu=6.0*t-6.0*t2; f32 au=3.0*t2-4.0*t+1.0; f32 bu=3.0*t2-2.0*t;
+    f32 hu=path.dx*pu+path.ux*au+path.ou*bu;
+    f32 hv=path.dz*pu+path.uz*au+path.ov*bu;
+    f32 pv=6.0-12.0*t; f32 av=6.0*t-4.0; f32 bv=6.0*t-2.0;
+    f32 du=path.dx*pv+path.ux*av+path.ou*bv;
+    f32 dv=path.dz*pv+path.uz*av+path.ov*bv;
+    f32 pace2=sq(hu)+sq(hv); f32 pace=length(hu,hv);
+    bool road=nav_road(x,z,0);
+    if (i>0 && ((!road && path.street) || (i==32 && !road) || pace<0.001 ||
+        sq((hu*dv-hv*du)*nav_radius)>pace2*pace2*pace2 ||
+        (car_hit(x,z,hu/pace,hv/pace)!=0 || car_hit(x,z,-hu/pace,-hv/pace)!=0))) { false } else {
+        if (draw && i>0) { nav_add(x,z); };
+        if (i==32) { true } else { nav_splice(path,draw,i+1) }
+    }
+};
+bool(f32,f32,f32,f32,f32,f32,f32,f32,f32) nav_link_approach = fn(px,pz,x,z,hu,hv,u,v,weight) {
+    f32 dx=x-px; f32 dz=z-pz; f32 span=length(dx,dz);
+    if (span<0.05 || span>20.0 || hu*dx+hv*dz< -0.2 || u*dx+v*dz< -0.2) { false } else {
+        f32 stem=span*weight;
+        NavApproach path={ .x=px; .z=pz; .dx=dx; .dz=dz; .ux=hu*stem; .uz=hv*stem;
+            .ou=u*stem; .ov=v*stem; .street=nav_road(px,pz,0); };
+        if (nav_splice(path,false,0)) { nav_approach=path; true } else { false }
+    }
+};
+f32(i32,f32,f32) nav_leave_margin = fn(id,u,v) {
+    i32 next=nav_edge[ix(id)].next;
+    if (next<0) { 0.0 } else {
+        i32 b=nav_b(id); i32 c=nav_b(next); f32 span=nav_distance(b,c);
+        f32 wu=(nav_x(c)-nav_x(b))/span; f32 wv=(nav_z(c)-nav_z(b))/span;
+        nav_radius*abs_f(u*wv-v*wu)/(1.0+u*wu+v*wv)
+    }
+};
+bool(i32,f32,f32,f32,f32,i32) nav_entry = fn(id,px,pz,hu,hv,trial) {
+    i32 a=nav_a(id); i32 b=nav_b(id);
+    f32 ax=nav_x(a); f32 az=nav_z(a); f32 span=nav_distance(a,b);
+    f32 u=(nav_x(b)-ax)/span; f32 v=(nav_z(b)-az)/span;
+    f32 along=(px-ax)*u+(pz-az)*v;
+    f32 last=span-nav_leave_margin(id,u,v);
+    f32 at=clamp(along+float_i(trial)*3.0,0.0,last);
+    f32 x=ax+u*at; f32 z=az+v*at;
+    f32 approach=length(x-px,z-pz);
+    if (trial>5 || approach>20.0) { false } else {
+        if (approach<0.05 && hu*u+hv*v>0.985) {
+            nav_approach={ .x=x; .z=z; .dx=0.0; .dz=0.0; .ux=0.0; .uz=0.0; .ou=0.0; .ov=0.0; .street=true; };
+            nav_entry_score=nav_edge[ix(id)].cost-at;
+            true
+        } else {
+            if (nav_link_approach(px,pz,x,z,hu,hv,u,v,1.0) ||
+                nav_link_approach(px,pz,x,z,hu,hv,u,v,0.68) ||
+                nav_link_approach(px,pz,x,z,hu,hv,u,v,1.42)) {
+                nav_entry_score=nav_edge[ix(id)].cost-at+approach; true
+            } else { nav_entry(id,px,pz,hu,hv,trial+1) }
+        }
+    }
+};
+f32[9] nav_arrival_offsets = [0.0,0.42,-0.42,0.82,-0.82,1.20,-1.20,1.52,-1.52];
+bool(f32,f32,f32,f32,f32,f32,f32,f32,i32) nav_arrive = fn(px,pz,x,z,hu,hv,u,v,index) {
+    if (index>=9) { false } else {
+        f32 angle=nav_arrival_offsets[ix(index)];
+        f32 c=cos_small(angle); f32 si=sin_small(angle);
+        f32 nav_arrival_tangent_x=u*c-v*si; f32 nav_arrival_tangent_z=u*si+v*c;
+        if (nav_link_approach(px,pz,x,z,hu,hv,nav_arrival_tangent_x,nav_arrival_tangent_z,1.0) ||
+            nav_link_approach(px,pz,x,z,hu,hv,nav_arrival_tangent_x,nav_arrival_tangent_z,0.68) ||
+            nav_link_approach(px,pz,x,z,hu,hv,nav_arrival_tangent_x,nav_arrival_tangent_z,1.42) ||
+            nav_link_approach(px,pz,x,z,hu,hv,nav_arrival_tangent_x,nav_arrival_tangent_z,1.82)) { true }
+        else { nav_arrive(px,pz,x,z,hu,hv,u,v,index+1) }
+    }
+};
+bool(f32,f32,f32,f32,f32,f32) nav_local_goal = fn(px,pz,x,z,hu,hv) {
+    f32 dx=x-px; f32 dz=z-pz; f32 span=length(dx,dz);
+    if (span<0.05 || span>14.0 || hu*dx+hv*dz< -0.2) { false }
+    else { nav_arrive(px,pz,x,z,hu,hv,dx/span,dz/span,0) }
+};
+
+i32(i32,f32,f32,f32,f32,bool,i32,f32) nav_pick = fn(i,px,pz,hu,hv,drive,best,score) {
+    if (i>=nav_edges) { best } else {
+        bool available=nav_edge[ix(i)].cost<nav_far;
+        bool valid=if (!available) { false } else {
+            if (drive) { nav_entry(i,px,pz,hu,hv,0) || nav_entry(i,px,pz,-hu,-hv,0) }
+            else {
+                i32 a=nav_a(i); i32 b=nav_b(i);
+                f32 span=nav_distance(a,b);
+                f32 u=(nav_x(b)-nav_x(a))/span; f32 v=(nav_z(b)-nav_z(a))/span;
+                f32 at=clamp((px-nav_x(a))*u+(pz-nav_z(a))*v,0.0,span);
+                f32 x=nav_x(a)+u*at; f32 z=nav_z(a)+v*at;
+                f32 approach=length(x-px,z-pz);
+                nav_entry_score=nav_edge[ix(i)].cost-at+approach;
+                approach<14.0 && nav_line(px,pz,x,z,false,false)
+            }
+        };
+        if (valid && nav_entry_score<score) { nav_pick(i+1,px,pz,hu,hv,drive,i,nav_entry_score) }
+        else { nav_pick(i+1,px,pz,hu,hv,drive,best,score) }
+    }
+};
+bool(i32,bool) nav_trace = fn(edge,drive) {
+    i32 next=nav_edge[ix(edge)].next;
+    i32 end=nav_b(edge);
+    if (nav_count>nav_limit-14) { false } else {
+        if (next<0) { nav_add(nav_x(end),nav_z(end)); true } else {
+            if (drive) {
+                if (nav_junction(edge,next,true)) { nav_trace(next,drive) } else { false }
+            } else { nav_add(nav_x(end),nav_z(end)); nav_trace(next,drive) }
+        }
+    }
+};
+i32(f32,f32,i32) nav_find_goal = fn(x,z,i) {
+    if (i>=nav_node_count) { -1 } else {
+        if (sq(x-nav_x(i))+sq(z-nav_z(i))<0.05) { i } else { nav_find_goal(x,z,i+1) }
+    }
+};
+i32() navigation_update = fn {
+    nav_count=0;
+    if (stage==MissionStage::pickup_tape || stage==MissionStage::reach_pier || stage==MissionStage::answer_phone) {
+        f32 px=player_x(); f32 pz=player_z();
+        f32 tx=if (stage==MissionStage::answer_phone) { phone_x }
+        else { if (stage==MissionStage::pickup_tape) {
+            if (in_car && !follows_backstreet()) { tape_x } else { tape_guide_x() }
+        } else {
+            if (in_car && !follows_return() && avenue_leg<0) { park_x } else { pier_guide_x() }
+        } };
+        f32 tz=if (stage==MissionStage::answer_phone) { phone_z }
+        else { if (stage==MissionStage::pickup_tape) {
+            if (in_car && !follows_backstreet()) { 29.15 } else { tape_guide_z() }
+        } else {
+            if (in_car && !follows_return() && avenue_leg<0) { park_z } else { pier_guide_z() }
+        } };
+        i32 mode=if (in_car) { 1 } else { 0 };
+        i32 goal=nav_find_goal(tx,tz,0);
+        if (goal>=0) {
+            if (nav_goal!=goal || nav_mode!=mode) {
+                nav_seed(0,goal,in_car); nav_search(in_car);
+                nav_goal=goal; nav_mode=mode;
+            };
+            f32 hu=sin_small(car_yaw); f32 hv=cos_small(car_yaw);
+            bool direct=in_car&&(nav_local_goal(px,pz,tx,tz,hu,hv)||nav_local_goal(px,pz,tx,tz,-hu,-hv));
+            if (direct) {
+                nav_add(px,pz);
+                if (!nav_splice(nav_approach,true,0)) { nav_count=0; };
+            } else {
+                i32 edge=nav_pick(0,px,pz,hu,hv,in_car,-1,nav_far);
+                if (edge>=0) {
+                    nav_add(px,pz);
+                    if (in_car) {
+                        bool entered=nav_entry(edge,px,pz,hu,hv,0) || nav_entry(edge,px,pz,-hu,-hv,0);
+                        if (entered) {
+                            if (nav_approach.dx==0.0 && nav_approach.dz==0.0) { nav_add(nav_approach.x,nav_approach.z); }
+                            else { if (!nav_splice(nav_approach,true,0)) { nav_count=0; }; };
+                        } else { nav_count=0; };
+                    } else {
+                        i32 a=nav_a(edge); i32 b=nav_b(edge); f32 span=nav_distance(a,b);
+                        f32 u=(nav_x(b)-nav_x(a))/span; f32 v=(nav_z(b)-nav_z(a))/span;
+                        f32 at=clamp((px-nav_x(a))*u+(pz-nav_z(a))*v,0.0,span);
+                        nav_add(nav_x(a)+u*at,nav_z(a)+v*at);
+                    };
+                    if (nav_count>0 && !nav_trace(edge,in_car)) { nav_count=0; };
+                };
+            };
+        };
+    };
+    nav_count
+};
+f32(i32,i32) navigation_point = fn(row,column) {
+    if (row>=0 && row<nav_count && column>=0 && column<2) { nav_points[ix(row)][ix(column)] }
+    else { 0.0 }
+};
+
 
 bool() avenue_prepared = fn {
     abs_f(car_x-avenue_prep_x)<0.85 && abs_f(car_z-shop_service_z)<0.40 &&

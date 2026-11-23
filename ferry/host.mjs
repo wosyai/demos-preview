@@ -1,4 +1,4 @@
-export const ENGINE_PATH = "./ferry.wasm?v=ferry-free-orbit-v1";
+export const ENGINE_PATH = "./ferry.wasm?v=ferry-street-orbit-v1";
 const INPUTS = new Map([
   ["KeyA","left"],["ArrowLeft","left"],["KeyD","right"],["ArrowRight","right"],
   ["KeyW","up"],["ArrowUp","up"],["KeyS","down"],["ArrowDown","down"],["Space","brake"],
@@ -58,12 +58,12 @@ function routeMapBounds(roads) {
   }
   return [minX,maxX,minZ,maxZ];
 }
-const MAP_INTERVAL=72, MAP_DASH=[3,5], MAP_SOLID=[];
+const MAP_INTERVAL=72, MAP_HEADING_STEP=.14, FULL_CIRCLE=2*Math.PI;
 
-function drawRouteMap(ctx,base,projection,roads,bounds,frame,route,step) {
+function drawRouteMap(ctx,base,projection,roads,bounds,frame,route,count) {
   if(!bounds||!roads.length) return;
   const {width,height}=ctx.canvas, active=[0,1,8].includes(frame[17]);
-  const px=frame[26],pz=frame[27],tx=frame[24],tz=frame[25];
+  const px=frame[26],pz=frame[27],tx=count?route[(count-1)*2]:frame[24],tz=count?route[(count-1)*2+1]:frame[25];
   const minX=Math.min(bounds[0],px,active?tx:Infinity), maxX=Math.max(bounds[1],px,active?tx:-Infinity);
   const minZ=Math.min(bounds[2],pz,active?tz:Infinity), maxZ=Math.max(bounds[3],pz,active?tz:-Infinity);
   const scale=Math.min((width-30)/(maxX-minX),(height-30)/(maxZ-minZ));
@@ -84,39 +84,15 @@ function drawRouteMap(ctx,base,projection,roads,bounds,frame,route,step) {
     ctx.clearRect(0,0,width,height);
     ctx.drawImage(base.canvas,0,0);
   } else paintRoads(ctx);
-  function stroke(color,weight,dash) {
-    ctx.lineJoin="round";
-    ctx.lineCap="round";
-    ctx.setLineDash(dash);
-    ctx.strokeStyle="#101924";
-    ctx.lineWidth=weight+2.5;
-    ctx.stroke();
-    ctx.strokeStyle=color;
-    ctx.lineWidth=weight;
-    ctx.stroke();
-    ctx.setLineDash(MAP_SOLID);
-  }
-  function segment(ax,az,bx,bz,weight,dash) {
-    ctx.beginPath();
-    ctx.moveTo(x(ax),z(az));
-    ctx.lineTo(x(bx),z(bz));
-    stroke("#ffcd87",weight,dash);
-  }
   if(active) {
-    if(step>=0&&step<route.length-1) {
+    if(count>1) {
       ctx.beginPath();
-      ctx.moveTo(x(tx),z(tz));
-      for(let i=step+1;i<route.length;i++) ctx.lineTo(x(route[i][0]),z(route[i][1]));
-      stroke("#c09465",2,MAP_SOLID);
+      ctx.moveTo(x(route[0]),z(route[1]));
+      for(let point=1;point<count;point++) ctx.lineTo(x(route[point*2]),z(route[point*2+1]));
+      ctx.lineJoin="round"; ctx.lineCap="round";
+      ctx.strokeStyle="#101924"; ctx.lineWidth=5.5; ctx.stroke();
+      ctx.strokeStyle="#ffcd87"; ctx.lineWidth=3; ctx.stroke();
     }
-    if(step>0) {
-      const [ax,az]=route[step-1], dx=tx-ax, dz=tz-az;
-      const size=dx*dx+dz*dz;
-      const u=size?Math.max(0,Math.min(1,((px-ax)*dx+(pz-az)*dz)/size)):0;
-      const jx=ax+dx*u, jz=az+dz*u;
-      if(Math.hypot(px-jx,pz-jz)*scale>2) segment(px,pz,jx,jz,2,MAP_DASH);
-      segment(jx,jz,tx,tz,3,MAP_SOLID);
-    } else if(Math.hypot(px-tx,pz-tz)*scale>2) segment(px,pz,tx,tz,2,MAP_DASH);
     ctx.beginPath();
     ctx.arc(x(tx),z(tz),5,0,Math.PI*2);
     ctx.fillStyle="#ffcd87"; ctx.fill();
@@ -347,7 +323,8 @@ export async function boot(env=globalThis,createGraphics=graphics) {
   const map=get("city-map"), chart=get("city-chart").getContext?.("2d");
   const roadLayer=chart&&document.createElement?.("canvas").getContext("2d");
   const projection={}, painted={};
-  let roads=[], roadBounds, routeKey=-1, route=[], routeStep=-1, nextMap=0, mapPhase=-1;
+  const route=new Float32Array(192), sampled={};
+  let roads=[], roadBounds, routeCount=0, nextMap=0, mapPhase=-1;
   let engine, renderer, frame, aspect=0, menuText="Loading the waterfront…", failed=false, last=0, playing=false, lost=false, ready=false, paused=false, mode=0, previousCue=-1, previousState=-1;
   const heldButtons=[power,reverse,brake,action];
   const renderThumb=(x,y)=>{
@@ -391,29 +368,29 @@ export async function boot(env=globalThis,createGraphics=graphics) {
     const phase=frame[17], now=performance.now();
     if(!force&&phase===mapPhase&&now<nextMap) return;
     mapPhase=phase; nextMap=now+MAP_INTERVAL;
-    const selected=engine.route_selection(), changed=selected!==routeKey;
-    if(changed) {
-      const next=[];
-      if(selected!==0) {
-        const length=engine.route_value(selected,-1,0);
-        if(!Number.isInteger(length)||length<2||length>16) throw Error("The guide route is unreadable.");
-        for(let i=0;i<length;i++) {
-          const x=engine.route_value(selected,i,0),z=engine.route_value(selected,i,1);
-          if(!Number.isFinite(x)||!Number.isFinite(z)) throw Error("The guide route is unreadable.");
-          next.push([x,z]);
-        }
-      }
-      route=next; routeKey=selected;
-    }
-    const driving=frame[16]===1, heading=driving?frame[28]:0;
+    const selected=engine.route_selection(), driving=frame[16]===1, heading=driving?frame[28]:0;
     const active=phase===0||phase===1||phase===8, tx=active?frame[24]:0, tz=active?frame[25]:0;
     const px=frame[26], pz=frame[27];
-    const targetChanged=painted.tx!==tx||painted.tz!==tz;
-    if(changed||targetChanged) routeStep=route.findIndex(([x,z])=>Math.hypot(x-tx,z-tz)<.05);
-    if(!force&&!changed&&painted.phase===phase&&!targetChanged&&painted.px===px&&painted.pz===pz&&painted.driving===driving&&painted.heading===heading) return;
-    painted.phase=phase; painted.tx=tx; painted.tz=tz; painted.px=px; painted.pz=pz;
-    painted.driving=driving; painted.heading=heading;
-    drawRouteMap(chart,roadLayer,projection,roads,roadBounds,frame,route,routeStep);
+    const targetChanged=sampled.tx!==tx||sampled.tz!==tz;
+    const turn=Math.abs(heading-sampled.heading);
+    const headingChanged=driving&&Math.min(turn,FULL_CIRCLE-turn)>=MAP_HEADING_STEP;
+    const routeChanged=force||sampled.phase!==phase||sampled.driving!==driving||sampled.key!==selected||targetChanged||
+      (active&&(headingChanged||(px-sampled.px)**2+(pz-sampled.pz)**2>=.25));
+    if(routeChanged) {
+      const count=active?engine.navigation_update():0;
+      if(!Number.isInteger(count)||count<0||count>route.length/2) throw Error("The street route is unreadable.");
+      for(let i=0;i<count;i++) {
+        const x=engine.navigation_point(i,0),z=engine.navigation_point(i,1);
+        if(!Number.isFinite(x)||!Number.isFinite(z)) throw Error("The street route is unreadable.");
+        route[i*2]=x; route[i*2+1]=z;
+      }
+      routeCount=count;
+      sampled.phase=phase; sampled.key=selected; sampled.driving=driving;
+      sampled.tx=tx; sampled.tz=tz; sampled.px=px; sampled.pz=pz; sampled.heading=heading;
+    }
+    if(!routeChanged&&painted.px===px&&painted.pz===pz&&painted.heading===heading) return;
+    painted.px=px; painted.pz=pz; painted.heading=heading;
+    drawRouteMap(chart,roadLayer,projection,roads,roadBounds,frame,route,routeCount);
   }
   map.addEventListener("toggle",()=>{ if(ready) paintMap(true); });
   function releasePedals(includeBrake=false) {
@@ -617,7 +594,7 @@ export async function boot(env=globalThis,createGraphics=graphics) {
     if(failed) return;
     const exports=module.instance.exports;
     if(!(exports.memory instanceof WebAssembly.Memory) ||
-      !["_start","reset","tick","cancel_action","map_value","route_selection","route_value"].every((name)=>typeof exports[name]==="function")) {
+      !["_start","reset","tick","cancel_action","map_value","route_selection","navigation_update","navigation_point"].every((name)=>typeof exports[name]==="function")) {
       throw Error("The game engine could not be initialized.");
     }
     engine=exports;
