@@ -38,6 +38,17 @@ struct copy AircraftPose {
 	f32 climb;
 }
 
+struct copy WreckPart {
+	f32 x;
+	f32 y;
+	f32 z;
+	f32 dx;
+	f32 dy;
+	f32 dz;
+	f32 roll;
+	f32 pitch;
+}
+
 struct copy RenderPose {
 	f32 x;
 	f32 y;
@@ -71,9 +82,28 @@ RenderPose empty_presentation = {
 };
 RenderPose[2] previous_pose = [empty_presentation, empty_presentation];
 RenderPose[2] presented_pose = [empty_presentation, empty_presentation];
-f32[36] display = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0];
+f32[41] display = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0];
 f32[7] empty_mail = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0];
 f32[7][3] mail = [empty_mail, empty_mail, empty_mail];
+i32 mail_launch_tick = -1;
+i32 mail_impact_tick = -1;
+f32 mail_heading = 0.0;
+f32 mail_elapsed_before = 0.0;
+bool mail_received = false;
+f32 pouch_x = 0.0;
+f32 pouch_y = 0.0;
+f32 pouch_z = 0.0;
+f32 mail_shot = 0.0;
+WreckPart empty_wreck = { .x=0.0; .y=0.0; .z=0.0; .dx=0.0; .dy=0.0; .dz=0.0; .roll=0.0; .pitch=0.0; };
+WreckPart[3] wreck_parts = [empty_wreck, empty_wreck, empty_wreck];
+WreckPart[3] wreck_previous = [empty_wreck, empty_wreck, empty_wreck];
+i32 wreck_age = -1;
+bool wreck_active = false;
+f32 wreck_x = 0.0;
+f32 wreck_y = 0.0;
+f32 wreck_z = 0.0;
+f32 wreck_h = 0.0;
+
 
 i32 course = 0;
 bool cockpit_view = false;
@@ -1368,12 +1398,20 @@ unit(u64,u64) launch_mail = fn(plane,race) {
 	mail[race][4] = speed * cos_small(heading);
 	mail[race][5] = 0.0;
 	mail[race][6] = mail_time(poses[plane].y);
+	if (race == 0) {
+		mail_launch_tick = stage_tick[0];
+		mail_impact_tick = -1;
+		mail_heading = heading;
+		mail_elapsed_before = 0.0;
+		mail_received = false;
+	};
 	phase[race] = MissionPhase::mail_in_flight;
 };
 
 unit(u64) lower_mail = fn(race) {
 	f32 elapsed = mail[race][5];
 	f32 total = mail[race][6];
+	if (race == 0) { mail_elapsed_before = elapsed; };
 	f32 next = clamp(elapsed+0.033333333,0.0,total);
 	mail[race][0] = mail[race][0] + mail[race][3] * (next-elapsed);
 	mail[race][2] = mail[race][2] + mail[race][4] * (next-elapsed);
@@ -1382,7 +1420,9 @@ unit(u64) lower_mail = fn(race) {
 	if (next >= total) {
 		f32 dx = mail[race][0]-drop_x();
 		f32 dz = mail[race][2]-drop_z();
-		if (dx*dx+dz*dz <= 91.0) { phase[race] = MissionPhase::landing_approach; } else {
+		bool received = dx*dx+dz*dz <= 91.0;
+		if (race == 0) { mail_impact_tick = stage_tick[0]; mail_received = received; };
+		if (received) { phase[race] = MissionPhase::landing_approach; } else {
 			phase[race] = MissionPhase::mail_approach;
 			event_code[race] = 8;
 		};
@@ -1708,6 +1748,124 @@ unit() ghost_end = fn {
 	};
 };
 
+bool(i32) impact_result = fn(code) {
+	code == 2 || code == 4 || code == 5 || code == 6 || code == 7 || code == 8 || code == 10
+};
+
+unit() start_wreck = fn {
+	wreck_age = 0;
+	wreck_active = true;
+	bool solid_hit = result[0] == 2 || result[0] == 8;
+	wreck_h = poses[0].heading;
+	f32 sx = sin_small(wreck_h);
+	f32 sz = cos_small(wreck_h);
+	f32 clearance = if (solid_hit) { 2.75 } else { 0.0 };
+	wreck_x = previous_pose[0].x-sx*clearance;
+	wreck_y = if (solid_hit) { previous_pose[0].y } else { 1.0 };
+	wreck_z = previous_pose[0].z-sz*clearance;
+	f32 speed = clamp(poses[0].speed,3.0,37.0);
+	f32 a = if (solid_hit) { -0.16 } else { 0.46 };
+	WreckPart spine = { .x=wreck_x; .y=wreck_y; .z=wreck_z; .dx=sx*speed*a; .dy=2.9; .dz=sz*speed*a; .roll=0.18; .pitch=0.0; };
+	WreckPart left = { .x=wreck_x-sz*0.67; .y=wreck_y+0.49; .z=wreck_z+sx*0.67; .dx=sx*speed*a-sz*5.4; .dy=6.8; .dz=sz*speed*a+sx*5.4; .roll=0.26; .pitch=0.23; };
+	WreckPart right = { .x=wreck_x+sz*0.57; .y=wreck_y+0.74; .z=wreck_z-sx*0.57; .dx=sx*speed*a+sz*4.35; .dy=5.8; .dz=sz*speed*a-sx*4.35; .roll=-0.31; .pitch=-0.17; };
+	wreck_parts[0] = spine;
+	wreck_parts[1] = left;
+	wreck_parts[2] = right;
+	wreck_previous[0] = spine;
+	wreck_previous[1] = left;
+	wreck_previous[2] = right;
+};
+
+f32(u64,f32,f32) wreck_floor = fn(i,roll,pitch) {
+	f32 vertical = abs_f(cos_small(pitch));
+	f32 deep = abs_f(sin_small(pitch));
+	f32 tall = abs_f(cos_small(roll))*vertical;
+	f32 across = abs_f(sin_small(roll))*vertical;
+	if (i == 0) { 0.11+0.32*tall+0.53*across+2.1*deep } else { 0.11+0.29*tall+1.58*across+0.72*deep }
+};
+
+bool(f32,f32,f32,f32,bool) wreck_wall = fn(x,y,z,probe,along_x) {
+	if (along_x) {
+		obstacle(x,y,z) || obstacle(x+probe,y,z)
+	} else {
+		obstacle(x,y,z) || obstacle(x,y,z+probe)
+	}
+};
+
+unit(u64) move_wreck_part = fn(i) {
+	WreckPart p = wreck_parts[i];
+	wreck_previous[i] = p;
+	f32 gravity = clamp(p.dy-9.8/30.0,-40.0,40.0);
+	f32 tx = p.x+p.dx/30.0;
+	f32 tz = p.z+p.dz/30.0;
+	f32 ty = p.y+gravity/30.0;
+	f32 floor = wreck_floor(i,p.roll,p.pitch);
+	f32 probe_x = if (p.dx >= 0.0) { 0.35 } else { -0.35 };
+	f32 probe_z = if (p.dz >= 0.0) { 0.35 } else { -0.35 };
+	f32 dx = p.dx*0.986;
+	f32 dz = p.dz*0.986;
+	f32 dy = gravity;
+	if (wreck_wall(tx,p.y,p.z,probe_x,true)) { tx = p.x; dx = -dx*0.29; };
+	if (wreck_wall(tx,p.y,tz,probe_z,false)) { tz = p.z; dz = -dz*0.29; };
+	if (ty <= floor) {
+		ty = floor;
+		dy = if (gravity < -1.2) { -gravity*0.27 } else { 0.0 };
+		dx = dx*0.77;
+		dz = dz*0.77;
+	} else {
+		f32 edge = if (gravity < 0.0) { ty-floor+0.11 } else { ty+floor-0.11 };
+		if (obstacle(tx,edge,tz)) {
+			ty = p.y;
+			dy = if (abs_f(gravity) > 1.2) { -dy*0.27 } else { 0.0 };
+			if (gravity < 0.0) { dx = dx*0.77; dz = dz*0.77; };
+		};
+	};
+	f32 spin = if ((ty <= floor || obstacle(tx,ty-floor+0.03,tz)) && abs_f(dy) < 0.4) { 0.0 } else { if (i == 1) { 0.104 } else { -0.083 } };
+	WreckPart next = { .x=tx; .y=ty; .z=tz; .dx=dx; .dy=dy; .dz=dz; .roll=wrap(p.roll+spin); .pitch=wrap(p.pitch-spin*0.54); };
+	wreck_parts[i] = next;
+};
+
+bool(u64) wreck_resting = fn(i) {
+	WreckPart p = wreck_parts[i];
+	(p.y <= wreck_floor(i,p.roll,p.pitch)+0.001 || obstacle(p.x,p.y-wreck_floor(i,p.roll,p.pitch)+0.03,p.z)) &&
+	abs_f(p.dx)+abs_f(p.dz) < 0.45 && abs_f(p.dy) < 0.45
+};
+
+bool() wreck_playing = fn { wreck_active };
+
+f32(f32,f32,f32,f32,i32) wreck_support = fn(x,y,z,low,left) {
+	if (y <= low || left <= 0) { low } else {
+		f32 below = clamp(y-0.45,low,y);
+		if (obstacle(x,below,z)) { y } else { wreck_support(x,below,z,low,left-1) }
+	}
+};
+
+unit(u64) finish_wreck_part = fn(i) {
+	WreckPart p = wreck_parts[i];
+	if (!wreck_resting(i)) {
+		f32 low = wreck_floor(i,p.roll,p.pitch);
+		f32 at = clamp(p.y-low,0.0,130.0);
+		f32 support = low+wreck_support(p.x,at,p.z,0.0,290);
+		WreckPart settled = { .x=p.x; .y=support; .z=p.z; .dx=0.0; .dy=0.0; .dz=0.0; .roll=p.roll; .pitch=p.pitch; };
+		wreck_parts[i] = settled;
+	};
+};
+
+unit() step_wreck = fn {
+	wreck_age = wreck_age+1;
+	move_wreck_part(0);
+	move_wreck_part(1);
+	move_wreck_part(2);
+	if (wreck_age == 330) {
+		finish_wreck_part(0);
+		finish_wreck_part(1);
+		finish_wreck_part(2);
+		wreck_active = false;
+	} else {
+		if (wreck_age >= 84 && wreck_resting(0) && wreck_resting(1) && wreck_resting(2)) { wreck_active = false; };
+	};
+};
+
 unit(i32) step = fn(input) {
 	i32 n = stage_tick[0];
 	flight_log[ix(n/4096)][ix(n/256%16)][ix(n/16%16)][ix(n%16)] = core.int_trunc<u16>(input);
@@ -1718,15 +1876,18 @@ unit(i32) step = fn(input) {
 	retain_pose(0);
 	cockpit_drive = 0.0;
 	step_course(0,0,input);
+	if (impact_result(result[0])) { start_wreck(); };
 	if (result[0] == 1) { store_record(); };
 };
 
 unit(i32,i32) advance = fn(input,left) {
-	if (left > 0 && accumulator >= 0.033333333 && result[0] == 0) {
+	if (left > 0 && accumulator >= 0.033333333 && (result[0] == 0 || wreck_playing())) {
 		accumulator = accumulator - 0.033333333;
-		i32 content = input | (if (pending_drop) { 128 } else { 0 });
-		cancel_drop();
-		step(content);
+		if (result[0] == 0) {
+			i32 content = input | (if (pending_drop) { 128 } else { 0 });
+			cancel_drop();
+			step(content);
+		} else { step_wreck(); };
 		advance(input,left-1);
 	};
 };
@@ -1906,12 +2067,16 @@ unit(i32,bool) passed_guides = fn(n,celebrating) {
 	};
 };
 
-unit(i32,f32,f32) flight_guides = fn(mail_status,impact_x,impact_z) {
+unit() ring_guides = fn {
 	i32 next = next_gate[0];
 	if (next < 3) { gate_arch(gate_x(next),gate_y(next),gate_z(next),0,0); };
 	bool celebrating = ring_celebrating();
 	if (celebrating) { gate_arch(gate_x(gate_flash),gate_y(gate_flash),gate_z(gate_flash),0,1); };
 	if (earned_gates != 0) { passed_guides(0,celebrating); };
+};
+
+unit(i32,f32,f32) flight_guides = fn(mail_status,impact_x,impact_z) {
+	ring_guides();
 	if (result[0] == 0) {
 		MissionPhase stage = phase[0];
 		f32 x = presented_pose[0].x;
@@ -2148,30 +2313,99 @@ unit(f32) wright_supply_cart = fn(alpha) {
 	};
 };
 
+unit(u64,f32) wreck_art = fn(i,alpha) {
+	WreckPart previous = wreck_previous[i];
+	WreckPart current = wreck_parts[i];
+	f32 roll = wrap(previous.roll+wrap(current.roll-previous.roll)*alpha);
+	f32 pitch = wrap(previous.pitch+wrap(current.pitch-previous.pitch)*alpha);
+	model_local = true;
+	model_x = blend(previous.x,current.x,alpha);
+	model_y = blend(previous.y,current.y,alpha);
+	model_z = blend(previous.z,current.z,alpha);
+	model_hs = sin_small(wreck_h);
+	model_hc = cos_small(wreck_h);
+	model_ps = sin_small(pitch);
+	model_pc = cos_small(pitch);
+	model_rs = sin_small(-roll);
+	model_rc = cos_small(roll);
+	if (i == 0) {
+		box(-0.53,-0.25,-2.1,1.06,0.46,4.2,0.57,0.33,0.24);
+		box(-0.32,0.21,-0.37,0.64,0.57,1.4,0.38,0.26,0.20);
+	} else {
+		f32 cloth = if (course == 0) { 0.73 } else { 0.89 };
+		f32 slat = if (i == 1) { -0.55 } else { 0.35 };
+		box(-1.58,-0.10,-0.68,3.16,0.20,1.36,cloth,0.77,0.63);
+		box(slat,-0.29,-0.72,0.18,0.57,1.48,0.53,0.34,0.24);
+	};
+	model_local = false;
+};
+
+f32(f32) eased_unit = fn(value) {
+	f32 t = clamp(value,0.0,1.0);
+	t*t*(3.0-2.0*t)
+};
+
+unit(f32) present_pouch = fn(alpha) {
+	mail_shot = 0.0;
+	if (course == 1 && result[0] == 0 && mail_launch_tick >= 0) {
+		f32 age = float_i(stage_tick[0]-mail_launch_tick)+alpha;
+		f32 after = if (mail_impact_tick >= 0) { float_i(stage_tick[0]-mail_impact_tick)+alpha } else { 0.0 };
+		mail_shot = eased_unit(age/8.0)*(1.0-eased_unit((after-18.0)/22.0));
+		if (mail_shot > 0.0) {
+			f32 elapsed = mail[0][5];
+			f32 t = if (mail_impact_tick >= 0) { elapsed } else { blend(mail_elapsed_before,elapsed,alpha) };
+			pouch_x = mail[0][0]-mail[0][3]*(elapsed-t);
+			pouch_y = mail[0][1]+9.0*(elapsed*elapsed-t*t);
+			pouch_z = mail[0][2]-mail[0][4]*(elapsed-t);
+		};
+	};
+};
+
+unit() draw_pouch_shot = fn {
+	box(pouch_x-0.36,pouch_y-0.05,pouch_z-0.29,0.72,0.56,0.58,0.88,0.41,0.19);
+	if (mail_impact_tick >= 0) {
+		f32 x = mail[0][0];
+		f32 z = mail[0][2];
+		f32 r = if (mail_received) { 0.31 } else { 0.85 };
+		f32 g = if (mail_received) { 0.82 } else { 0.41 };
+		ground_patch(x-1.8,z-1.8,3.6,0.15,0.232,r,g,0.32);
+		ground_patch(x-1.8,z+1.65,3.6,0.15,0.232,r,g,0.32);
+		ground_patch(x-1.8,z-1.65,0.15,3.3,0.232,r,g,0.32);
+		ground_patch(x+1.65,z-1.65,0.15,3.3,0.232,r,g,0.32);
+	};
+};
+
 unit(f32,i32,f32,f32) draw_aircraft = fn(alpha,mail_status,impact_x,impact_z) {
 	vertex_count = 0;
 	drawing_world = false;
-	flight_guides(mail_status,impact_x,impact_z);
+	f32 scene_alpha = if (wreck_age >= 0) { 1.0 } else { alpha };
+	if (wreck_age < 0) { if (mail_shot <= 0.0) { flight_guides(mail_status,impact_x,impact_z); } else { ring_guides(); }; };
 	if (course == 0) {
 		paint_crops(0);
 		i32 age = stage_tick[0]-spray_tick;
 		if (age < 36) { spray_mist(0,age); };
-		if (phase[0] == MissionPhase::supply_approach || phase[0] == MissionPhase::supply_rollout || phase[0] == MissionPhase::cargo_pickup) { wright_supply_cart(alpha); };
+		if (phase[0] == MissionPhase::supply_approach || phase[0] == MissionPhase::supply_rollout || phase[0] == MissionPhase::cargo_pickup) { wright_supply_cart(scene_alpha); };
 	} else {
-		if (phase[0] == MissionPhase::seine_crossing || phase[0] == MissionPhase::mail_approach) { seine_market_craft(alpha); };
+		if (phase[0] == MissionPhase::seine_crossing || phase[0] == MissionPhase::mail_approach) { seine_market_craft(scene_alpha); };
 	};
-	if (phase[0] == MissionPhase::mail_in_flight) {
-		box(mail[0][0]-0.30,mail[0][1],mail[0][2]-0.30,0.60,0.54,0.60,0.92,0.50,0.18);
-	};
+	if (wreck_age >= 0) {
+		wreck_art(0,alpha);
+		wreck_art(1,alpha);
+		wreck_art(2,alpha);
+	} else {
+		if (mail_shot > 0.0) { draw_pouch_shot(); };
 
-	if (best_ticks > 0 && stage_tick[0] > 0 && stage_tick[0] < best_ticks) {
-		present_pose(1,alpha);
-		f32 dx = presented_pose[1].x-presented_pose[0].x;
-		f32 dy = presented_pose[1].y-presented_pose[0].y;
-		f32 dz = presented_pose[1].z-presented_pose[0].z;
-		if (dx*dx+dy*dy+dz*dz > 121.0) { draw_plane(1,true); };
+		if (mail_shot <= 0.0 && best_ticks > 0 && stage_tick[0] > 0 && stage_tick[0] < best_ticks) {
+			present_pose(1,alpha);
+			f32 dx = presented_pose[1].x-presented_pose[0].x;
+			f32 dy = presented_pose[1].y-presented_pose[0].y;
+			f32 dz = presented_pose[1].z-presented_pose[0].z;
+			if (dx*dx+dy*dy+dz*dz > 121.0) { draw_plane(1,true); };
+		};
+		if (cockpit_view) {
+			if (mail_shot <= 0.0) { cockpit_model(); };
+		} else { draw_plane(0,false); };
 	};
-	if (cockpit_view) { cockpit_model(); } else { draw_plane(0,false); };
 	i32 count = vertex_count*6;
 	unsafe { host.aircraft(core.pointer_cast<*?u8>(&?moving_mesh[0][0][0][0]),count); };
 };
@@ -2204,10 +2438,27 @@ unit(i32) select_view = fn(view) {
 	cockpit_view = view == 1;
 };
 
-unit(i32) frame = fn(mail_status) {
-	f32 hx = sin_small(presented_pose[0].heading);
-	f32 hz = cos_small(presented_pose[0].heading);
-	f32 pitch = if (cockpit_view) { presented_pose[0].pitch } else { -0.20 + presented_pose[0].pitch*0.62 };
+f32(f32,f32,f32) spread = fn(a,b,c) {
+	f32 lo = if (a < b) { a } else { b };
+	f32 hi = if (a > b) { a } else { b };
+	(if (hi > c) { hi } else { c })-(if (lo < c) { lo } else { c })
+};
+
+unit(i32,f32) frame = fn(mail_status,wreck_alpha) {
+	bool wrecking = wreck_age >= 0;
+	bool interior = cockpit_view && !wrecking;
+	f32 orbit = if (wrecking) { clamp((float_i(wreck_age)+wreck_alpha)/34.0,0.0,1.0) } else { 0.0 };
+	f32 p_heading = presented_pose[0].heading;
+	f32 hp = sin_small(p_heading);
+	f32 hz0 = cos_small(p_heading);
+	bool following = !wrecking && mail_shot > 0.0;
+	f32 heading = if (wrecking) { wrap(wreck_h-0.37*orbit*orbit*(3.0-2.0*orbit)) } else {
+		if (following) { wrap(p_heading+wrap(mail_heading-p_heading)*mail_shot) } else { p_heading }
+	};
+	f32 hx = if (wrecking || following) { sin_small(heading) } else { hp };
+	f32 hz = if (wrecking || following) { cos_small(heading) } else { hz0 };
+	f32 base_pitch = if (interior) { presented_pose[0].pitch } else { -0.20 + presented_pose[0].pitch*0.62 };
+	f32 pitch = if (wrecking) { -0.27 } else { if (following) { blend(base_pitch,-0.57,mail_shot) } else { base_pitch } };
 	f32 ps = sin_small(pitch);
 	f32 pc = cos_small(pitch);
 	f32 vx = hx*pc;
@@ -2216,18 +2467,38 @@ unit(i32) frame = fn(mail_status) {
 	f32 ux = -hx*ps;
 	f32 uy = pc;
 	f32 uz = -hz*ps;
-	f32 ex = if (cockpit_view) { presented_pose[0].x+hx*0.75 } else { presented_pose[0].x-hx*17.5 };
-	f32 ey = if (cockpit_view) { presented_pose[0].y+0.82 } else { presented_pose[0].y+5.3 };
-	f32 ez = if (cockpit_view) { presented_pose[0].z+hz*0.75 } else { presented_pose[0].z-hz*17.5 };
-	f32 roll = presented_pose[0].roll;
-	f32 rs = if (cockpit_view) { sin_small(-roll) } else { 0.0 };
-	f32 rc = if (cockpit_view) { cos_small(roll) } else { 1.0 };
-	f32 rx = if (cockpit_view) { hz*rc+ux*rs } else { hz };
-	f32 ry = if (cockpit_view) { uy*rs } else { 0.0 };
-	f32 rz = if (cockpit_view) { -hx*rc+uz*rs } else { -hx };
-	f32 upx = if (cockpit_view) { ux*rc-hz*rs } else { ux };
-	f32 upy = if (cockpit_view) { uy*rc } else { uy };
-	f32 upz = if (cockpit_view) { uz*rc+hx*rs } else { uz };
+	f32 ex_home = if (interior) { presented_pose[0].x+hp*0.75 } else { presented_pose[0].x-hp*17.5 };
+	f32 ey_home = if (interior) { presented_pose[0].y+0.82 } else { presented_pose[0].y+5.3 };
+	f32 ez_home = if (interior) { presented_pose[0].z+hz0*0.75 } else { presented_pose[0].z-hz0*17.5 };
+	f32 ex = if (following) { blend(ex_home,pouch_x-sin_small(mail_heading)*7.0,mail_shot) } else { ex_home };
+	f32 ey = if (following) { blend(ey_home,pouch_y+4.52,mail_shot) } else { ey_home };
+	f32 ez = if (following) { blend(ez_home,pouch_z-cos_small(mail_heading)*7.0,mail_shot) } else { ez_home };
+	if (wrecking) {
+		f32 x0 = blend(wreck_previous[0].x,wreck_parts[0].x,wreck_alpha);
+		f32 x1 = blend(wreck_previous[1].x,wreck_parts[1].x,wreck_alpha);
+		f32 x2 = blend(wreck_previous[2].x,wreck_parts[2].x,wreck_alpha);
+		f32 y0 = blend(wreck_previous[0].y,wreck_parts[0].y,wreck_alpha);
+		f32 y1 = blend(wreck_previous[1].y,wreck_parts[1].y,wreck_alpha);
+		f32 y2 = blend(wreck_previous[2].y,wreck_parts[2].y,wreck_alpha);
+		f32 z0 = blend(wreck_previous[0].z,wreck_parts[0].z,wreck_alpha);
+		f32 z1 = blend(wreck_previous[1].z,wreck_parts[1].z,wreck_alpha);
+		f32 z2 = blend(wreck_previous[2].z,wreck_parts[2].z,wreck_alpha);
+		f32 wide = spread(x0,x1,x2)+spread(z0,z1,z2);
+		f32 tall = spread(y0,y1,y2);
+		f32 pullback = clamp(16.5+0.43*wide+1.1*tall,17.5,64.0);
+		ex = (x0+x1+x2)/3.0-hx*pullback;
+		ey = (y0+y1+y2)/3.0+0.29*pullback;
+		ez = (z0+z1+z2)/3.0-hz*pullback;
+	};
+	f32 roll = if (following) { presented_pose[0].roll*(1.0-mail_shot) } else { presented_pose[0].roll };
+	f32 rs = if (interior) { sin_small(-roll) } else { 0.0 };
+	f32 rc = if (interior) { cos_small(roll) } else { 1.0 };
+	f32 rx = if (interior) { hz*rc+ux*rs } else { hz };
+	f32 ry = if (interior) { uy*rs } else { 0.0 };
+	f32 rz = if (interior) { -hx*rc+uz*rs } else { -hx };
+	f32 upx = if (interior) { ux*rc-hz*rs } else { ux };
+	f32 upy = if (interior) { uy*rc } else { uy };
+	f32 upz = if (interior) { uz*rc+hx*rs } else { uz };
 	f32 scale_y = if (viewport < 0.86) { 1.30 } else { 1.61 };
 	f32 scale_x = scale_y/viewport;
 	f32 near_far = 1.0015052;
@@ -2235,7 +2506,7 @@ unit(i32) frame = fn(mail_status) {
 	display[1] = upx*scale_y;
 	display[2] = vx*near_far;
 	display[3] = vx;
-	display[4] = if (cockpit_view) { ry*scale_x } else { 0.0 };
+	display[4] = if (interior) { ry*scale_x } else { 0.0 };
 	display[5] = upy*scale_y;
 	display[6] = vy*near_far;
 	display[7] = vy;
@@ -2243,7 +2514,7 @@ unit(i32) frame = fn(mail_status) {
 	display[9] = upz*scale_y;
 	display[10] = vz*near_far;
 	display[11] = vz;
-	display[12] = if (cockpit_view) { -(rx*ex+ry*ey+rz*ez)*scale_x } else { -(hz*ex-hx*ez)*scale_x };
+	display[12] = if (interior) { -(rx*ex+ry*ey+rz*ez)*scale_x } else { -(hz*ex-hx*ez)*scale_x };
 	display[13] = -(upx*ex+upy*ey+upz*ez)*scale_y;
 	f32 offset = -(vx*ex+vy*ey+vz*ez);
 	display[14] = offset*near_far-1.401053;
@@ -2291,7 +2562,12 @@ unit(i32) frame = fn(mail_status) {
 	display[33] = float_i(gate);
 	display[34] = if (gate < 3) { clamp(float_i(gate_deadline(gate)-stage_tick[0])/30.0,0.0,31.0) } else { 0.0 };
 	display[35] = if (ring_celebrating()) { 1.0 } else { 0.0 };
-	unsafe { host.frame(core.pointer_cast<*?u8>(&?display[0]),36); };
+	display[36] = if (wreck_playing()) { 1.0 } else { if (following) { 2.0 } else { 0.0 } };
+	display[37] = presented_pose[0].x;
+	display[38] = presented_pose[0].y;
+	display[39] = presented_pose[0].z;
+	display[40] = presented_pose[0].heading;
+	unsafe { host.frame(core.pointer_cast<*?u8>(&?display[0]),41); };
 };
 
 unit(i32) reset = fn(requested) {
@@ -2303,11 +2579,16 @@ unit(i32) reset = fn(requested) {
 	};
 	course = next;
 	cockpit_drive = 0.0;
+	wreck_age = -1;
+	wreck_active = false;
 	cancel_drop();
 	spray_tick = -50;
 	earned_gates = 0;
 	gate_flash = -1;
 	gate_flash_until = 0;
+	mail_launch_tick = -1;
+	mail_impact_tick = -1;
+	mail_shot = 0.0;
 	reset_mission(0);
 	reset_mission(1);
 	accumulator = 0.0;
@@ -2325,10 +2606,11 @@ unit(f32,i32,f32) tick = fn(dt,input,aspect) {
 	f32 accepted = if (dt >= 0.0 && dt < 0.20) { dt } else { 0.0 };
 	viewport = if (aspect > 0.25 && aspect < 5.0) { aspect } else { 1.0 };
 	accumulator = clamp(accumulator+accepted,0.0,0.17);
-	if (held(input,128)) { pending_drop = true; };
+	if (result[0] == 0 && held(input,128)) { pending_drop = true; };
 	advance(canonical_input(input & -129),5);
 	f32 alpha = if (result[0] == 0) { clamp(accumulator*30.0,0.0,1.0) } else { 1.0 };
 	present_pose(0,alpha);
+	present_pouch(alpha);
 	i32 render_mail_status = 0;
 	f32 render_impact_x = 0.0;
 	f32 render_impact_z = 0.0;
@@ -2341,7 +2623,8 @@ unit(f32,i32,f32) tick = fn(dt,input,aspect) {
 			render_mail_status = mail_impact_status(render_impact_x,render_impact_z);
 		};
 	};
-	draw_aircraft(alpha,render_mail_status,render_impact_x,render_impact_z);
-	frame(render_mail_status);
+	f32 render_alpha = if (wreck_playing()) { clamp(accumulator*30.0,0.0,1.0) } else { alpha };
+	draw_aircraft(render_alpha,render_mail_status,render_impact_x,render_impact_z);
+	frame(render_mail_status,render_alpha);
 };
 %%end

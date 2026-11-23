@@ -18,7 +18,7 @@ physics, scenery, camera, cargo pickup, mail trajectory, farm spray, landings, a
 ## Host ABI
 
 The WebAssembly host imports module `flight`: `world` and `aircraft` receive
-packed XYZRGB triangles, `frame` receives a 36-float projection/HUD buffer,
+packed XYZRGB triangles, `frame` receives a 41-float projection/HUD/cinematic buffer,
 and `record` receives an opaque binary replay. The host supplies elapsed real
 time, an input bitmask, and viewport aspect. Pointers are byte offsets into
 exported memory; reacquire typed views after growth. `world` is stable until a
@@ -39,6 +39,8 @@ and score in [24]. Mission-specific fields are:
 | 29–31 | Landing instruction (1 align, 2 slow down, 3 ease descent, 4 ready), climb warning, delivered pouch or completed crop rows |
 | 32–34 | Gates earned, current gate index, and seconds remaining for the current gate |
 | 35 | Wosy ring-award flash: 1 during the short confirmation, or 0 |
+| 36 | Presentation state: 0 normal, 2 pouch follow/impact/return (1 reserved for fatal-impact presentation) |
+| 37–40 | Actual interpolated aircraft X/Y/Z and heading, independent of camera framing |
 
 Input uses bits 0–5 for left, right, climb, dive, power, brake. For proportional
 controls, set bit 6 and put signed bank and pitch bytes at bits 8–15 and 16–23.
@@ -87,3 +89,9 @@ flight engine permits release. The cue is visual and leaves v7 replays valid.
 
 The next ring is dashed amber. A scored ring flashes bright green, then remains
 muted green. An expired unscored ring disappears. Replay v7 is unchanged.
+
+Frame [36] is ordinary (0), active crash (1), or mail follow (2), with crash taking priority. Slots [37–40] expose aircraft position and heading independent of the presentation camera.
+
+Mission time, failure code, and replay input stop at impact. Wosy advances the debris and camera on the fixed presentation cadence until settled (with a bounded support fallback), and the host keeps drawing but suppresses actionable cues while the flag is set. Cinematic debris uses flat terrain and existing flight-obstacle proxies, not all decorative world geometry.
+
+Accepted Paris releases blend the view to the same Wosy pouch trajectory used for scoring. Impact shows a short marker at the measured contact, then eases back to the selected camera. The aircraft remains controlled by the normal flight loop; the focus shot neither adds a replay command nor changes mission scoring.

@@ -8,15 +8,15 @@ const bytes = readFileSync(artifact);
 assert.equal(createHash("sha256").update(bytes).digest("hex"), digest);
 const wasm = new WebAssembly.Module(bytes);
 assert.deepEqual(WebAssembly.Module.imports(wasm).map(({module, name}) => `${module}.${name}`).sort(),
-    ["flight.aircraft", "flight.frame", "flight.record", "flight.world"]);
+    ["flight.aircraft", "flight.frame", "flight.record", "flight.world", "wasi_snapshot_preview1.proc_exit"]);
 
 let engine, frame, records = 0;
-engine = new WebAssembly.Instance(wasm, {flight: {
+engine = new WebAssembly.Instance(wasm, {wasi_snapshot_preview1:{proc_exit(code){assert.fail("Wosy touchdown trapped: "+code);}}, flight: {
     world() {},
     aircraft() {},
     record() { records++; },
     frame(pointer, length) {
-        assert.equal(length, 36);
+        assert.equal(length, 41);
         frame = new Float32Array(engine.memory.buffer, pointer, length).slice();
     },
 }}).exports;
@@ -37,6 +37,7 @@ function pose() {
 }
 function step(input = 0, dt = 1 / 30) {
     engine.tick(dt, input, aspect);
+    assert.equal(frame[36], 0, "survivable rough contact never starts break-up");
     assert.equal(frame[22], 0, `no terminal failure expected, phase=${frame[20]} position=${JSON.stringify(pose())}`);
 }
 engine.reset(0);

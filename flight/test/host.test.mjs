@@ -34,12 +34,12 @@ function graphicsFixture() {
   return { gl, draws, uploads, matrices };
 }
 
-function mock({ noGraphics = false, badMesh = false, initialLost = false, exitAtStart = false, inputVersion = null, orientationAPI = false, frameLength = 36 } = {}) {
+function mock({ noGraphics = false, badMesh = false, initialLost = false, exitAtStart = false, inputVersion = null, orientationAPI = false, frameLength = 41 } = {}) {
   const doc = new Hub(), win = new Hub(), nodes = new Map(), raf = new Map(), data = new Map();
   const g = graphicsFixture(), called = { reset: [], tick: [], replay: [], requests: [], views: [], begin: 0, cancel: 0 };
   const wasmExports = new WebAssembly.Memory({initial: 1});
   let index = 0, shouldComplete = false, current = 0, imported, distance = 122, phase = 2, dropStatus = 0, route = 0, eventCode = 0;
-  let guidance = [0, 4, 0, 0], ringState = [0, 0, 0, 0];
+  let guidance = [0, 4, 0, 0], ringState = [0, 0, 0, 0], lossCode = 0, cinematic = 0;
   function element(name, dataset = {}) {
     const node = new Hub();
     const captures = new Set(), classes = new Set(), properties = new Map();
@@ -92,7 +92,7 @@ function mock({ noGraphics = false, badMesh = false, initialLost = false, exitAt
         ...(inputVersion === null ? {} : {input_version: () => inputVersion}),
         reset(course) {
           current = course;
-          phase = course === 1 ? 0 : 2; dropStatus = 0; route = 0; eventCode = 0;
+          phase = course === 1 ? 0 : 2; dropStatus = 0; route = 0; eventCode = 0; lossCode = 0; cinematic = 0;
           called.reset.push(course);
           imported.world(0, badMesh ? 16 : 18);
         },
@@ -105,8 +105,8 @@ function mock({ noGraphics = false, badMesh = false, initialLost = false, exitAt
           called.tick.push([dt, mask, aspect]);
           imported.aircraft(128, 18);
           const frame = new Float32Array(wasmExports.buffer, 256, frameLength);
-          frame.set([aspect,0,0,0,0,1,0,0,0,0,1,0,0,0,0,1, current,12.125,31,22,phase,dropStatus,shouldComplete ? 1 : 0,12.125,250,route,eventCode,distance]);
-          if (frameLength === 36) { frame.set(guidance, 28); frame.set(ringState, 32); }
+          frame.set([aspect,0,0,0,0,1,0,0,0,0,1,0,0,0,0,1, current,12.125,31,22,phase,dropStatus,shouldComplete ? 1 : lossCode,12.125,250,route,eventCode,distance]);
+          if (frameLength === 41) { frame.set(guidance, 28); frame.set(ringState, 32); frame[36]=cinematic; }
           imported.frame(256, frameLength);
           if (shouldComplete) {
             new Uint8Array(wasmExports.buffer, 512, 3).set([3,4,255]);
@@ -121,6 +121,8 @@ function mock({ noGraphics = false, badMesh = false, initialLost = false, exitAt
   const host = bootFlight(win, doc);
   return { ...host, ...g, doc, win, nodes, data, courses, canvas, called, raf,
     complete(value = true) { shouldComplete = value; },
+    impact(code, active) { lossCode = code; cinematic=Number(active); },
+    film(value) { cinematic = value; },
     cue(next) {
       ({distance = 122, phase = 2, dropStatus = 0, route = 0, eventCode = 0} = next);
     },
@@ -257,6 +259,59 @@ test("pause navigation wraps visible controls and recovers focus after Settings 
   assert.equal(get("flight-dialog-settings").open, false);
   assert.equal(sim.doc.activeElement, get("game"));
 });
+test("terminal contact draws the wreck before opening the retry summary", async () => {
+  const sim = mock();
+  await sim.ready;
+  sim.courses[1].events("click");
+  sim.cue({phase:1,dropStatus:9});
+  sim.frame(8);
+  assert.equal(sim.nodes.get("drop").hidden, false);
+  sim.film(2);
+  sim.cue({phase:5});
+  sim.frame(12);
+  assert.equal(sim.nodes.get("mission-phase").textContent, "Mail in flight");
+  sim.impact(8, true);
+  sim.frame(16);
+  assert.equal(sim.nodes.get("summary").hidden, true);
+  assert.equal(sim.nodes.get("callout").hidden, true);
+  assert.equal(sim.nodes.get("drop").hidden, true);
+  assert.equal(sim.nodes.get("flight-cue").textContent, "");
+  const draws=sim.draws.length;
+  const ticks=sim.called.tick.length;
+  sim.frame(32);
+  assert.equal(sim.nodes.get("summary").hidden, true);
+  assert.ok(sim.draws.length>draws);
+  assert.equal(sim.called.tick.length,ticks+1,"Wosy still receives elapsed presentation time");
+  sim.impact(8, false);
+  sim.frame(48);
+  assert.equal(sim.nodes.get("summary").hidden, false);
+  assert.equal(sim.data.size,0,"a wreck cannot publish a successful replay");
+});
+test("the mail shot reports actual impact and returns to ordinary controls", async () => {
+  const sim=mock();
+  await sim.ready;
+  sim.courses[1].events("click");
+  sim.film(2);
+  sim.cue({phase:5});
+  sim.frame(16);
+  assert.equal(sim.nodes.get("mission-phase").textContent,"Mail in flight");
+  assert.equal(sim.nodes.get("callout").hidden, true);
+  assert.equal(sim.nodes.get("drop").hidden,true);
+  sim.guidance(0,4,false,true);
+  sim.cue({phase:2});
+  sim.frame(132);
+  assert.equal(sim.nodes.get("mission-phase").textContent,"Mail delivered");
+  sim.guidance(0,4,false,false);
+  sim.cue({phase:1,dropStatus:8,eventCode:8});
+  sim.frame(238);
+  assert.equal(sim.nodes.get("mission-phase").textContent,"Mail missed");
+  assert.equal(sim.nodes.get("drop").hidden,true);
+  sim.film(0);
+  sim.frame(344);
+  assert.notEqual(sim.nodes.get("mission-phase").textContent,"Mail missed");
+  assert.equal(sim.nodes.get("drop").hidden,false);
+  assert.equal(sim.nodes.get("summary").hidden,true);
+});
 test("context recovery redraws without resetting an active run", async () => {
   const sim = mock();
   await sim.ready;
@@ -389,9 +444,9 @@ test("the Flight minimal HUD updates both host assets and retains the same Wasm 
   await sim.ready;
   const html = await readFile(new URL("../index.html", import.meta.url), "utf8");
   assert.match(html, /href="\.\/style\.css\?v=paris-quay-quarter-flight-v11-hud1"/);
-  assert.match(html, /src="\.\/host\.mjs\?v=paris-quay-quarter-flight-v11-space1-hud2"/);
+  assert.match(html, /src="\.\/host\.mjs\?v=flight-cinematics-v12-space1-hud2"/);
   assert.deepEqual(sim.called.requests.map((url) => [url.pathname.split("/").at(-1), url.search]),
-    [["flight.wasm", "?v=paris-quay-quarter-flight-v11"]]);
+    [["flight.wasm", "?v=flight-cinematics-v12"]]);
 });
 
 test("view button and V toggle the engine camera without resetting a route", async () => {
@@ -645,7 +700,7 @@ test("only next action, speed and altitude occupy the live HUD; stats and restar
 });
 
 test("only the exact mission frame ABI is accepted", async () => {
-  for (const frameLength of [28, 30, 32, 34, 35, 37]) {
+  for (const frameLength of [28, 30, 32, 34, 35, 36, 37, 40, 42]) {
     const unknown = mock({frameLength});
     await unknown.ready;
     assert.equal(unknown.courses[0].disabled, true);

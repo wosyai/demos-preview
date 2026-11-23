@@ -8,7 +8,7 @@ const KEYS = new Map([
 ]);
 const COURSES = ["Crop Patrol", "Paris Air Mail"];
 const STORAGE_KEY = "wosy-flying-low/missions-v7/";
-const MISSION_FRAME_FLOATS = 36;
+const MISSION_FRAME_FLOATS = 41;
 const LANDING_CUES = [
   "Land in the marked strip", "Level wings and align with the strip", "Brake to slow down",
   "Ease your descent", "Aligned · ease onto the strip",
@@ -315,6 +315,7 @@ export function bootFlight(win, doc) {
   let cockpit = false;
   const dropButton = actionButtons.find((button) => button.dataset.action === "drop");
   let activeStick = null, analogInput = false, dropPending = false, dropAvailable = false;
+  let cinematicHud = 0;
 
   function syncButtons() {
     const mask = controls.mask;
@@ -416,6 +417,21 @@ export function bootFlight(win, doc) {
   function updateHud(frame) {
     setText(instruments[2], roundText(frame[18], "m/s"));
     setText(instruments[3], roundText(frame[19], "m"));
+    const film = frame[36];
+    cinematicHud = film;
+    if (film !== 0) {
+      dropAvailable = false;
+      if (dropButton) {
+        dropButton.hidden = true;
+        dropButton.disabled = true;
+        dropButton.classList.toggle("drop-ready", false);
+      }
+      const caption = film === 1 ? "Impact" : frame[20] === 5 ? "Mail in flight" : frame[31] === 1 ? "Mail delivered" : "Mail missed";
+      callout.hidden = true;
+      setText(flightCue, film === 2 ? caption : "");
+      setText(instruments[1], caption);
+      return;
+    }
     const phase = frame[20], dropStatus = frame[21], route = frame[25];
     dropAvailable = phase === 1 || phase === 9 || phase === 11;
     if (dropButton) {
@@ -513,6 +529,7 @@ export function bootFlight(win, doc) {
     if (loading || error || lost || !engine || !Number.isInteger(course) || course < 0 || course >= COURSES.length) return;
     try {
       current = course;
+      cinematicHud = 0;
       clearInput();
       engine.reset(course);
       engine.select_view(playing && cockpit ? 1 : 0);
@@ -585,10 +602,10 @@ export function bootFlight(win, doc) {
       const frame = state();
       if (active || dirty || resized) { draw(frame); dirty = false; }
       if (active && frame) {
-        if (frame[22] !== 0) {
+        if (frame[22] !== 0 && frame[36] === 0) {
           updateHud(frame);
           showSummary("result", frame);
-        } else if (timestamp >= hudTick) {
+        } else if (frame[36] !== cinematicHud || (frame[36] !== 1 && timestamp >= hudTick)) {
           updateHud(frame);
           hudTick = timestamp + 90;
         }
@@ -764,7 +781,7 @@ export function bootFlight(win, doc) {
     if (!gl) { failure("This game needs WebGL 2. Try a current browser with hardware acceleration enabled."); return; }
     try {
       gpu = graphics(gl);
-      const wasm = await win.fetch(new URL("./flight.wasm?v=paris-quay-quarter-flight-v11", import.meta.url));
+      const wasm = await win.fetch(new URL("./flight.wasm?v=flight-cinematics-v12", import.meta.url));
       if (!wasm.ok) throw new Error("The flight engine could not be downloaded.");
       const { instance } = await win.WebAssembly.instantiate(await wasm.arrayBuffer(), imports);
       engine = instance.exports;

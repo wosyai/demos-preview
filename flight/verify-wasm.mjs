@@ -13,6 +13,7 @@ const digest = (array) => createHash("sha256").update(floatBytes(array)).digest(
 const module = new WebAssembly.Module(readFileSync(process.argv[2] ?? new URL("flight.wasm", import.meta.url)));
 assert.deepEqual(WebAssembly.Module.imports(module).map(({ module, name }) => `${module}.${name}`).sort(), [
     "flight.aircraft", "flight.frame", "flight.record", "flight.world",
+    ...(comparisonBaseline ? [] : ["wasi_snapshot_preview1.proc_exit"]),
 ]);
 
 let engine;
@@ -31,7 +32,7 @@ function readFloats(pointer, length, stride, limit) {
     assert(values.every(Number.isFinite));
     return values;
 }
-engine = new WebAssembly.Instance(module, { flight: {
+engine = new WebAssembly.Instance(module, { wasi_snapshot_preview1: {proc_exit(code) { assert.fail("Wosy simulation trapped: "+code); }}, flight: {
     world(pointer, length) {
         worldPointer = pointer;
         world = readFloats(pointer, length, 18, 196608);
@@ -42,10 +43,13 @@ engine = new WebAssembly.Instance(module, { flight: {
         aircraft = readFloats(pointer, length, 18, 12288);
     },
     frame(pointer, length) {
-        const expected = comparisonBaseline ? 35 : 36;
+        const expected = comparisonBaseline ? 35 : 41;
         frame = readFloats(pointer, length, 1, expected);
         assert.equal(frame.length, expected);
-        if (!comparisonBaseline) assert(frame[35] === 0 || frame[35] === 1);
+        if (!comparisonBaseline) {
+            assert(frame[35] === 0 || frame[35] === 1);
+            assert([0, 1, 2].includes(frame[36]));
+        }
         assert(frame[28] >= -1 && frame[28] <= 1, "turn cue is bounded");
         assert([0, 1, 2, 3, 4].includes(frame[29]), "landing enum is recognized");
         assert(frame[30] === 0 || frame[30] === 1, "shortcut availability is Boolean");
@@ -257,7 +261,10 @@ assert(headingAfter(hostAnalog(-127, 0)) < 0, "signed joystick left is preserved
 
 // Play through the public input/projection ABI, with no exported test state or
 // ability to teleport. The chase offset is documented by the authored camera.
+let verifyCockpitMail=false;
 function aircraftPose() {
+    if (frame[36] === 2 || verifyCockpitMail)
+        return {x:frame[37], y:frame[38], z:frame[39], speed:frame[18], angle:frame[40]};
     const angle = Math.atan2(frame[3], frame[11]);
     const hx = Math.sin(angle), hz = Math.cos(angle);
     const right = -frame[12] / (1.61 / 1.65);
@@ -497,6 +504,7 @@ function observeMarkers(course, mode) {
     };
 }
 function sortie(course, mode = "normal") {
+    verifyCockpitMail=false;
     reset(1-course); reset(course);
     if (!comparisonBaseline) {
         const start = aircraftPose();
@@ -512,6 +520,8 @@ function sortie(course, mode = "normal") {
     let surveyCruise = false, surveyEast = false;
     let checkedPortraitDrop = false, checkedChaseDrop = false, checkedSupplyFrustum = false;
     let checkedPredictedImpact = false;
+    let seenFalling=0, seenContact=0, returnedAfterContact=false, previousPouchHeight=Infinity;
+    let cockpitAtRelease=false, returnedCockpit=false;
     let craftStartX;
     let movingSeine = false;
     let cartStartZ, movingCart = false;
@@ -534,6 +544,48 @@ function sortie(course, mode = "normal") {
         visited.add(phase);
         observer?.before(p, phase);
         let input = 0;
+        if(!comparisonBaseline && course===1 && (mode==="normal" || mode==="cockpit mail")) {
+            if(frame[36]===2 && !cockpitAtRelease && mode==="cockpit mail") {
+                engine.select_view(1);
+                tick(0,0,.45);
+                verifyCockpitMail=true;
+                cockpitAtRelease=true;
+            }
+            if(frame[36]===2 && phase===5) {
+                if(mode==="cockpit mail") {
+                    assert.equal(marker([.99,.91,.71]).length,0,"the dashboard cannot cross the blended eye");
+                    assert.equal(marker([.96,.96,.86]).length,0,"the exterior airframe does not enclose the blending cockpit eye");
+                }
+                const pouch=marker([.88,.41,.19]);
+                assert.equal(pouch.length,6,"the cut renders the actual pouch");
+                const y=Math.min(...pouch.map(v=>v[1]));
+                assert(y<=previousPouchHeight+.001,"the cinematic pouch falls continuously");
+                previousPouchHeight=y;
+                seenFalling++;
+            } else if(frame[36]===2 && phase===2) {
+                assert.equal(frame[31],1,"the actual Wosy delivery counted before the return");
+                const impact=marker([.31,.82,.32]);
+                assert.equal(impact.length,24,"a marker is drawn at the counted impact");
+                if(seenContact===0) {
+                    assert(impact.some(([x,,z])=>(x-109)**2+(z-218)**2<144),
+                        "the impact marker is in the same postal target");
+                }
+                if(seenContact===2 && mode==="normal")
+                    verifyCueProjection("mail impact framing", () => impact, .12,.04);
+                seenContact++;
+            } else if(seenContact>0 && phase===2) {
+                returnedAfterContact=true;
+                if(mode==="cockpit mail" && !returnedCockpit) {
+                    assert.equal(marker([.99,.91,.71]).length,228,"the selected cockpit returns without another toggle");
+                    const interior=frame.slice(0,16);
+                    engine.select_view(0); tick(0,0,1.65);
+                    assert.notDeepEqual(frame.slice(0,16),interior);
+                    verifyCockpitMail=false;
+                    returnedCockpit=true;
+                }
+                assert.equal(marker([.31,.82,.32]).length,0,"the landing view does not retain a cinematic marker");
+            }
+        }
         if (!comparisonBaseline && course === 0 && mode === "normal") {
             const cart = marker([.91,.58,.23]);
             const servicePhase = phase === 7 || phase === 8 || phase === 9;
@@ -670,7 +722,12 @@ function sortie(course, mode = "normal") {
             if (status === 9) input |= 128;
         }
         if (phase === 0) {
-            if (mode === "riverside") {
+            if (mode === "ground impact") {
+                input = pilot(p,0,0.1,-0.08,32);
+                step(input);
+                continue;
+            }
+            if (mode === "riverside" || mode === "tower impact") {
                 if (p.z >= 105 && p.y >= 35) surveyCruise = true;
                 const target = surveyCruise ? [67, 190] : [-111, p.z + 90];
                 input = pilot(p, Math.atan2(target[0]-p.x, target[1]-p.z), 38, 0, 16);
@@ -685,6 +742,12 @@ function sortie(course, mode = "normal") {
             input = pilot(p,Math.atan2(target[0]-p.x,target[1]-p.z),height,slope,0);
         }
         if (phase === 1) {
+            if (mode === "tower impact") {
+                const bearing = Math.atan2(228-p.x,359-p.z);
+                input = pilot(p,bearing,51,0,16);
+                step(input);
+                continue;
+            }
             if (mode === "riverside") {
                 assert(surveyCruise, "the survey reached roof clearance before leaving the launch corridor");
                 if (!comparisonBaseline && !checkedPortraitDrop && p.y >= 35) {
@@ -738,6 +801,8 @@ function sortie(course, mode = "normal") {
                 step(input|128);
                 assert.equal(frame[26],8,"an early input is rejected by the Wosy release gate");
                 assert.equal(frame[20],1,"early mail does not launch");
+                assert.equal(frame[36],0,"a rejected predicted miss cannot start the cinematic or count a delivery");
+                assert.equal(frame[31],0);
                 return {result:"early release rejected"};
             }
             if (mode === "high" && status === 5) {
@@ -773,6 +838,11 @@ function sortie(course, mode = "normal") {
     observer?.finish();
     if (!comparisonBaseline && course === 0 && mode === "normal")
         assert(movingCart,"ordinary Wright descent encounters the actively moving supply cart");
+    if(!comparisonBaseline && course===1 && (mode==="normal" || mode==="cockpit mail")) {
+        assert(seenFalling>10 && seenContact>18 && returnedAfterContact,
+            "a complete ordinary sortie uses pouch-follow, holds actual impact, then returns to landing");
+        if(mode==="cockpit mail") assert(cockpitAtRelease && returnedCockpit);
+    }
     if (!comparisonBaseline && course === 1 && (mode === "normal" || mode === "cyan"))
         assert(movingSeine,"ordinary Paris controls observe a real moving market boat and wake");
     if (mode === "riverside" || mode === "county") return {result: frame[22], phase:frame[20], position: aircraftPose(), surveyCruise, surveyEast};
@@ -789,12 +859,98 @@ if (!comparisonBaseline) {
     assert.equal(east.result, "northeast reach", `ordinary flight controls can reach the new Paris northeast district: ${JSON.stringify(east)}`);
 }
 assert.equal(cyanParis.route,1,"the low Paris departure earns the cyan route outcome");
-assert.equal(sortie(1,"strike").result,8,"failing to climb out of the low route hits the bridge");
+function wreckYRange(part) {
+    const points=aircraft.subarray(aircraft.length-1080+part*360,aircraft.length-1080+(part+1)*360);
+    assert.equal(points.length,360,"each of the three wreck pieces has two actual boxes");
+    const y=Array.from(points).filter((_,index)=>index%6===1);
+    assert(y.every(Number.isFinite));
+    return [Math.min(...y),Math.max(...y)];
+}
+function wreckCenters() {
+    return [0,1,2].map(part=>{
+        const piece=aircraft.subarray(aircraft.length-1080+part*360,aircraft.length-1080+(part+1)*360);
+        return [0,1,2].map(axis=>{
+            const values=Array.from(piece).filter((_,index)=>index%6===axis);
+            return (Math.min(...values)+Math.max(...values))/2;
+        });
+    });
+}
+const impact = sortie(1,"strike");
+assert.equal(impact.result,8,"failing to climb out of the low route hits the bridge");
+if (!comparisonBaseline) {
+    assert.equal(frame[36],1,"fatal bridge contact starts a separate wreck presentation");
+    const atImpact = aircraft.slice();
+    const fragmentVertices=Array.from(atImpact.subarray(-1080));
+    assert(fragmentVertices.every((x,i)=>i%6!==0 || x<54),
+        "bridge-contact pieces begin on the entry side rather than inside the deck");
+    const clock = frame[17], before = frame.slice();
+    engine.select_view(1);
+    tick(128,0,.45);
+    assert.deepEqual(frame.subarray(16),before.subarray(16),"camera changes and zero dt cannot advance the crash");
+    engine.cancel_drop();
+    for(let i=0;i<28;i++) tick(20,1/30,.45);
+    assert.equal(frame[36],1,"debris is still active after the first second");
+    assert.equal(frame[17],clock,"the fixed mission clock is frozen at actual impact");
+    assert.notDeepEqual(aircraft,atImpact,"gravity and collision move the real Wosy wreck mesh");
+    for(let i=0;i<340 && frame[36]!==0;i++) tick(128,1/30,.45);
+    assert.equal(frame[36],0,"the result is ready after the visual-only crash clock ends");
+    assert.equal(frame[22],8,"cinematic physics never changes the cause of the loss");
+    assert.equal(frame[17],clock,"controls during the scene never advance or record mission progress");
+    const wreck = aircraft.slice();
+    tick(0,1/30,.45);
+    assert.deepEqual(aircraft,wreck,"the completed wreck stays on the terrain behind the result");
+    engine.select_view(0);
+    assert.equal(sortie(1,"strike").result,8,"the same low route repeats the same impact");
+    for(let i=0;i<1330 && frame[36]!==0;i++) tick(i%3?4:128,1/120,.45);
+    assert.equal(frame[36],0,"120 Hz presentation also reaches the completed verdict");
+    assert.deepEqual(aircraft,wreck,"debris gravity and obstacle response share fixed 30 Hz steps");
+    engine.select_view(1);
+    reset(1);
+    assert.equal(frame[36],0,"retry clears the wreck");
+    const cockpit = frame.slice();
+    engine.select_view(0); tick(0,0);
+    assert.notDeepEqual(frame.subarray(0,16),cockpit.subarray(0,16),"retry retained the user-selected cockpit");
+}
 assert.equal(sortie(0,"overrun").result,9,"pickup overrun remains an explicit failure");
+if(!comparisonBaseline) {
+    assert.equal(frame[36],0,"rollout overrun is not an impact cinematic");
+    const wreckHeight=()=>Math.max(...marker([.57*1.12,.33*1.12,.24*1.12]).map(([,y])=>y));
+    const ground=sortie(1,"ground impact");
+    assert.equal(ground.result,7,"an ordinary fatal touchdown reaches terrain without a clearance");
+    assert.equal(frame[19],1);
+    assert.equal(frame[36],1);
+    for(let i=0;i<340 && frame[36]!==0;i++) tick(0,1/30,.45);
+    assert.equal(frame[36],0);
+    for(let part=0;part<3;part++) {
+        const [low,high]=wreckYRange(part);
+        assert(low>-.08 && high<5,"all three parts of a terrain crash end at ground support");
+    }
+    const tower=sortie(1,"tower impact");
+    assert.equal(tower.result,2,"an ordinary high strike reaches a real geometry collider");
+    assert(frame[19]>39,"the real contact starts too high for the former short cap");
+    const contactHeight=frame[19];
+    assert.equal(frame[36],1);
+    for(let i=0;i<84;i++) tick(0,1/30,.45);
+    assert.equal(frame[36],1,"high debris is still falling past the former cap");
+    assert(wreckHeight() < contactHeight-8,"the live exterior camera follows the actual descending debris");
+    tick(0,0,1.65);
+    verifyCueProjection("high fall frames all three fragments",wreckCenters,.08,.08);
+    for(let i=0;i<340 && frame[36]!==0;i++) tick(0,1/30,.45);
+    assert.equal(frame[36],0,"the support fallback is bounded");
+    tick(0,0,1.65);
+    verifyCueProjection("settled high view fits all three fragments",wreckCenters,.08,.08);
+    for(let part=0;part<3;part++) {
+        const [low,high]=wreckYRange(part);
+        assert(low>-.08 && high<contactHeight-15,"all high-impact parts descend to lower support");
+    }
+}
 const noCargo = sortie(0,"no cargo");
 assert(noCargo.visited.has(9) && !noCargo.visited.has(10) && !noCargo.data,"throttling without loading cargo never advances the mission");
 assert.equal(sortie(1,"high").result,"invalid release");
-if (!comparisonBaseline) assert.equal(sortie(1,"early").result,"early release rejected");
+if (!comparisonBaseline) {
+    assert.equal(sortie(1,"early").result,"early release rejected");
+    assert.equal(sortie(1,"cockpit mail").result,1,"capturing the same mail shot restores an independently selected cockpit");
+}
 for (const {course, visited, result, time, data, actions, gates} of [goodFarm,goodParis,cyanParis]) {
     assert.equal(result,1,"complete delivery plus final stop earns a successful sortie");
     for (const phase of [6,7,8,9,10,2,3,...(course?[0,1,5]:[11])]) assert(visited.has(phase),`sortie passed phase ${phase}`);
