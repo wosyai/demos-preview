@@ -91,13 +91,14 @@ function routeMapBounds(roads) {
 }
 const MAP_INTERVAL=72, MAP_HEADING_STEP=.14, FULL_CIRCLE=2*Math.PI;
 
-function drawRouteMap(ctx,base,projection,roads,bounds,frame,route,count) {
+function drawRouteMap(ctx,base,projection,roads,bounds,frame,route,count,markScale) {
   if(!bounds||!roads.length) return;
   const {width,height}=ctx.canvas, guided=count>1;
   const px=frame[26],pz=frame[27],tx=guided?route[(count-1)*2]:px,tz=guided?route[(count-1)*2+1]:pz;
   const minX=Math.min(bounds[0],px,tx), maxX=Math.max(bounds[1],px,tx);
   const minZ=Math.min(bounds[2],pz,tz), maxZ=Math.max(bounds[3],pz,tz);
-  const scale=Math.min((width-30)/(maxX-minX),(height-30)/(maxZ-minZ));
+  const pad=Math.min(Math.min(width,height)/2-1,Math.max(15,10*markScale));
+  const scale=Math.min((width-2*pad)/(maxX-minX),(height-2*pad)/(maxZ-minZ));
   const dx0=(width-(maxX-minX)*scale)/2-minX*scale;
   const dz0=(height-(maxZ-minZ)*scale)/2+maxZ*scale;
   const x=(v)=>dx0+v*scale, z=(v)=>dz0-v*scale;
@@ -120,25 +121,25 @@ function drawRouteMap(ctx,base,projection,roads,bounds,frame,route,count) {
     ctx.moveTo(x(route[0]),z(route[1]));
     for(let point=1;point<count;point++) ctx.lineTo(x(route[point*2]),z(route[point*2+1]));
     ctx.lineJoin="round"; ctx.lineCap="round";
-    ctx.strokeStyle="#101924"; ctx.lineWidth=5.5; ctx.stroke();
-    ctx.strokeStyle="#ffcd87"; ctx.lineWidth=3; ctx.stroke();
+    ctx.strokeStyle="#101924"; ctx.lineWidth=5.5*markScale; ctx.stroke();
+    ctx.strokeStyle="#ffcd87"; ctx.lineWidth=3*markScale; ctx.stroke();
     ctx.beginPath();
-    ctx.arc(x(tx),z(tz),5,0,Math.PI*2);
+    ctx.arc(x(tx),z(tz),5*markScale,0,Math.PI*2);
     ctx.fillStyle="#ffcd87"; ctx.fill();
-    ctx.strokeStyle="#101924"; ctx.lineWidth=1.5; ctx.stroke();
+    ctx.strokeStyle="#101924"; ctx.lineWidth=1.5*markScale; ctx.stroke();
   }
   const sx0=x(px), sz0=z(pz), yaw=frame[28];
   ctx.beginPath();
   if(frame[16]===1&&Number.isFinite(yaw)) {
-    const sx=Math.sin(yaw), cz=Math.cos(yaw);
+    const sx=Math.sin(yaw)*markScale, cz=Math.cos(yaw)*markScale;
     ctx.moveTo(sx0+sx*8,sz0-cz*8);
     ctx.lineTo(sx0-sx*5-cz*5,sz0+cz*5-sx*5);
     ctx.lineTo(sx0-sx*2,sz0+cz*2);
     ctx.lineTo(sx0-sx*5+cz*5,sz0+cz*5+sx*5);
     ctx.closePath();
-  } else ctx.arc(sx0,sz0,3.6,0,Math.PI*2);
+  } else ctx.arc(sx0,sz0,3.6*markScale,0,Math.PI*2);
   ctx.fillStyle="#fff5e1"; ctx.fill();
-  ctx.strokeStyle="#101924"; ctx.lineWidth=1.5; ctx.stroke();
+  ctx.strokeStyle="#101924"; ctx.lineWidth=1.5*markScale; ctx.stroke();
 }
 
 const meshLimits = {world:9*4096*6,moving:24*256*6};
@@ -350,12 +351,13 @@ export async function boot(env=globalThis,createGraphics=graphics,createAudio=cr
   const touch=get("touch"), trip=get("trip"), departure=get("departure"), brakeIcon=get("brake-icon"), actionIcon=get("action-icon");
   const input=inputState(), meshes=new Map();
   const audio=createAudio("ferry"), soundtrack=ferrySoundtrack(audio);
-  const map=get("city-map"), chart=get("city-chart").getContext?.("2d");
+  const map=get("city-map"), chartNode=get("city-chart"), chart=chartNode.getContext?.("2d");
+  const you=get("route-you");
   const nextStop=get("route-stop"), guide=get("route-guide"), unavailable=get("route-unavailable");
   const roadLayer=chart&&document.createElement?.("canvas").getContext("2d");
   const projection={}, painted={};
   const route=new Float32Array(192), sampled={};
-  let roads=[], roadBounds, routeCount=0, nextMap=0, mapPhase=-1;
+  let roads=[], roadBounds, routeCount=0, nextMap=0, mapPhase=-1, markScale=1;
   let engine, renderer, frame, aspect=0, menuText="Loading the waterfront…", failed=false, last=0, playing=false, lost=false, ready=false, paused=false, mode=0, previousCue=-1, previousState=-1;
   const heldButtons=[power,reverse,brake,action];
   const renderThumb=(x,y)=>{
@@ -400,7 +402,7 @@ export async function boot(env=globalThis,createGraphics=graphics,createAudio=cr
     const phase=frame[17], now=performance.now();
     if(!force&&phase===mapPhase&&now<nextMap) return;
     mapPhase=phase; nextMap=now+MAP_INTERVAL;
-    const selected=engine.route_selection(), driving=frame[16]===1, heading=driving?frame[28]:0;
+    const selected=engine.route_selection(), driving=frame[16]===1, heading=driving&&Number.isFinite(frame[28])?frame[28]:0;
     const active=phase===0||phase===1||phase===8, tx=active?frame[24]:0, tz=active?frame[25]:0;
     const px=frame[26], pz=frame[27];
     const targetChanged=sampled.tx!==tx||sampled.tz!==tz;
@@ -422,11 +424,35 @@ export async function boot(env=globalThis,createGraphics=graphics,createAudio=cr
       sampled.phase=phase; sampled.key=selected; sampled.driving=driving;
       sampled.tx=tx; sampled.tz=tz; sampled.px=px; sampled.pz=pz; sampled.heading=heading;
     }
-    if(!routeChanged&&painted.px===px&&painted.pz===pz&&painted.heading===heading) return;
-    painted.px=px; painted.pz=pz; painted.heading=heading;
-    drawRouteMap(chart,roadLayer,projection,roads,roadBounds,frame,route,routeCount);
+    renderMap(routeChanged);
   }
-  map.addEventListener("toggle",()=>{ if(ready) paintMap(true); });
+  function renderMap(routeChanged=false) {
+    const px=frame[26], pz=frame[27], arrow=frame[16]===1&&Number.isFinite(frame[28]), heading=arrow?frame[28]:0;
+    if(!routeChanged&&painted.px===px&&painted.pz===pz&&painted.arrow===arrow&&painted.heading===heading&&painted.markScale===markScale) return;
+    if(painted.arrow!==arrow) you.dataset.driving=String(arrow);
+    painted.px=px; painted.pz=pz; painted.heading=heading;
+    painted.arrow=arrow; painted.markScale=markScale;
+    drawRouteMap(chart,roadLayer,projection,roads,roadBounds,frame,route,routeCount,markScale);
+  }
+  function resizeMap(width,height,repaint=true) {
+    if(!(width>0&&height>0)) return;
+    const scale=Math.max(1,chartNode.width/width,chartNode.height/height);
+    if(scale===markScale) return;
+    markScale=scale;
+    if(repaint&&ready&&frame&&map.open&&!map.hidden) renderMap();
+  }
+  const mapObserver=chart&&typeof env.ResizeObserver==="function" ? new env.ResizeObserver(([entry])=>{
+    if(entry) resizeMap(entry.contentRect.width,entry.contentRect.height);
+  }) : null;
+  if(mapObserver) mapObserver.observe(chartNode);
+  else if(chart) window.addEventListener("resize",()=>{
+    if(map.open&&!map.hidden) resizeMap(chartNode.clientWidth,chartNode.clientHeight);
+  });
+  map.addEventListener("toggle",()=>{
+    if(!ready||!map.open||map.hidden) return;
+    if(!mapObserver) resizeMap(chartNode.clientWidth,chartNode.clientHeight,false);
+    paintMap(true);
+  });
   function releasePedals(includeBrake=false) {
     for(const [id,name] of input.buttons) {
       if(name!=="power"&&name!=="reverse"&&!(includeBrake&&name==="brake")) continue;

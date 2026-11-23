@@ -83,8 +83,8 @@ h1 span{color:var(--rust)}
 .city-map canvas { position:static; display:block; width:100%; height:auto; max-height:29dvh; object-fit:contain; }
 .city-map p { display:flex; justify-content:space-between; flex-wrap:wrap; gap:.2rem .45rem; margin:4px 3px 0; font-size:.67rem; }
 .city-map p span::before { content:""; display:inline-block; width:.55rem; height:.55rem; margin-right:.26rem; background:currentColor; vertical-align:baseline; }
-.route-you::before { clip-path:polygon(50% 0,100% 100%,50% 74%,0 100%); }
-.route-stop::before { border-radius:50%; }
+.route-you::before, .route-stop::before { border-radius:50%; }
+.route-you[data-driving=true]::before { clip-path:polygon(50% 0,100% 100%,50% 74%,0 100%); border-radius:0; }
 .route-stop, .route-guide { color:var(--amber); }
 .city-map p .route-guide::before { width:.62rem; height:2px; vertical-align:middle; }
 .hint { grid-column:1/-1; margin:0; padding:3px 5px; color:var(--cream); font-size:.74rem; overflow-wrap:anywhere; }

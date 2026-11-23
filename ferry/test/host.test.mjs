@@ -106,7 +106,7 @@ test("sound follows gameplay edges rather than duplicate frames or reset baselin
   assert.equal(names().at(-1),"missed");
 });
 
-function shell({defer=false,missing="",cue=1}={}) {
+function shell({defer=false,missing="",cue=1,observeMap=true}={}) {
   class Target {
     handlers=new Map();
     captures=new Set();
@@ -143,7 +143,7 @@ function shell({defer=false,missing="",cue=1}={}) {
     lineTo(...args){mapPaint.push(["route-leg",...args]);},
     setLineDash(pattern){this.dash=pattern;},
     closePath(){mapPaint.push(["close-shape"]);},
-    stroke(){mapPaint.push(["stroke",this.strokeStyle,this.dash]);},
+    stroke(){mapPaint.push(["stroke",this.strokeStyle,this.dash,this.lineWidth]);},
     arc(...args){mapPaint.push(["dot",...args]);}, fill(){mapPaint.push(["fill",this.fillStyle]);},
   });
   const window=new Target(), document=Object.assign(new Target(),{getElementById:get});
@@ -154,11 +154,15 @@ function shell({defer=false,missing="",cue=1}={}) {
   };
   const memory=new WebAssembly.Memory({initial:1});
   const frames=[],ticks=[],draws=[],uploads=[],resets=[];
-  let finishFetch,cancellations=0,wasmStarts=0,time=0;
+  let finishFetch, chartResize, cancellations=0,wasmStarts=0,time=0;
   let state=0,seconds=90,turn=0,selection=0,routeReads=0, player=[0,0],target=[0,0],heading=0,driving=false, routeSelections=0, pathUpdates=0, path=[], exitOnAction=false, hit=0, hitSequence=0;
   const fetchGate=new Promise(resolve=>{finishFetch=resolve;});
   const env={
     window,document,devicePixelRatio:1,performance:{now:()=>time},
+    ResizeObserver:observeMap?class {
+      constructor(update){chartResize=update;}
+      observe(node){assert.equal(node,chart);}
+    }:undefined,
     requestAnimationFrame(fn){frames.push(fn);},
     async fetch() {
       if(defer) await fetchGate;
@@ -189,6 +193,7 @@ function shell({defer=false,missing="",cue=1}={}) {
     ()=>({unlock(){},play(){},loop(){},stopLoop(){},setActive(){}}));
   return {
     get,window,document,ticks,draws,uploads,resets,started,finishFetch,mapPaint,roadPaint,
+    resizeMap(width,height){chartResize([{contentRect:{width,height}}]);},
     advance(delta=16){ const frame=frames.shift(); assert(frame,"animation callback was scheduled");frame(time+=delta); },
     mission(next){({state,seconds,turn,cue,selection,player,target,heading,driving,exitOnAction,hit,hitSequence,path}={state,seconds,turn,cue,selection,player,target,heading,driving,exitOnAction,hit,hitSequence,path,...next});},
     get routeSelections(){return routeSelections;},
@@ -522,6 +527,73 @@ test("minimap paints exactly Wosy's connected route and never invents a shortcut
   app.mission({state:5,driving:false});
   app.advance();
   assert.deepEqual(app.mapPaint.filter(row=>row[0]==="fill"),[["fill","#fff5e1"]],"crossing removes guidance immediately");
+});
+
+test("narrow or height-limited minimaps keep readable markers without replanning",async()=>{
+  const app=shell(); await app.started;
+  app.get("start").emit("click");
+  app.mission({state:1,player:[0,3],target:[2,4],path:[[0,3],[0,4],[2,4]]});
+  app.advance();
+  const map=app.get("city-map"), chart=app.get("city-chart"), you=app.get("route-you");
+  for(const dimension of ["clientWidth","clientHeight"]) Object.defineProperty(chart,dimension,{
+    get(){assert.fail("the observer path must not synchronously measure the minimap");},
+  });
+  map.open=true; map.emit("toggle");
+  function visibleSizes(scale) {
+    const [stop,player]=app.mapPaint.filter(([kind])=>kind==="dot");
+    const [, , ,width]=app.mapPaint.find(([kind,color])=>kind==="stroke"&&color==="#ffcd87");
+    assert(Math.abs(stop[3]*scale-5)<1e-9);
+    assert(Math.abs(player[3]*scale-3.6)<1e-9);
+    assert(Math.abs(width*scale-3)<1e-9);
+  }
+  visibleSizes(1);
+  assert.equal(you.dataset.driving,"false");
+  app.mapPaint.length=0;
+  app.resizeMap(140,91);
+  visibleSizes(.5);
+  app.mapPaint.length=0;
+  app.resizeMap(140,60);
+  visibleSizes(60/182);
+  assert.equal(app.pathUpdates,1,"presentation changes never ask Wosy for a new route");
+  assert.equal(app.routeSelections,1,"observer paints without polling the route");
+  app.mapPaint.length=0;
+  app.resizeMap(140,60);
+  app.advance(72);
+  assert.equal(app.mapPaint.length,0,"a repeated resize and stationary paint do no work");
+  app.mission({driving:true,heading:Math.PI/2});
+  app.mapPaint.length=0;
+  app.advance(72);
+  assert.equal(you.dataset.driving,"true");
+  assert(app.mapPaint.some(([kind])=>kind==="close-shape"),"driving glyph and legend both switch to an arrow");
+  app.mission({heading:NaN});
+  app.mapPaint.length=0;
+  app.advance(72);
+  assert.equal(you.dataset.driving,"false");
+  assert(!app.mapPaint.some(([kind])=>kind==="close-shape"),"an unreadable heading draws a dot and matches its legend");
+});
+
+test("without ResizeObserver the minimap reads layout only at opening and window resize",async()=>{
+  const app=shell({observeMap:false}); await app.started;
+  app.get("start").emit("click");
+  app.mission({state:1,player:[0,3],target:[2,4],path:[[0,3],[0,4],[2,4]]});
+  app.advance();
+  const map=app.get("city-map"), chart=app.get("city-chart");
+  let measured=0, height=91;
+  Object.defineProperties(chart,{
+    clientWidth:{get(){measured++;return 140;}},
+    clientHeight:{get(){measured++;return height;}},
+  });
+  app.window.emit("resize");
+  assert.equal(measured,0);
+  map.open=true; map.emit("toggle");
+  assert.equal(measured,2);
+  app.advance(72);
+  assert.equal(measured,2);
+  app.mapPaint.length=0; height=60;
+  app.window.emit("resize");
+  assert.equal(measured,4);
+  assert(app.mapPaint.length>0);
+  assert.equal(app.pathUpdates,1);
 });
 
 

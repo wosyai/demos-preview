@@ -6,7 +6,7 @@
 <meta name="theme-color" content="#102726">
 <meta name="description" content="Last Ferry, a playable third-person seaside game made in Wosy.">
 <title>Last Ferry | Wosy Arcade</title>
-<link rel="stylesheet" href="./style.css?v=ferry-free-orbit-v1">
+<link rel="stylesheet" href="./style.css?v=ferry-map-legibility-v1">
   <link rel="stylesheet" href="../arcade/shell.css?v=4">
 </head>
 <body class="arcade-city">
@@ -41,7 +41,7 @@
       <summary><svg class="icon" aria-hidden="true"><use href="#icon-map"/></svg> Map</summary>
       <div class="route-sheet">
         <canvas id="city-chart" width="280" height="182" aria-hidden="true"></canvas>
-        <p><span class="route-you">You</span><span id="route-stop" class="route-stop" hidden>Next stop</span><span id="route-guide" class="route-guide" hidden>Guide</span></p>
+        <p><span id="route-you" class="route-you">You</span><span id="route-stop" class="route-stop" hidden>Next stop</span><span id="route-guide" class="route-guide" hidden>Guide</span></p>
         <p id="route-unavailable" hidden>Route unavailable here.</p>
       </div>
     </details>
@@ -78,6 +78,6 @@
   </section>
   <span id="announce" class="sr-only" aria-live="polite"></span>
 </main>
-<script type="module" src="./host.mjs?v=ferry-clear-recovery-v5"></script>
+<script type="module" src="./host.mjs?v=ferry-map-legibility-v1"></script>
 </body>
 </html>
