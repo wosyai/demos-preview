@@ -444,9 +444,9 @@ test("the Flight host and Wasm share a deployment cache token", async () => {
   await sim.ready;
   const html = await readFile(new URL("../index.html", import.meta.url), "utf8");
   assert.match(html, /href="\.\/style\.css\?v=paris-quay-quarter-flight-v11-hud1"/);
-  assert.match(html, /src="\.\/host\.mjs\?v=flight-parcel-wreck-v5"/);
+  assert.match(html, /src="\.\/host\.mjs\?v=flight-golden-skies-v1"/);
   assert.deepEqual(sim.called.requests.map((url) => [url.pathname.split("/").at(-1), url.search]),
-    [["flight.wasm", "?v=flight-parcel-wreck-v5"]]);
+    [["flight.wasm", "?v=flight-golden-skies-v1"]]);
 });
 
 test("view button and V toggle the engine camera without resetting a route", async () => {

@@ -79,11 +79,11 @@ u8[4][16][8][16] block_atlas = [
 	blank_atlas_line, blank_atlas_line, blank_atlas_line, blank_atlas_line, blank_atlas_line, blank_atlas_line, blank_atlas_line, blank_atlas_line
 ];
 bool atlas_ready = false;
-f32[44] frame_values = [
+f32[46] frame_values = [
 	0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
 	0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
 	0.0, 1.0, 0.0, 0.0, 0.0,
-	0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0
+	0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0
 ];
 i32 write_position = 0;
 i32 wire_position = 0;
@@ -122,6 +122,8 @@ bool flying = false;
 bool grounded = false;
 bool ground_contact_dirty = false;
 bool jump_pending = false;
+f32 jump_buffer = 0.0;
+f32 ledge_grace = 0.0;
 f32 vertical_speed = 0.0;
 bool third_person = false;
 f32 boom_mix = 0.0;
@@ -1974,6 +1976,8 @@ unit() spawn_player = fn {
 	boom_initialized = false;
 	ground_contact_dirty = false;
 	jump_pending = false;
+	jump_buffer = 0.0;
+	ledge_grace = 0.0;
 	vertical_speed = 0.0;
 	reset_pocket_foley();
 	gait_phase = 0.0;
@@ -1992,6 +1996,8 @@ unit() clear_controls = fn {
 	controls = 0;
 	pulse_controls = 0;
 	jump_pending = false;
+	jump_buffer = 0.0;
+	ledge_grace = 0.0;
 	held_edits = 0;
 	repeat_edit_mode = -1;
 	repeat_edit_wait = 0.0;
@@ -2012,6 +2018,8 @@ unit() toggle_flight = fn {
 		grounded = false;
 		ground_contact_dirty = !flying;
 		jump_pending = false;
+		jump_buffer = 0.0;
+		ledge_grace = 0.0;
 		vertical_speed = 0.0;
 	};
 };
@@ -2182,12 +2190,20 @@ unit(f32, f32, f32) move_camera = fn(dt, sy, cy) {
 				grounded = vertical_speed <= 0.0 && player_collides(camera_pose.x, camera_pose.y - 0.018, camera_pose.z);
 				ground_contact_dirty = false;
 			};
-			if (jump_pending) {
-				if (grounded) {
+			jump_buffer = if (jump_pending) { 0.115 } else { clamp_f(jump_buffer - dt, 0.0, 0.115) };
+			ledge_grace = if (grounded) { 0.095 } else { clamp_f(ledge_grace - dt, 0.0, 0.095) };
+			if (jump_buffer > 0.0) {
+				if (grounded || (ledge_grace > 0.0 && immersion < 0.15)) {
 					vertical_speed = 7.4 - 2.0 * immersion;
 					grounded = false;
+					jump_buffer = 0.0;
+					ledge_grace = 0.0;
 				} else {
-					if (immersion >= 0.15 && vertical_speed < 3.8) { vertical_speed = 3.8; };
+					if (immersion >= 0.15 && vertical_speed < 3.8) {
+						vertical_speed = 3.8;
+						jump_buffer = 0.0;
+						ledge_grace = 0.0;
+					};
 				};
 			};
 			f32 lift = if (immersion > 0.0 && active(16) == 1) { 48.0 } else { 35.0 };
@@ -2487,6 +2503,8 @@ unit(f32, f32, f32, f32, f32, f32, f32, f32, RayHit) publish_frame = fn(x, y, z,
 	};
 	frame_values[37] = camera_pose.x;
 	frame_values[38] = camera_pose.z;
+	frame_values[44] = sea_level;
+	frame_values[45] = if (beacon_phase == BeaconPhase::restored) { 1.0 } else { 0.0 };
 	i32 legacy = legacy_hit(hit);
 	i32 frame_hit = if (hit.face >= 0 && legacy < 0) { 1 } else { legacy };
 	unsafe { host.frame(core.pointer_cast<*?u8>(&?frame_values[0]), frame_hit); };

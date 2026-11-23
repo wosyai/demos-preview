@@ -15,3 +15,19 @@
 .catalog-label h2 { margin: .18rem 0 0; font: 800 clamp(1.22rem, 3vw, 2rem)/1.05 system-ui, sans-serif; letter-spacing: -.04em; }
 .catalog-play { width: 1.4rem; height: 1.4rem; padding: .54rem; border-radius: 50%; color: var(--arcade-ink); background: var(--arcade-accent); stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
 @media (max-width: 640px) { .catalog-games { grid-template-columns: minmax(0, 1fr); } }
+/* Game shelf: a quiet gallery, with each world supplying its own light. */
+.arcade-home { background: radial-gradient(ellipse at 88% 4%, #2c424340, transparent 50%),linear-gradient(145deg,#182128,#11161c 68%); }
+.catalog-heading { border-top: 1px solid #74817c66; padding-top: 1rem; }
+.catalog-heading .catalog-brand { display: flex; align-items: center; gap:.65rem; color:#d9e4da; }
+.catalog-brand b { display:grid; place-items:center; width:1.8rem; height:1.8rem; color:#142121; background:#d7ecb4; font:900 1.2rem/1 system-ui; letter-spacing:-.1em; text-transform:none; border-radius:.45rem; }
+.catalog-heading h1 { margin-top: clamp(1.4rem,3vw,2.3rem); }
+.catalog-heading p { color: #c4ceca; max-width: 40rem; text-wrap: pretty; }
+.catalog-game { overflow:hidden; gap:1rem; padding:0 0 .9rem; border-radius:.9rem; box-shadow:0 .8rem 2rem #0003; }
+.catalog-game .arcade-cover { border-radius:0; width:100%; outline:0; border-bottom:1px solid #fff2; }
+.catalog-label { padding-left:1rem; }
+.catalog-play { margin-right:1rem; }
+@media (prefers-reduced-motion:no-preference) and (hover:hover) {
+  .catalog-game, .catalog-play { transition:transform 180ms ease,border-color 180ms ease; }
+  .catalog-game:hover { transform:translateY(-.25rem); }
+  .catalog-game:hover .catalog-play { transform:translateX(.15rem); }
+}

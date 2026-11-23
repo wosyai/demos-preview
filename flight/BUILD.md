@@ -114,3 +114,10 @@ contact, including their separate roof and sign pieces. Wright barns use
 their sloped roof surfaces and gabled interiors rather than an enclosing
 rectangular volume. Roof overhangs do not fill the air below them. Saved
 replays are still accepted only when their inputs succeed in current physics.
+
+The landing brackets use the selected strip threshold and mark an angled corridor
+toward the touchdown zone. They are guidance only and disappear at rollout.
+Braking increases rollout steering authority; airborne controls, speed limits,
+and stopping conditions are unchanged. Existing replay records are still only
+admitted after a complete re-simulation. The original recordings are not rewritten.
+The decorative windsocks are driven by presentation time, not gameplay wind.

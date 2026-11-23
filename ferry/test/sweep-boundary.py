@@ -25,7 +25,7 @@ with TemporaryDirectory(prefix="ferry-collision-") as directory:
     builder = (ferry / "build-wasm.py").read_text().replace(
         'Path(__file__).resolve().parent.parent / "tools" / "start.ll"',
         f"Path({str(startup)!r})",
-    ).replace('"tick", "cancel_action")', '"tick", "cancel_action", "touch_probe")')
+    ).replace('"navigation_point")', '"navigation_point", "touch_probe")')
     (fixture / "build-wasm.py").write_text(builder)
     subprocess.run([str(wosy), "build", "app"], cwd=fixture, check=True)
     subprocess.run(

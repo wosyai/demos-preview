@@ -32,7 +32,7 @@ const FAILURE_CUES = [
 ];
 const FLOATS_PER_VERTEX = 6;
 const MAX_REPLAY = 65536;
-const FIELD_COLORS = [[.64, .79, .84], [.72, .79, .83]];
+const FIELD_COLORS = [[.61, .78, .87], [.78, .68, .71]];
 
 const ANALOG_FLAG = 1 << 6;
 const JOYSTICK_DEADZONE = .13;
@@ -171,6 +171,13 @@ float aaNoise(vec2 p, vec2 footprint) {
 }
 void main() {
   vec3 color = tint;
+  float paris = step(.70, atmosphere.r);
+  vec3 normal = normalize(cross(dFdx(surface),dFdy(surface))+vec3(0.0,0.00000001,0.0));
+  vec3 light = normalize(mix(vec3(.46,.71,.63),vec3(-.44,.45,.78),paris));
+  if (normal.y < 0.0) normal = -normal;
+  float diffuse = mix(abs(dot(normal,light))*.70,max(0.0,dot(normal,light)),smoothstep(.06,.49,abs(normal.y)));
+  vec3 sunGrade = mix(vec3(1.17,1.095,.91),vec3(1.19,1.02,.90),paris);
+  vec3 shadeGrade = mix(vec3(.79,.88,1.04),vec3(.79,.83,1.06),paris);
   vec2 xz = surface.xz;
   vec2 facade = xz*.27 + vec2(surface.y)*.43;
   vec2 water = vec2(xz.x*.25+xz.y*.11,xz.y*1.16-xz.x*.29);
@@ -189,6 +196,10 @@ void main() {
     float fields = aaNoise(xz*.31,groundFootprint*.31)*.58 + aaNoise(xz*1.73,groundFootprint*1.73)*.42;
     float material = mix(aaNoise(facade,facadeFootprint),fields,ground);
     color *= 1.0+(material-.5)*mix(.087,.21,ground);
+    float guide = smoothstep(.38,.68,max(tint.r,max(tint.g,tint.b))-min(tint.r,min(tint.g,tint.b)));
+    color *= mix(mix(shadeGrade,sunGrade,smoothstep(.04,.86,diffuse)),vec3(1.0),guide*.86);
+    float cloud = aaNoise(xz*.021,groundFootprint*.021);
+    color *= 1.0-(.15+.07*paris)*smoothstep(.53,.72,cloud)*ground*(1.0-guide);
   }
   if (coverage < 16) {
     ivec2 pixel = ivec2(gl_FragCoord.xy);
@@ -198,7 +209,7 @@ void main() {
     if (threshold >= coverage) discard;
   }
   float haze = smoothstep(60.0, 580.0, depth);
-  vec3 horizon = mix(atmosphere,vec3(.89,.82,.69),.28);
+  vec3 horizon = mix(atmosphere,mix(vec3(.89,.82,.69),vec3(.94,.72,.57),paris),.44);
   fragment = vec4(mix(color,horizon,haze*.89),1.0);
 }`;
 const SKY_VERTEX = `#version 300 es
@@ -235,19 +246,21 @@ float noise(vec2 p) {
 }
 void main() {
   vec3 ray = skyRay(skyProjection, uv*2.0-1.0);
-  vec3 horizon = mix(atmosphere,vec3(.93,.83,.68),.42);
-  vec3 zenith = atmosphere * vec3(.31,.64,.94);
+  float paris = step(.70,atmosphere.r);
+  vec3 horizon = mix(atmosphere,mix(vec3(.94,.88,.73),vec3(1.0,.70,.48),paris),.53);
+  vec3 zenith = mix(vec3(.21,.51,.79),vec3(.27,.30,.63),paris);
   vec3 tone = mix(horizon, zenith, smoothstep(-.06,.79,ray.y));
-  vec3 sunDirection = normalize(vec3(.35,.31,.88));
+  vec3 sunDirection = normalize(mix(vec3(.42,.31,.88),vec3(-.44,.18,.89),paris));
   float d = length(ray-sunDirection);
   tone = mix(tone,vec3(1.0,.72,.40),.43*exp(-5.2*d));
   tone = mix(tone,vec3(1.0,.97,.83),1.0-smoothstep(.017,.023,d));
   if (ray.y > .024) {
     vec2 p = ray.xz/max(.09,ray.y+.13)*vec2(1.56,2.12)+vec2(2.6,7.4);
     float wisps = noise(p*.77)*.55+noise(p*1.61)*.26+noise(p*4.4)*.13+noise(p*8.1)*.06;
-    float cover = smoothstep(.57,.75,wisps)*smoothstep(.024,.155,ray.y);
-    vec3 cloud = mix(vec3(.83,.82,.81),vec3(1.0,.91,.73),exp(-2.4*d));
-    tone = mix(tone,cloud,cover*.88);
+    float cover = smoothstep(.51,.68,wisps)*smoothstep(.024,.11,ray.y);
+    vec3 cloud = mix(mix(vec3(.68,.77,.89),vec3(.66,.58,.72),paris),vec3(1.0,.91,.73),exp(-2.4*d));
+    float rim = smoothstep(.45,.66,wisps);
+    tone = mix(tone,cloud+vec3(.11,.09,.056)*rim,cover*.88);
   }
   fragment = vec4(tone,1.0);
 }
@@ -806,7 +819,7 @@ export function bootFlight(win, doc) {
     if (!gl) { failure("This game needs WebGL 2. Try a current browser with hardware acceleration enabled."); return; }
     try {
       gpu = graphics(gl);
-      const wasm = await win.fetch(new URL("./flight.wasm?v=flight-parcel-wreck-v5", import.meta.url));
+      const wasm = await win.fetch(new URL("./flight.wasm?v=flight-golden-skies-v1", import.meta.url));
       if (!wasm.ok) throw new Error("The flight engine could not be downloaded.");
       const { instance } = await win.WebAssembly.instantiate(await wasm.arrayBuffer(), imports);
       engine = instance.exports;

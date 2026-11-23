@@ -278,3 +278,8 @@
   cursor: pointer;
 }
 .arcade-stage .arcade-settings-body > .arcade-settings-status:empty { margin: 0; }
+.arcade-stage .arcade-cover { border-radius: .8rem; outline-color: #fff3; box-shadow: 0 1.1rem 3rem #07121355; }
+.arcade-stage .arcade-rail { border-color: #ffffff30; }
+@media (prefers-reduced-motion:no-preference) {
+  .arcade-stage .arcade-copy button { transition: background-color .16s ease, outline-offset .16s ease; }
+}

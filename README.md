@@ -7,12 +7,15 @@ Playable examples built with the [Wosy language](https://github.com/wosyai/lang)
 Pick up a tape at Sunset Video and reach Pier 8 before the last ferry leaves.
 Choose the coastal boulevard, cut through the neighborhood streets, or get
 out of the car. Explore the district without a time limit in **Free roam**.
+On the approach to Pier 8, look for the lit harbor cranes; use the road map for the next turn.
 The town and its moving objects are full 3D; Wosy runs the vehicle, traffic,
 pedestrians, collisions, and mission. See the [build guide](ferry/BUILD.md).
 
 ## Flying Low
 
 A third-person game with two early-aviation missions. Land at the marked pickup strip, collect the payload, and take off again. In Paris, drop the mail pouch over its target. On the Wright Flyer, dust the marked crop strips before returning to land. Fly again against a ghost of your best completed mission.
+
+On final approach, the green brackets descend toward the strip. Each one disappears as you pass it; brake and steer together during rollout.
 
 Flying Low runs in English on desktop and mobile in a WebGL 2 browser. Wosy owns flight dynamics, the chase camera, mission geometry and outcome, scoring, and replay. The browser handles input, drawing, and storing replays on the device.
 
@@ -21,6 +24,8 @@ See the [build guide](flight/BUILD.md). Verify both missions and replay behavior
 ## Pocket Island
 
 **Beacon Run** is an open-ended expedition across a seeded archipelago. Find the lens, regulator, and igniter in any order, then return to the lighthouse to light it. Pick your own route: explore the islands, swim between shores, or collect wood and place blocks to build a crossing. Waves affect buoyancy and drag, and the tide rises and falls while you explore.
+
+**Free Build** opens a separate sandbox island with unlimited blocks and flight. It does not spend wood or advance the Beacon Run.
 
 Wosy owns terrain, texture pixels, collisions, water geometry and swimming, camera and editable targets, and all mission rules. The browser only handles input and submits the meshes to WebGL 2.
 

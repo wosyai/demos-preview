@@ -1,11 +1,11 @@
 <svg xmlns="http://www.w3.org/2000/svg">
-  <symbol id="air" viewBox="0 0 360 240">
-    <circle cx="236" cy="87" r="59" fill="#edb67e"/>
+  <symbol id="air" viewBox="0 0 360 240"><defs><linearGradient id="air-sky" x2="0" y2="1" gradientUnits="objectBoundingBox"><stop stop-color="#496d7d"/><stop offset="1" stop-color="#efc58f"/></linearGradient><radialGradient id="air-sun"><stop stop-color="#ffe9ad"/><stop offset="1" stop-color="#df9266"/></radialGradient></defs><path d="M0 0h360v240H0z" fill="url(#air-sky)"/><circle cx="236" cy="87" r="70" fill="#ffe9ad" opacity=".12"/>
+    <circle cx="236" cy="87" r="59" fill="url(#air-sun)"/>
     <path fill="#638c86" d="m0 159 118-52 83 47 68-32 91 35v83H0Z"/>
     <path fill="#35686a" d="m0 183 76-27 75 30 98-46 111 48v52H0Z"/>
     <path fill="#274d51" d="m0 221 78-35 62 23 113-35 107 31v35H0Z"/>
     <path d="M28 156c30-14 62-24 93-27m103 15c32 1 63-6 91-19" fill="none" stroke="#edd1a3" stroke-width="2" stroke-dasharray="6 8"/>
-    <g transform="rotate(-14 177 115)">
+    <g fill="#e3ceaa" opacity=".74"><path d="m0 66 22-2 10-6 11 2 6 4 35 2zm281-24 13-2 7-4 12 3 20 3z"/></g><g fill="none" stroke="#83a092" stroke-width="1.4"><path d="m2 204 76-32m-46 28 52-22m-17 24 28-12m121-13 31-14m-19 16 24-11"/></g><path d="m35 171 1-16 10-8 15 5 2 12-15 7z" fill="#966451"/><path d="m32 156 12-11 16 3 6 7-17-3-10 7z" fill="#e9c697"/><g transform="rotate(-14 177 115)">
       <path d="m151 104 56-6 29 9-30 12-55 2-23-7-13-1-9-12 25 6Z" fill="#faf0d1" stroke="#213b3c" stroke-width="3"/>
       <path d="m137 91 81 1 8 7-93 3Zm4 35 79-4 5 5-88 8Z" fill="#faf0d1" stroke="#213b3c" stroke-width="3"/>
       <path d="m149 102 1 24m36-24v22m28-24v22m16-34v38m-55-6v20m-19-2h41" fill="none" stroke="#213b3c" stroke-width="3"/>
@@ -13,9 +13,9 @@
       <path d="M253 110h35m-30 10h18" stroke="#faf0d1" stroke-width="2"/>
     </g>
   </symbol>
-  <symbol id="island" viewBox="0 0 360 240">
-    <circle cx="258" cy="75" r="51" fill="#eaff9a"/>
-    <path d="M0 144h360v96H0Z" fill="#417f79"/>
+  <symbol id="island" viewBox="0 0 360 240"><defs><linearGradient id="island-sky" x2="0" y2="1" gradientUnits="objectBoundingBox"><stop stop-color="#367d81"/><stop offset="1" stop-color="#cbdb98"/></linearGradient><radialGradient id="island-sun"><stop stop-color="#fffaad"/><stop offset="1" stop-color="#ebbe69"/></radialGradient></defs><path d="M0 0h360v240H0z" fill="url(#island-sky)"/><circle cx="258" cy="75" r="70" fill="#fffaad" opacity=".12"/>
+    <circle cx="258" cy="75" r="51" fill="url(#island-sun)"/>
+    <g fill="#fff8c9" opacity=".62"><path d="m18 60 20-3 9-7 13 1 6 5 18 2 7 3zm155-22 14-2 5-3 10 1 7 3 16 1z"/></g><path d="m0 145 33-13 22 4 19-11 39 18 21-5 26 7zm247-1 27-10 12 3 22-14 8 3 44 17v7z" fill="#83a996"/><path d="M0 144h360v96H0Z" fill="#417f79"/>
     <path d="M30 166h39m227 15h31M16 203h49m202 15h45m-97-29h26" fill="none" stroke="#82bfa4" stroke-width="3"/>
     <path d="m51 147 79-44 49 24 63-37 68 56-107 75Z" fill="#8fba6b"/>
     <path d="m51 147 152 74v18L51 164Z" fill="#3b624c"/>
@@ -26,14 +26,14 @@
     <path d="m111 129 12-34 17 25-17 10Zm45 27 11-32 16 24-16 10Z" fill="#305944"/>
     <path d="m245 82 46-12m-46 14 55 6" stroke="#fff1c2" stroke-width="2"/>
   </symbol>
-  <symbol id="city" viewBox="0 0 360 240">
-    <circle cx="263" cy="94" r="61" fill="#ff896e"/>
+  <symbol id="city" viewBox="0 0 360 240"><defs><linearGradient id="city-sky" x2="0" y2="1" gradientUnits="objectBoundingBox"><stop stop-color="#292e57"/><stop offset="1" stop-color="#d28383"/></linearGradient><radialGradient id="city-sun"><stop stop-color="#ffcc94"/><stop offset="1" stop-color="#f27070"/></radialGradient></defs><path d="M0 0h360v240H0z" fill="url(#city-sky)"/><circle cx="263" cy="94" r="70" fill="#ffcc94" opacity=".12"/>
+    <circle cx="263" cy="94" r="61" fill="url(#city-sun)"/>
     <path fill="#683c5d" d="M0 152V79h38v20h24v-9h32v40h31V61h48v48h26v-26h22v60h37v-35h36v27h66v44H0Z"/>
     <path fill="#213e44" d="M0 169h360v71H0Z"/>
     <path fill="#203038" d="m0 240 159-95h39l153 95Z"/>
     <path d="m157 235 10-26m6-14 6-14m5-11 3-10M14 240l148-93m172 93-136-93" fill="none" stroke="#f0ad7f" stroke-width="3"/>
     <path d="M137 76h8m9 0h8m-25 10h8m9 0h8m-25 10h8m9 0h8m-113 22h8m16-12h8m-1 13h8m182 7h8" stroke="#f3bc9a" stroke-width="3"/>
-    <path d="M85 194v-14l11-15 28-7 12 4 13 23-1 8-6 4H92Z" fill="#de755b" stroke="#1a2e35" stroke-width="3"/>
+    <path d="m226 148 31-8 72 1 31 7v3l-29-6-72-1-32 8z" fill="#583d52"/><path d="M258 137v16m61-20v20m-92-4q13-1 31-14 32 15 61-3 26 12 41 11" fill="none" stroke="#e5b3a1" stroke-width="1.4"/><g fill="#ffd89e"><circle cx="261" cy="142" r="1"/><circle cx="270" cy="143" r="1"/><circle cx="280" cy="143" r="1"/><circle cx="290" cy="143" r="1"/><circle cx="300" cy="143" r="1"/></g><path d="M85 194v-14l11-15 28-7 12 4 13 23-1 8-6 4H92Z" fill="#de755b" stroke="#1a2e35" stroke-width="3"/>
     <path d="m100 170 21-7 11 3 7 9-39 7Z" fill="#d9ebdb"/>
     <path d="M91 185h12m31-3h9" stroke="#ffc988" stroke-width="3"/>
     <path d="M274 167h46l-8 8h-29Zm13-8h20v8h-20Z" fill="#ffb995"/>

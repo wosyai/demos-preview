@@ -7,8 +7,8 @@
 <meta name="description" content="Explore a seeded voxel archipelago, build your own crossings, and find three parts to restore the lighthouse in Pocket Island.">
 <title>Pocket Island • Wosy</title>
 <link rel="stylesheet" href="./style.css?v=beacon-bearing-v1-arcade-ui4-single1">
-<script type="module" src="./main.js?v=pocket-chase-orbit-v6"></script>
-  <link rel="stylesheet" href="../arcade/shell.css?v=4">
+<script type="module" src="./main.js?v=pocket-tidal-light-v1"></script>
+  <link rel="stylesheet" href="../arcade/shell.css?v=5">
 </head>
 <body class="arcade-island">
 <svg class="glyph-source" width="0" height="0" aria-hidden="true" focusable="false"><defs>
@@ -70,16 +70,18 @@
       <p class="arcade-deck">Break and place blocks to make your own way. Find the lens, regulator and igniter to restore the lighthouse. Watch the tide.</p>
       <div class="entry-actions">
         <button class="primary" id="mission-start" type="button" disabled>Start Beacon Run</button>
+        <button class="secondary" id="enter" type="button" disabled>Free Build</button>
       </div>
       <section class="entry-guide" aria-label="Controls">
-        <p class="entry-keys"><kbd>WASD</kbd> Move · Mouse: look · <kbd>Space</kbd> Jump / hold to swim up<br><kbd>Q</kbd> or left click: break · <kbd>E</kbd> or right click: place wood</p>
-        <p class="entry-touch">Left stick: move. Drag on the right to look. Tap Jump or hold to swim up. Break wood, walk over it to pick it up, and use Place to build.</p>
+        <p class="entry-keys"><kbd>WASD</kbd> Move · Mouse: look · <kbd>Space</kbd> Jump / hold to swim up<br><kbd>Q</kbd> or left click: break · <kbd>E</kbd> or right click: place block</p>
+        <p class="entry-touch">Left stick: move. Drag on the right to look. Tap Jump or hold to swim up. Use Break and Place to shape the world.</p>
         <p class="camera-legend"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="#glyph-view"/></svg><svg viewBox="0 0 24 24" aria-hidden="true"><use href="#glyph-person"/></svg><span>Switch first / third person <kbd>V</kbd></span></p>
+        <p class="build-legend">Free Build: a separate sandbox island with unlimited blocks and flight (<kbd>F</kbd>). In Beacon Run, collect wood before building.</p>
       </section>
       <p id="engine-status" class="arcade-launch-status" role="status">Loading engine</p>
       <p class="error" id="error" role="alert" hidden></p>
     </div>
-    <div class="arcade-cover" aria-hidden="true"><svg><use href="../arcade/covers.svg?v=1#island"></use></svg></div>
+    <div class="arcade-cover" aria-hidden="true"><svg><use href="../arcade/covers.svg?v=2#island"></use></svg></div>
   </section>
   <span id="guide-marker" class="guide-marker" aria-hidden="true" hidden><svg viewBox="0 0 24 24"><use id="guide-marker-icon" href="#glyph-break"/></svg></span>
   <span class="reticle" aria-hidden="true"></span>

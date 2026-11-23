@@ -36,7 +36,7 @@ const moveStick = get("move-stick");
 const materials = Array.from(document.querySelectorAll("[data-material]"));
 
 const gl = canvas.getContext("webgl2", { alpha: false, antialias: true, stencil: true });
-const fogColor = [0.66, 0.78, 0.83];
+const fogColor = [0.64, 0.79, 0.84];
 const keyActions = new Map([
   ["KeyW",0], ["ArrowUp",0], ["KeyS",1], ["ArrowDown",1],
   ["KeyA",2], ["ArrowLeft",2], ["KeyD",3], ["ArrowRight",3],
@@ -59,6 +59,7 @@ const layers = {
 };
 
 let engine, memory, gpu, playing = false, loaded = false, failed = false, contextLost = false;
+let nativeLookReady = false;
 let pointerLook = null, stick = null, axes = 0, toastTimer = 0, previous = 0, raf = 0;
 let displayedMaterial, displayedFlight, displayedGrounded;
 let aimX = 0, aimY = 0, terrainVersion = 0;
@@ -84,6 +85,9 @@ in vec3 point;
 uniform vec3 eye;
 uniform vec3 fog;
 uniform int pass;
+uniform float sceneTime;
+uniform float seaLevel;
+uniform float beaconGlow;
 uniform int adventure;
 uniform vec3 streamOwner;
 uniform sampler2D terrainAtlas;
@@ -92,19 +96,32 @@ void main() {
   vec3 col=rgb;
   float alpha=1.0;
   float haze=clamp((distance(eye,point)-29.0)/94.0,0.0,1.0);
+  float altitude=point.y-seaLevel;
+  vec3 air=mix(fog*vec3(.85,.94,.99),fog,smoothstep(-2.0,26.0,altitude));
   if (pass==1) {
     vec3 normal=normalize(cross(dFdx(point),dFdy(point))) * (gl_FrontFacing ? 1.0 : -1.0);
     vec3 view=normalize(eye-point);
-    float fresnel=pow(1.0-clamp(abs(dot(normal,view)),0.0,1.0),4.0);
-    float ripple=sign(normal.y)*dot(normal.xz,vec2(-0.72,0.69));
-    vec3 water=vec3(0.038,0.32,0.41)+vec3(0.16,0.27,0.23)*ripple;
-    vec3 reflected=reflect(-view,normal*sign(normal.y));
-    float glitter=pow(max(0.0,dot(reflected,${sunVector})),28.0);
-    water += vec3(.71,.57,.28)*glitter;
-    float crest = smoothstep(.11,.26,length(normal.xz));
-    water = mix(water,vec3(.33,.62,.64),crest*(.12+.25*fresnel));
-    col=mix(water,fog,0.72*fresnel);
-    alpha=mix(0.55+0.37*fresnel,1.0,haze);
+    // Geometry and buoyancy share Wosy's waves. These sub-grid normals
+    // contribute only reflected light, so the shore's depth stays exact.
+    normal *= sign(normal.y);
+    vec2 p=point.xz;
+    float detail=1.0-smoothstep(24.0,85.0,distance(eye,point));
+    float a=sin(dot(p,vec2(1.25,.78))-sceneTime*2.9);
+    float b=sin(dot(p,vec2(-.87,1.97))+sceneTime*2.0);
+    float c=sin(dot(p,vec2(.28,3.45))-sceneTime*3.3);
+    vec3 surface=normalize(normal+detail*vec3(.052*a-.032*b,0.0,.055*b+.025*c));
+    float fresnel=pow(1.0-clamp(abs(dot(surface,view)),0.0,1.0),4.2);
+    vec3 reflected=reflect(-view,surface);
+    float reflectedSun=max(0.0,dot(reflected,${sunVector}));
+    float rime=smoothstep(.12,.24,length(normal.xz))*(.5+.5*c);
+    float shoal=.5+.5*sin(dot(p,vec2(.32,-.26))+b*.4);
+    vec3 body=mix(vec3(.018,.19,.24),vec3(.035,.38,.37),.35+.49*shoal);
+    vec3 reflectedSky=mix(fog,vec3(.075,.34,.59),smoothstep(0.,.75,reflected.y));
+    reflectedSky+=vec3(.88,.58,.26)*(.19*pow(reflectedSun,10.)+.95*pow(reflectedSun,92.));
+    col=mix(body,reflectedSky,.22+.70*fresnel);
+    col=mix(col,vec3(.52,.74,.69),rime*.17*detail);
+    if (eye.y < point.y-.07) col=mix(col,vec3(.07,.47,.47),.48);
+    alpha=mix(.49+.44*fresnel,1.0,haze);
   } else if (pass==0 || pass==3) {
     if (adventure!=0) {
       vec2 delta=point.xz-streamOwner.xz;
@@ -142,7 +159,7 @@ void main() {
       }
     }
     if (pass==3) {
-      pixel=vec4(mix(col,fog,pow(haze,1.08)*0.94),alpha);
+      pixel=vec4(mix(col,air,pow(haze,1.08)*0.94),alpha);
       return;
     }
     if (rgb.z > 1.0) {
@@ -158,6 +175,12 @@ void main() {
         float diffuse=0.5+0.5*dot(normal,key);
         float glint=pow(max(dot(normal,normalize(key+view)),0.0),14.0);
         col=material*(0.58+0.37*diffuse)+vec3(.76,.9,1.0)*(.16*glint);
+      } else if (adventure!=0 && point.y>=14.0 && point.y<=15.0 &&
+                 point.x>=23.0 && point.x<=26.0 && point.z>=4.0 && point.z<=6.0) {
+        float mullion=step(.13,fract(point.x+point.z))*step(.11,fract(point.y));
+        float shimmer=.90+.10*sin(sceneTime*2.1+point.x+point.z);
+        vec3 glass=mix(vec3(.14,.31,.33),vec3(1.,.74,.31)*shimmer,beaconGlow);
+        col=mix(vec3(.09,.15,.18),glass,mullion);
       } else col=rgb.z>1.5?vec3(1.0,0.83,0.30):vec3(0.88,0.39,0.09);
     } else {
       vec3 texel=texture(terrainAtlas,rgb.xy).rgb;
@@ -170,9 +193,30 @@ void main() {
       vec3 ambient=mix(vec3(.53,.65,.79),vec3(.82,.93,1.0),up);
       vec3 daylight=ambient+vec3(.47,.32,.15)*key;
       col=texel*daylight*(.84+.22*rgb.z+.095*macro+.065*grain)+vec3(.013,.023,.031)*(1.0-rgb.z);
+      // Damp stone on the tidal line and moving sunlight below the waves.
+      float wet=1.0-smoothstep(-.3,.55,altitude);
+      col=mix(col,col*vec3(.69,.87,.90),wet*.67);
+      if (altitude<0.0 && altitude>-3.0) {
+        vec2 p=point.xz+vec2(point.y*.31,-point.y*.20);
+        float line=sin(2.8*p.x+sin(3.0*p.y+sceneTime*.82))
+                 + sin(3.5*p.y-sin(3.3*p.x-sceneTime*.58));
+        float caustic=smoothstep(1.48,1.96,line)*(1.0+altitude/3.0);
+        col+=vec3(.11,.20,.14)*caustic*(.32+.68*up);
+      }
+      if (adventure!=0 && point.x>=21.0 && point.x<=28.0 && point.z>=3.0 && point.z<=7.0 &&
+          point.y>=6.0 && point.y<=15.0) {
+        // Painted salt-white tower and oxide-red signal bands read through haze.
+        float course=floor(point.y-.001);
+        float tile=floor(rgb.x*8.0);
+        if (tile==3.0 && course<12.0) col=mix(col,vec3(.78,.82,.74)*daylight, .57);
+        if (tile==4.0 && (course==9.0 || course==11.0))
+          col=mix(col,vec3(.54,.13,.085)*daylight,.85);
+        if ((tile==5.0 || tile==6.0) && course>=13.0) col=mix(col,vec3(.12,.23,.24)*daylight,.66);
+
+      }
     }
   }
-  pixel=vec4(mix(col,fog,pow(haze,1.08)*0.94),alpha);
+  pixel=vec4(mix(col,air,pow(haze,1.08)*0.94),alpha);
 }`;
 const skyVertex = `#version 300 es
 out vec2 uv;
@@ -187,6 +231,7 @@ in vec2 uv;
 uniform mat4 skyProjection;
 uniform vec3 fog;
 uniform int hasLand;
+uniform float sceneTime;
 out vec4 pixel;
 vec3 skyRay(mat4 matrix, vec2 screen) {
   vec3 right = vec3(matrix[0].x, matrix[1].x, matrix[2].x);
@@ -217,11 +262,16 @@ void main() {
   float haze=exp(-8.0*height);
   col=mix(col,vec3(.87,.76,.60),.58*haze*max(.15,1.0-d*.47));
   if(ray.y>0.018) {
-    vec2 p=ray.xz/(ray.y+.16)*2.9+vec2(14.3,3.8);
+    vec2 p=ray.xz/(ray.y+.16)*2.9+vec2(14.3,3.8)+vec2(sceneTime*.012,-sceneTime*.005);
     float clouds=.67*noise(p)+.23*noise(p*2.07)+.10*noise(p*4.11);
     float cover=smoothstep(.50,.71,clouds)*smoothstep(.018,.13,ray.y);
-    vec3 cloud=mix(vec3(.58,.70,.79),vec3(1.,.92,.80),smoothstep(.49,.75,clouds));
-    col=mix(col,cloud,cover*.91);
+    float highCloud=noise(p*vec2(.51,1.77)+vec2(-sceneTime*.009,18.5));
+    float cirrus=smoothstep(.54,.76,highCloud)*smoothstep(.12,.36,ray.y);
+    col=mix(col,vec3(.74,.84,.87),cirrus*.24);
+    float edge=noise(p+sunDirection.xz*.53);
+    float glow=smoothstep(.0,.24,clouds-edge)*(1.0-smoothstep(.24,1.5,d));
+    vec3 cloud=mix(vec3(.57,.69,.78),vec3(.99,.92,.79),smoothstep(.49,.75,clouds)+.18*glow);
+    col=mix(col,cloud,cover*.94);
   }
   col=mix(col,vec3(1.,.79,.48),.33*exp(-8.0*d));
   col=mix(col,vec3(1.,.96,.81),1.0-smoothstep(.018,.023,d));
@@ -290,8 +340,8 @@ function newGraphics() {
     horizon: geometry(layers.horizon.data, gl.DYNAMIC_DRAW),
     outline: geometry(layers.outline.data, gl.DYNAMIC_DRAW),
     player: geometry(layers.player.data, gl.DYNAMIC_DRAW),
-    main: locations(world, ["projection", "eye", "fog", "pass", "adventure", "streamOwner", "terrainAtlas"]),
-    background: locations(sky, ["skyProjection", "fog", "hasLand"]),
+    main: locations(world, ["projection", "eye", "fog", "pass", "adventure", "streamOwner", "terrainAtlas", "sceneTime", "seaLevel", "beaconGlow"]),
+    background: locations(sky, ["skyProjection", "fog", "hasLand", "sceneTime"]),
   };
 }
 
@@ -477,7 +527,7 @@ async function boot() {
   }
   try {
     prepareGraphics();
-    const response = await fetch(new URL("./engine.wasm?v=pocket-chase-orbit-v6", import.meta.url));
+    const response = await fetch(new URL("./engine.wasm?v=pocket-tidal-light-v1", import.meta.url));
     if (!response.ok) throw new Error(`Engine not found (HTTP ${response.status}).`);
     const bytes = await response.arrayBuffer();
     const api = {
@@ -624,7 +674,7 @@ function renderObjectiveBearing(frame) {
 
 function present(pointer, hit) {
   if (!gpu || contextLost || document.hidden) return;
-  const data = memoryFloats(pointer, 44);
+  const data = memoryFloats(pointer, 46);
   renderMission(data[25], data[27], data[28], data[39], data[40]);
   renderBeaconGuide(data);
   renderObjectiveBearing(data);
@@ -640,6 +690,7 @@ function present(pointer, hit) {
   const projection = data.subarray(0, 16);
   gl.uniformMatrix4fv(gpu.background.skyProjection, false, projection);
   gl.uniform3fv(gpu.background.fog, fogColor);
+  gl.uniform1f(gpu.background.sceneTime, data[21]);
   gl.uniform1i(gpu.background.hasLand, adventure === 2 ? 1 : 0);
   gl.bindVertexArray(gpu.skyVao);
   gl.drawArrays(gl.TRIANGLES,0,3);
@@ -649,6 +700,9 @@ function present(pointer, hit) {
   gl.uniformMatrix4fv(gpu.main.projection, false, projection);
   gl.uniform3f(gpu.main.eye, data[16], data[17], data[18]);
   gl.uniform3fv(gpu.main.fog, fogColor);
+  gl.uniform1f(gpu.main.sceneTime, data[21]);
+  gl.uniform1f(gpu.main.seaLevel, data[44]);
+  gl.uniform1f(gpu.main.beaconGlow, data[45]);
   gl.activeTexture(gl.TEXTURE0);
   gl.bindTexture(gl.TEXTURE_2D, gpu.terrainAtlas);
   gl.uniform1i(gpu.main.terrainAtlas, 0);
@@ -833,6 +887,7 @@ function showLookFallback() {
 
 function requestLook() {
   if (coarse.matches || typeof canvas.requestPointerLock !== "function") return;
+  nativeLookReady = false;
   try { canvas.requestPointerLock()?.catch(showLookFallback); }
   catch { showLookFallback(); }
 }
@@ -928,7 +983,7 @@ for (const button of viewButtons) button.addEventListener("click", cycleCamera);
 get("pause").addEventListener("click", () => {
   if (document.pointerLockElement === canvas) document.exitPointerLock();
   stopPlaying();
-  missionStart.focus({ preventScroll: true });
+  (beaconState === 0 && enter ? enter : missionStart).focus({ preventScroll: true });
 });
 get("seed-form")?.addEventListener("submit", (e) => {
   e.preventDefault();
@@ -998,7 +1053,8 @@ document.addEventListener("visibilitychange", () => {
   }
 });
 document.addEventListener("pointerlockchange", () => {
-  if (document.pointerLockElement === canvas) {
+  nativeLookReady = document.pointerLockElement === canvas;
+  if (nativeLookReady) {
     if (!playing || beaconState >= 2) document.exitPointerLock();
     return;
   }
@@ -1009,7 +1065,8 @@ document.addEventListener("pointerlockchange", () => {
 });
 document.addEventListener("pointerlockerror", showLookFallback);
 document.addEventListener("mousemove", (e) => {
-  if (playing && document.pointerLockElement === canvas) look(e.movementX, e.movementY);
+  // Some browsers publish a cursor warp between setting the lock element and its change event.
+  if (playing && nativeLookReady && document.pointerLockElement === canvas) look(e.movementX, e.movementY);
 });
 document.addEventListener("contextmenu", (e) => {
   if (e.target === canvas || document.pointerLockElement === canvas) e.preventDefault();

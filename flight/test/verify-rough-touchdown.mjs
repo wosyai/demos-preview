@@ -10,10 +10,10 @@ const wasm = new WebAssembly.Module(bytes);
 assert.deepEqual(WebAssembly.Module.imports(wasm).map(({module, name}) => `${module}.${name}`).sort(),
     ["flight.aircraft", "flight.frame", "flight.record", "flight.world", "wasi_snapshot_preview1.proc_exit"]);
 
-let engine, frame, records = 0;
+let engine, frame, plane, records = 0;
 engine = new WebAssembly.Instance(wasm, {wasi_snapshot_preview1:{proc_exit(code){assert.fail("Wosy touchdown trapped: "+code);}}, flight: {
     world() {},
-    aircraft() {},
+    aircraft(pointer, length) { plane = new Float32Array(engine.memory.buffer, pointer, length); },
     record() { records++; },
     frame(pointer, length) {
         assert.equal(length, 41);
@@ -47,6 +47,18 @@ for (let i = 0; i < 100 && frame[20] === 6; i++) step(20);
 assert.equal(frame[20], 7, "ordinary takeoff started the supply approach");
 
 const supply = 68;
+const glideBrackets = () => {
+    const samples = [];
+    for (let i = 0; i < plane.length; i += 6) {
+        if (Math.abs(plane[i+3]-.23) < .001 && Math.abs(plane[i+5]-.74) < .001) samples.push([plane[i],plane[i+1],plane[i+2]]);
+    }
+    return samples;
+};
+const guides = glideBrackets();
+assert(guides.length > 24, "multiple depth-separated runway brackets are drawn ahead");
+const depths = [...new Set(guides.map(v => v[2]))].sort((a,b) => a-b);
+assert(depths.every((z,i) => i === 0 || Math.max(...guides.filter(v => v[2] === z).map(v => v[1])) <
+    Math.min(...guides.filter(v => v[2] === depths[i-1]).map(v => v[1]))), "brackets descend toward the runway");
 let bankedSteps = 0;
 for (let i = 0; i < 520 && frame[20] === 7; i++) {
     const p = pose();
@@ -64,11 +76,17 @@ assert(bankedSteps >= 6, "ordinary joystick input established an intentional lat
 assert.equal(frame[20], 8, "rough touchdown entered the regular supply rollout");
 assert.equal(frame[26], 13, "the Wosy engine classified this as survivable rough touchdown");
 const contact = pose();
+assert.equal(glideBrackets().length, 0, "the approach aids disappear after touchdown");
 assert(contact.speed > 2, "touchdown did not skip the moving rollout");
-step(32 | 128);
+step(32 | 128 | 1);
+const brakeHeadingBefore = pose().angle;
 assert.equal(frame[20], 8, "mission action cannot load during the moving rollout");
 assert.equal(frame[26], 13);
-assert(pose().speed > 0);
+assert(pose().speed < contact.speed && pose().speed > 0);
+step(32);
+const response = brakeHeadingBefore-pose().angle;
+assert(Math.abs(response-Math.min(17,contact.speed)*.00078) < .0001,
+    "braking and opposite rudder combine for increased steering without cancelling deceleration");
 
 for (let i = 0; i < 180 && frame[20] === 8; i++) {
     step(32);

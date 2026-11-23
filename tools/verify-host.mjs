@@ -11,14 +11,15 @@ for (const id of ['pause', 'fullscreen', 'camera-view', 'view-touch', 'jump-touc
   assert.equal(button[1].replace(/<[^>]+>/g, '').trim(), label, id + ' has the expected visible label');
 }
 assert.match(markup, /<section class="entry-guide" aria-label="Controls">[\s\S]*?<p class="camera-legend">[\s\S]*?href="#glyph-view"[\s\S]*?href="#glyph-person"[\s\S]*?Switch first \/ third person/);
-assert.match(markup, /<div class="entry-actions">\s*<button class="primary" id="mission-start"[^>]*>Start Beacon Run<\/button>\s*<\/div>/);
+assert.match(markup, /<div class="entry-actions">\s*<button class="primary" id="mission-start"[^>]*>Start Beacon Run<\/button>\s*<button class="secondary" id="enter"[^>]*>Free Build<\/button>\s*<\/div>/);
 
-const legacyControlIds = ['enter', 'seed', 'seed-form', 'apply-seed', 'random-seed'];
+const legacyControlIds = ['seed', 'seed-form', 'apply-seed', 'random-seed'];
 for (const id of legacyControlIds) assert(!markup.includes(`id="${id}"`), id + ' is not a public control');
 const entryKeys = markup.match(/<p class="entry-keys">([^\n]+)<\/p>/)?.[1];
 const entryTouch = markup.match(/<p class="entry-touch">([^\n]+)<\/p>/)?.[1];
-assert.match(entryKeys ?? '', /<kbd>Q<\/kbd> or left click: break.*<kbd>E<\/kbd> or right click: place wood/);
-assert.match(entryTouch ?? '', /Break wood, walk over it to pick it up, and use Place to build/);
+assert.match(entryKeys ?? '', /<kbd>Q<\/kbd> or left click: break.*<kbd>E<\/kbd> or right click: place block/);
+assert.match(entryTouch ?? '', /Use Break and Place to shape the world/);
+assert.match(markup, /Free Build: a separate sandbox island with unlimited blocks and flight .*In Beacon Run, collect wood before building/);
 assert.doesNotMatch(entryKeys + entryTouch, /<kbd>F<\/kbd>|\b(?:fly|flight|select block|hotbar)\b/i);
 assert.match(markup, /<header class="top">[\s\S]*?id="mission-hud"[\s\S]*?class="top-actions"[\s\S]*?<\/header>/);
 assert.match(markup, /<h1 id="title">Pocket Island<\/h1>/);
@@ -260,7 +261,7 @@ async function loadHost(caseId, startsLost = false, stored = null, mobile = fals
           showcase.outline(1024, 2);
         }
         if (mission && counters.missionOverride !== undefined) mission = counters.missionOverride;
-        new Float32Array(memory.buffer, 512, 44).set([
+        new Float32Array(memory.buffer, 512, 46).set([
           +counters.flying, +counters.grounded, counters.picked, mission, mission === 3 ? 0 : .75, .50, 5, counters.relay ?? 0,
           counters.guide ?? 0, 0, 0, 0, 0, ...(counters.bearing ?? [0, 0]), 0, 0, mission ? (counters.parts ?? 0) : -1, counters.nextPart ?? 0, 0, 0, 0
         ], 22);
@@ -446,7 +447,7 @@ creative.node('flight-touch').dispatch('click');
 creative.frame();
 assert.equal(creative.node('flight-touch')['aria-pressed'], 'false', 'physical F suppresses a concurrent touch toggle');
 creative.doc.dispatch('keyup', { code: 'KeyF' });
-console.log('Creative host smoke passed: 44-float HUD, Wosy material authority, keyboard/wheel/touch inputs, and selected placement.');
+console.log('Creative host smoke passed: 46-float HUD, Wosy material authority, keyboard/wheel/touch inputs, and selected placement.');
 
 const accessible = await loadHost('accessible');
 await accessible.resolveFetch();
@@ -773,7 +774,12 @@ assert.equal(single.node('mission-start').textContent, 'Resume Beacon Run');
 const beacon = await loadHost('beacon-run');
 await beacon.resolveFetch();
 beacon.node('mission-start').dispatch('click');
+beacon.doc.pointerLockElement = beacon.node('scene');
+beacon.doc.dispatch('mousemove', { movementX: -249, movementY: -546 });
+assert.deepEqual(beacon.counters.looks, [], 'pre-event browser cursor warp cannot rotate the initial view');
 beacon.grantLock();
+beacon.doc.dispatch('mousemove', { movementX: 12, movementY: -5 });
+assert.deepEqual(beacon.counters.looks, [[12, -5]], 'ordinary mouse look works once the lock event fires');
 beacon.frame();
 assert.equal(beacon.counters.missionStarts, 1);
 assert.equal(beacon.node('mission-start').textContent, 'Resume Beacon Run');

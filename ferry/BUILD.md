@@ -33,19 +33,27 @@ World storage reserves nine 4,096-vertex chunks and moving storage 24
 host checks the reported counts and disjoint byte ranges before upload.
 The six-float vertex format stores explicit material bands in red: ordinary
 base red is 0–1; asphalt, masonry, canal, lamp pool and lamp emit red
-plus 2, 4, 6, 8 or 10 respectively; animated ferry foam adds 12 and the pier signal lens adds 14. Each triangle has one band, removed
+plus 2, 4, 6, 8 or 10 respectively; animated ferry foam adds 12, navigation lights add 14, and reflective glass adds 16. Each triangle has one band, removed
 in the vertex shader before interpolation. Negative blue remains the
 contact-shadow channel. Light-pool and ferry foam green store opacity; each pool is
 centered under its matching lamp. The GPU shades with world coordinates
 so textures do not slide as the camera moves. Player wheel detail phase
 follows signed simulation displacement; the browser does not move wheels.
+A dock terminal and two modeled gantries provide silhouettes beyond the basin.
+Their lights, glass and canal reflections share the dusk palette; the glass
+and wet pavement highlights are procedural rather than texture downloads.
 
 Traffic follows separate north-south and east-west lanes on the boulevard and
 the western district. The player and traffic share two vehicle substeps per
 fixed simulation tick. Each move sweeps the oriented body along its relative
 translation, keeps the motion up to first contact, and does not step through
 another vehicle. A normal response with a clamped nudge for a car hit by
-traffic leaves available tangential motion rather than reversing the car. Northbound traffic
+traffic leaves available tangential motion rather than reversing the car.
+At a facade, the solver keeps the clear part of the approach and slides
+tangentially for the rest of the substep. Brake takes priority over coincident
+pedal input in a straight line; deliberate hard turns still use the
+handbrake. Fast steering is damped and the chase camera gradually gives
+the car more space; free-look can pitch above the horizon. Northbound traffic
 turns south of the separately marked harbor crosswalk. Physical bollards keep
 the end of the road open for people walking from the vehicle approach to Pier 8.
 The objective marker and compass guide toward that crossing on the west side.

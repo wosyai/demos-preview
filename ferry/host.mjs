@@ -1,6 +1,6 @@
 import {createGameAudio} from "../arcade/audio.mjs";
 
-export const ENGINE_PATH = "./ferry.wasm?v=ferry-clear-recovery-v5";
+export const ENGINE_PATH = "./ferry.wasm?v=ferry-canal-dusk-v1";
 const FRAME_FLOATS=34;
 
 export function ferrySoundtrack(audio) {
@@ -202,16 +202,21 @@ function programFor(gl) {
       float elevation=max(0.,d.y);
       float facing=max(0.,dot(d,sun));
       vec3 horizon=mix(vec3(.49,.34,.51),vec3(.94,.54,.43),pow(facing,4.));
-      vec3 zenith=vec3(.083,.105,.24);
-      vec3 air=mix(horizon,zenith,smoothstep(.005,.61,elevation));
+      vec3 zenith=vec3(.055,.09,.21);
+      vec3 air=mix(horizon,zenith,smoothstep(.005,.64,elevation));
+      float hazeBand=(elevation-.115)*10.;
+      air+=vec3(.098,.019,.042)*exp(-hazeBand*hazeBand)*(.44+.56*facing);
       float glow=pow(facing,28.)*.27+pow(facing,280.)*.34;
       air+=vec3(1.,.51,.25)*glow;
       float disk=smoothstep(.99941,.99962,facing);
       air=mix(air,vec3(1.,.77,.52),disk);
-      vec2 p=d.xz/(.135+elevation);
-      float wisps=sin(p.x*9.8+p.y*3.7)+.43*sin(p.x*16.6-p.y*5.)+.36*sin(p.x*4.1+p.y*2.2);
-      float clouds=smoothstep(.47,1.22,wisps)*smoothstep(.08,.25,elevation)*(1.-smoothstep(.31,.63,elevation));
-      air=mix(air,vec3(.65,.43,.56)+vec3(.20,.085,.026)*pow(facing,4.),clouds*.26);
+      float az=atan(d.x,d.z);
+      float layer=elevation+.023*sin(5.*az)+.014*cos(9.*az);
+      float clouds=smoothstep(.58,1.12,sin(38.*layer)+.43*cos(61.*layer+4.*az));
+      float cirrus=smoothstep(.40,1.08,sin(23.*layer-3.*az)+.34*sin(43.*layer+2.*az));
+      float cloudBand=smoothstep(.045,.13,elevation)*(1.-smoothstep(.38,.63,elevation));
+      air=mix(air,vec3(.37,.29,.43),clouds*cloudBand*.31);
+      air+=vec3(.24,.10,.097)*cirrus*cloudBand*(.30+.70*pow(facing,4.));
       pixel=vec4(air,1.);
     }else if(tint.z<0.){
       pixel=vec4(.028,.015,.061,-tint.z);
@@ -234,14 +239,26 @@ function programFor(gl) {
       vec3 light=vec3(.76,.75,.92)+vec3(.27,.16,.09)*key+vec3(.05,.09,.16)*bounce;
       vec3 paint=tint;
       vec3 reflected=vec3(0.);
-      if(surface==1){
+      if(surface==8){
+        float panel=abs(normal.x)>.55?local.z:local.x;
+        float stripe=.5+.5*sin(panel*4.2+.15*local.y);
+        float variation=.5+.5*sin(panel*.9+local.y*.75);
+        float lower=1.-smoothstep(.3,3.4,local.y);
+        float glow=(.20+.80*lower)*(.35+.65*stripe*stripe);
+        paint=mix(tint*.39,vec3(.18,.37,.54),variation*.62);
+        reflected=vec3(.55,.22,.10)*glow+vec3(.10,.17,.26)*variation*variation;
+      }else if(surface==1){
         vec2 grit=local.xz*7.;
         float footprint=max(length(dFdx(grit)),length(dFdy(grit)));
         float gritFade=1.-smoothstep(.32,1.,footprint);
         vec2 cell=floor(grit);
         float speck=fract(dot(fract(cell*vec2(.1031,.1137)),vec2(7.13,13.9)));
         float wear=.5+.5*sin(local.x*.67+local.z*.46)*sin(local.z*.91);
-        paint*=.92+.13*wear+(.24*(speck-.5))*gritFade;
+        paint*=.93+.14*wear+(.16*(speck-.5))*gritFade;
+        float pooled=sin(local.x*1.4+sin(local.z*.53))*sin(local.z*.76+sin(local.x*.46));
+        float wet=smoothstep(.50,.82,pooled+.08*wear);
+        float skew=.34+.5*pow(max(0.,cos(local.z*.25+local.x*.23)),2.);
+        reflected=mix(vec3(.035,.071,.088),vec3(.15,.070,.087),skew)*wet*(.69+.31*haze);
       }else if(surface==2&&abs(normal.y)<.42){
         float across=abs(normal.x)>.5?local.z:local.x;
         vec2 brick=vec2(across*1.55,local.y*3.25);
@@ -258,12 +275,19 @@ function programFor(gl) {
         float a=dot(q,vec2(.11,2.8))+waterPhase;
         float b=dot(q,vec2(-.33,4.7))-2.*waterPhase;
         float detail=1.-smoothstep(.4,2.45,max(fwidth(a),fwidth(b)));
-        float wave=(sin(a)*.63+sin(b)*.37)*detail;
+        float ripple=sin(dot(q,vec2(.73,1.32))-.57*waterPhase);
+        float wave=(sin(a+.38*ripple)*.63+sin(b)*.25+.12*ripple)*detail;
         float gleam=max(0.,wave);
         gleam*=gleam; gleam*=gleam;
         float sunTrail=exp(-abs(q.x+18.-.19*(q.y-75.))*.105);
-        paint*=1.06+.22*wave;
-        reflected=vec3(.095,.12,.16)*(.25+.75*gleam)+vec3(.34,.17,.074)*sunTrail*gleam;
+        float terminal=exp(-abs(q.y-128.)*.126)*smoothstep(-35.,-25.,q.x)*(1.-smoothstep(0.,9.,q.x));
+        float dockSteps=smoothstep(.54,.93,sin(q.x*1.9+.78*wave));
+        float coastalLight=exp(-abs(q.y-75.)*.24)*exp(-abs(q.x-10.8)*.12);
+        paint*=1.015+.29*wave;
+        reflected=vec3(.077,.14,.18)*(.30+.70*gleam)
+          +vec3(.47,.19,.096)*sunTrail*gleam
+          +vec3(.39,.16,.088)*terminal*dockSteps*(.33+.67*gleam)
+          +vec3(.10,.21,.18)*coastalLight*(.28+.72*gleam);
       }
       vec3 dusk=paint*light+vec3(.036,.018,.045)+reflected;
       pixel=vec4(mix(dusk,vec3(.51,.34,.44),haze*.69),1.);

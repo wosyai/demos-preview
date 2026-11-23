@@ -49,9 +49,9 @@ test("short landscape reserves both touch-control edges while fitting a larger m
 test("loader agrees with shell version, WebAssembly triangle shape, and 34-float engine frame",async()=>{
   const html=await readFile(new URL("../index.html",import.meta.url),"utf8");
   const version=html.match(/host\.mjs\?v=([^"]+)/)?.[1];
-  assert.equal(version,"ferry-map-legibility-v1");
+  assert.equal(version,"ferry-canal-dusk-v1");
   assert(html.includes('style.css?v=ferry-map-landscape-v2"'));
-  assert.equal(ENGINE_PATH,"./ferry.wasm?v=ferry-clear-recovery-v5");
+  assert.equal(ENGINE_PATH,"./ferry.wasm?v=ferry-canal-dusk-v1");
   assert.doesNotMatch(html,/id="camera-view"/);
   assert.match(html,/<div id="play-hud" class="play-hud" hidden>[\s\S]*?<header[^>]*>[\s\S]*?id="objective"[\s\S]*?id="status"[\s\S]*?id="city-map"[\s\S]*?id="hint"[\s\S]*?<\/header>/);
   assert.match(html,/id="action-icon"[\s\S]*?<span id="action-caption">Interact<\/span>/);

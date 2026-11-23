@@ -28,6 +28,7 @@ i32 paint_light_pool = 4;
 i32 paint_lamp = 5;
 i32 paint_wake = 6;
 i32 paint_pier_signal = 7;
+i32 paint_glass = 8;
 f32 model_x = 0.0;
 f32 model_y = 0.0;
 f32 model_z = 0.0;
@@ -498,8 +499,10 @@ unit(f32,f32) draw_shop = fn(x,z) {
     box(x+4.30,5.12,z+0.26,5.41,0.71,0.01,0.30,0.19,0.34);
     neon_words(0,0,x+4.89,5.93,z+0.19,0.179,false,1.0,0.84,0.45);
     neon_words(1,0,x+5.56,5.14,z+0.18,0.149,false,0.56,0.98,0.86);
+    surface_paint=paint_glass;
     box(x+0.58,0.42,z-1.05,4.12,2.75,0.024,0.25,0.56,0.65);
     box(x+9.30,0.42,z-1.05,4.12,2.75,0.024,0.25,0.56,0.65);
+    surface_paint=0;
     box(x+2.50,0.43,z-1.10,0.12,2.75,0.15,0.52,0.76,0.74);
     box(x+11.41,0.43,z-1.10,0.12,2.75,0.15,0.52,0.76,0.74);
     box(x+0.63,1.19,z-1.09,4.06,0.10,0.05,0.49,0.66,0.70);
@@ -702,6 +705,18 @@ unit(f32,f32,f32) dusk_lamp = fn(x,z,reach) {
     surface_paint=0;
 };
 
+unit(f32,f32,f32) storefront_sconce = fn(wall,z,reach) {
+    f32 lantern=wall+reach;
+    box(wall-0.037,3.27,z-0.15,0.074,0.33,0.30,0.34,0.25,0.39);
+    box(min_f(wall,lantern)-0.07,3.51,z-0.095,abs_f(reach)+0.14,0.10,0.19,0.41,0.29,0.44);
+    box(lantern-0.24,3.47,z-0.20,0.48,0.11,0.40,0.40,0.27,0.41);
+    surface_paint=paint_lamp;
+    box(lantern-0.15,3.31,z-0.13,0.30,0.15,0.26,1.0,0.76,0.47);
+    surface_paint=paint_light_pool;
+    lamp_pool_fan(0,lantern,z);
+    surface_paint=0;
+};
+
 unit() working_wharf = fn {
     box(16.35,-0.43,86.5,7.70,0.75,16.10,0.30,0.36,0.43);
     box(16.28,0.30,86.43,7.84,0.13,16.26,0.48,0.48,0.48);
@@ -756,6 +771,42 @@ unit(f32,f32,i32) video_windows = fn(x,z,i) {
         video_card(x+9.76+shift,z,i+2);
         video_windows(x,z,i+1);
     };
+};
+
+unit(f32,f32,f32) gantry = fn(x,z,h) {
+    box(x,-0.13,z,13.0,0.88,8.0,0.29,0.32,0.45);
+    box(x+1.2,0.75,z+1.1,0.37,h,0.42,0.40,0.36,0.48);
+    box(x+1.2,0.75,z+5.7,0.37,h,0.42,0.34,0.32,0.47);
+    box(x+1.1,h+0.38,z+0.92,0.64,0.66,5.45,0.57,0.39,0.48);
+    box(x-2.5,h+0.91,z+2.15,24.8,0.42,0.69,0.63,0.44,0.51);
+    box(x-2.4,h+1.35,z+1.92,2.76,1.85,1.31,0.48,0.36,0.48);
+    box(x+16.2,h-5.7,z+2.47,0.09,6.69,0.12,0.28,0.31,0.43);
+    box(x+15.55,h-5.94,z+2.22,1.39,0.25,0.66,0.49,0.43,0.47);
+    quad(x+1.46,h+0.89,z+2.19,x+2.1,h+0.89,z+2.19,x+7.83,h+3.86,z+2.19,x+7.47,h+4.00,z+2.19,0.64,0.47,0.52);
+    quad(x+7.47,h+4.0,z+2.19,x+7.83,h+3.86,z+2.19,x+17.32,h+1.02,z+2.19,x+16.2,h+1.0,z+2.19,0.64,0.47,0.52);
+    surface_paint=paint_pier_signal;
+    box(x+22.0,h+1.33,z+2.16,0.35,0.20,0.48,1.0,0.46,0.38);
+    surface_paint=0;
+};
+
+unit(i32) terminal_windows = fn(i) {
+    if (i<9) {
+        f32 x=-26.5+3.3*float_i(i);
+        surface_paint=paint_glass;
+        box(x,1.57,128.89,2.20,1.58,0.11,0.45,0.58,0.68);
+        surface_paint=0;
+        terminal_windows(i+1);
+    };
+};
+
+unit() canal_terminal = fn {
+    box(-30.0,-0.13,126.0,34.0,1.00,11.0,0.31,0.35,0.45);
+    box(-28.0,0.85,129.0,32.0,3.53,7.5,0.58,0.46,0.50);
+    box(-29.1,4.36,128.2,34.0,0.33,9.3,0.48,0.58,0.63);
+    box(-28.7,4.70,128.51,33.2,0.41,8.8,0.76,0.56,0.56);
+    terminal_windows(0);
+    gantry(-7.0,138.0,17.9);
+    gantry(30.0,127.30,13.0);
 };
 
 unit() render_world = fn {
@@ -891,6 +942,9 @@ unit() render_world = fn {
     phone_corner();
     video_windows(-88.8,39.81,0);
     pier_signal_housing();
+    canal_terminal();
+    storefront_sconce(7.78,2.35,-1.11);
+    storefront_sconce(-6.00,-1.55,1.00);
     unsafe { host.world(core.pointer_cast<*?u8>(&?scenery[0][0][0][0][0]),vertex_count*6); };
     world_ready=true;
 };
@@ -1338,23 +1392,38 @@ bool(f32,f32,f32,f32,f32,f32) can_slide = fn(dx,dz,s,c,ns,nc) {
     traffic_hit(car_x,car_z,dx,dz,ns,nc)<0
 };
 
+f32(f32,f32,f32,f32,f32,f32,i32) wall_approach = fn(dx,dz,s,c,lo,hi,steps) {
+    if (steps<=0) { lo } else {
+        f32 split=(lo+hi)*0.5;
+        if (can_slide(dx*split,dz*split,s,c,s,c)) {
+            wall_approach(dx,dz,s,c,split,hi,steps-1)
+        } else {
+            wall_approach(dx,dz,s,c,lo,split,steps-1)
+        }
+    }
+};
+
 unit(f32,f32,f32,f32,f32,f32,f32,i32) slide_building = fn(dx,dz,yaw,s,c,ns,nc,hit) {
     if (yaw!=car_yaw && can_slide(dx,dz,s,c,s,c)) {
         car_x=car_x+dx; car_z=car_z+dz;
     } else {
-        bool clear_x=abs_f(dx)>0.00001 && can_slide(dx,0.0,s,c,ns,nc);
-        bool clear_z=abs_f(dz)>0.00001 && can_slide(0.0,dz,s,c,ns,nc);
+        f32 reached=wall_approach(dx,dz,s,c,0.0,1.0,6);
+        car_x=car_x+dx*reached; car_z=car_z+dz*reached;
+        f32 left=1.0-reached;
+        f32 slide_x=dx*left; f32 slide_z=dz*left;
+        bool clear_x=abs_f(slide_x)>0.00001 && can_slide(slide_x,0.0,s,c,ns,nc);
+        bool clear_z=abs_f(slide_z)>0.00001 && can_slide(0.0,slide_z,s,c,ns,nc);
         bool turned=clear_x || clear_z;
         if (!turned && yaw!=car_yaw) {
-            clear_x=abs_f(dx)>0.00001 && can_slide(dx,0.0,s,c,s,c);
-            clear_z=abs_f(dz)>0.00001 && can_slide(0.0,dz,s,c,s,c);
+            clear_x=abs_f(slide_x)>0.00001 && can_slide(slide_x,0.0,s,c,s,c);
+            clear_z=abs_f(slide_z)>0.00001 && can_slide(0.0,slide_z,s,c,s,c);
         };
         f32 blocked=0.0;
         if (clear_x && (!clear_z || abs_f(dx)>=abs_f(dz))) {
-            car_x=car_x+dx;
+            car_x=car_x+slide_x;
             vx=vx*0.985; blocked=abs_f(vz); vz=0.0;
         } else {
-            if (clear_z) { car_z=car_z+dz; vz=vz*0.985; blocked=abs_f(vx); vx=0.0; }
+            if (clear_z) { car_z=car_z+slide_z; vz=vz*0.985; blocked=abs_f(vx); vx=0.0; }
             else {
                 blocked=length(vx,vz); vx=0.0; vz=0.0;
             };
@@ -1367,12 +1436,14 @@ unit(f32,f32,f32,f32,f32,f32,f32,i32) slide_building = fn(dx,dz,yaw,s,c,ns,nc,hi
 unit(f32,f32,f32,f32,i32) move_vehicle = fn(steer,drive,s,c,brake) {
     f32 ahead=vx*s+vz*c;
     f32 sideways=vx*c-vz*s;
-    f32 power=if (drive>=0.0) { drive*8.7 } else {
+    f32 pedal_power=if (drive>=0.0) { drive*8.7 } else {
         if (ahead>0.5) { drive*13.5 } else { drive*4.8 }
     };
+    f32 power=if (brake!=0 && abs_f(steer)<0.6) { 0.0 } else { pedal_power };
     f32 drag=if (brake!=0) { 4.25 } else { 0.35+0.026*abs_f(ahead) };
     f32 next_speed=clamp(ahead+(power-ahead*drag)*dt_vehicle,-7.2,21.0);
-    f32 yaw_speed=if (brake!=0) { 2.2 } else { 1.41 };
+    f32 turn_speed=blend(1.41,1.26,clamp((abs_f(next_speed)-7.0)/7.0,0.0,1.0));
+    f32 yaw_speed=if (brake!=0) { 2.2 } else { turn_speed };
     f32 reverse=if (next_speed<0.0) { -1.0 } else { 1.0 };
     f32 change=steer*clamp(abs_f(next_speed)*0.19,0.0,1.0)*yaw_speed*reverse*dt_vehicle;
     f32 yaw=wrap(car_yaw+change);
@@ -1381,7 +1452,7 @@ unit(f32,f32,f32,f32,i32) move_vehicle = fn(steer,drive,s,c,brake) {
     f32 slip=(sideways-next_speed*change)*(1.0-dt_vehicle*grip);
     vx=ns*next_speed+nc*slip;
     vz=nc*next_speed-ns*slip;
-    if (abs_f(drive)<0.0001 && abs_f(next_speed)<0.035 && abs_f(slip)<0.035) { vx=0.0; vz=0.0; };
+    if ((brake!=0 || abs_f(drive)<0.0001) && abs_f(next_speed)<0.035 && abs_f(slip)<0.035) { vx=0.0; vz=0.0; };
     f32 dx=vx*dt_vehicle; f32 dz=vz*dt_vehicle;
     f32 nx=car_x+dx; f32 nz=car_z+dz;
     i32 hit=car_hit(nx,nz,ns,nc);
@@ -2159,7 +2230,8 @@ unit() camera_step = fn {
     camera_anchor_x=sx; camera_anchor_z=sz; camera_rig=rig;
     camera_yaw=wrap(camera_yaw+clamp(wrap(aim-camera_yaw)*0.15,-0.105,0.105));
     f32 hx=sin_small(camera_yaw); f32 hz=cos_small(camera_yaw);
-    f32 goal=blend(7.0,8.4,rig);
+    f32 pace=clamp(length(vx,vz)/12.0,0.0,1.0);
+    f32 goal=blend(7.0,8.15+1.05*pace,rig);
     f32 dist=clear_boom(sx,sz,-hx,-hz,blend(camera_boom,goal,0.13),0);
     camera_boom=dist;
     camera_x=sx-dist*hx;
@@ -2167,7 +2239,7 @@ unit() camera_step = fn {
     f32 camera_deck=if (stage==MissionStage::crossing || stage==MissionStage::docked || stage==MissionStage::disembarking || stage==MissionStage::delivered) { board_height } else { 0.0 };
     f32 open_boom=clamp((dist-2.9)/0.9,0.0,1.0);
     f32 camera_base=blend(2.35,blend(3.9,4.2,rig),open_boom);
-    f32 aim_pitch=clamp(blend(-0.48,blend(-0.25,-0.29,rig),open_boom)+orbit_pitch,-0.83,-0.06);
+    f32 aim_pitch=clamp(blend(-0.48,blend(-0.25,-0.29,rig),open_boom)+orbit_pitch,-0.83,0.13);
     f32 eye_y=camera_deck+camera_base;
     f32 clear_height=pier_marquee_floor-0.64;
     bool close_to_marquee=abs_f(sz-pier_marquee_z)<10.0 && sx>pier_marquee_x-10.0 && sx<pier_marquee_x+pier_marquee_width+10.0;
@@ -2373,9 +2445,11 @@ unit(f32) boat = fn(alpha) {
     box(3.66,1.21,-2.4,0.14,0.61,10.7,0.93,0.83,0.64);
     box(-2.6,1.20,1.75,5.2,2.2,4.5,0.94,0.84,0.69);
     box(-2.69,3.33,1.65,5.38,0.22,4.7,0.38,0.63,0.67);
+    surface_paint=paint_glass;
     box(-2.22,2.23,1.66,4.44,0.75,0.13,0.30,0.56,0.66);
     box(-2.66,2.23,2.04,0.13,0.75,3.80,0.32,0.57,0.64);
     box(2.53,2.23,2.04,0.13,0.75,3.80,0.32,0.57,0.64);
+    surface_paint=0;
     box(-0.085,3.55,4.12,0.17,1.94,0.17,0.65,0.54,0.48);
     box(-1.13,4.19,4.12,1.12,0.64,0.11,0.94,0.45,0.43);
     quad(-1.44,0.04,-3.90,1.44,0.04,-3.90,1.44,1.21,-1.26,-1.44,1.21,-1.26,0.82,0.64,0.45);
@@ -2599,7 +2673,7 @@ unit(f32,f32,f32,i32,f32,f32,f32) tick = fn(dt,steer,drive,controls,aspect,look_
         orbit_yaw=0.0; orbit_pitch=0.0;
     } else {
         if (look_x>=-3.2 && look_x<=3.2) { orbit_yaw=wrap(orbit_yaw+look_x); };
-        if (look_y>=-3.2 && look_y<=3.2) { orbit_pitch=clamp(orbit_pitch+look_y,-0.30,0.28); };
+        if (look_y>=-3.2 && look_y<=3.2) { orbit_pitch=clamp(orbit_pitch+look_y,-0.40,0.44); };
     };
     if ((controls & 2)!=0 && stage!=MissionStage::delivered && stage!=MissionStage::missed_departure && stage!=MissionStage::crossing && stage!=MissionStage::disembarking) {
         pending_action=true;

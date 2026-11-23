@@ -183,15 +183,13 @@ if (process.argv[3]) {
   }}).exports;
   base._start(); base.reset(0);
   assert(previous && scenery.length>previous.length,"the neighborhood adds drawable geometry");
-  assert.equal(scenery.length-previous.length,90*6,"three boxes add only the fixed Pier 8 signal housing");
-  for(let i=previous.length;i<scenery.length;i+=6) {
-    assert(scenery[i]>14.8 && scenery[i+2]>80.35 && scenery[i+2]<80.85,
-      "all new housing stays beside the existing rail");
+  for(let i=0;i<previous.length;i++) {
+    const paintedGlass=i%6===3 && Math.floor(scenery[i]/2)===8;
+    assert(Math.abs(scenery[i]-(paintedGlass?previous[i]+16:previous[i]))<.000002,
+      "the comparison baseline retains all previously modeled positions and tint");
   }
-  assert.deepEqual(scenery.subarray(0,previous.length),previous,
-    "the immediate waterfront baseline retains all raw positions, colors and material tags");
 }
-const materialCount=Array(6).fill(0), bulbs=[], pools=[];
+const materialCount=Array(9).fill(0), bulbs=[], pools=[];
 for(let i=0;i<scenery.length;i+=18) {
   const tag=Math.floor(scenery[i+3]/2);
   assert(tag>=0&&tag<materialCount.length);
@@ -204,14 +202,22 @@ for(let i=0;i<scenery.length;i+=18) {
   if(tag===4&&scenery[i+4]>.2) pools.push([scenery[i],scenery[i+2]]);
 }
 assert(materialCount[1]>=48&&materialCount[2]>=60&&materialCount[3]===2);
-assert.equal(materialCount[4],48); assert.equal(materialCount[5],60);
-assert.equal(pools.length,48,"each light-pool triangle has an illuminated center");
+assert.equal(materialCount[4],64); assert.equal(materialCount[5],80);
+assert.equal(materialCount[7],20,"two elevated dock navigation lights");
+assert.equal(materialCount[8],110,"shopfront and the terminal use the reflective glass band");
+const cranes=new Set();
+for(let i=0;i<scenery.length;i+=6) {
+  if(Math.floor(scenery[i+3]/2)===7 && scenery[i+1]>14) cranes.add(Math.round(scenery[i]));
+}
+assert.deepEqual([...cranes].sort((a,b)=>a-b),[15,52],"each gantry caps its own light");
+
+assert.equal(pools.length,64,"each light-pool triangle has an illuminated center");
 const poolLocations=new Map();
 for(const [x,z] of pools) {
   const key=[x,z].join(",");
   poolLocations.set(key,(poolLocations.get(key)??0)+1);
 }
-assert.equal(poolLocations.size,6,"six different lantern positions cast ground light");
+assert.equal(poolLocations.size,8,"eight different lantern positions cast ground light");
 const pairedBulbs=new Set();
 for(const [key,triangles] of poolLocations) {
   assert.equal(triangles,8,"each lit position has a full falloff fan");
@@ -221,7 +227,7 @@ for(const [key,triangles] of poolLocations) {
   assert(matching.every(bulb=>!pairedBulbs.has(bulb)),"separate pools point to separate lamps");
   for(const bulb of matching) pairedBulbs.add(bulb);
 }
-assert.equal(pairedBulbs.size,180,"every emitted lamp vertex belongs to one of the six distinct matched lamps");
+assert.equal(pairedBulbs.size,240,"every emitted lamp vertex belongs to one of the eight distinct matched lamps");
 tick(0,0,0,0,.53);
 assert.notEqual(frame[0],projection); assert.deepEqual(rawMoving(),prior);
 function cameraRoute(wide) {
@@ -250,6 +256,13 @@ function cameraEye() {
   const right=v[0]**2+v[8]**2, up=v[1]**2+v[5]**2+v[9]**2;
   return [0,4,8].map(i=>-(v[12]*v[i]/right+v[13]*v[i+1]/up+v[15]*v[i+3]));
 }
+engine.reset(1);
+tick(0,0,0,step,1.65,0,.70);
+run(75);
+assert(frame[7]>.105,"upward free look brings the gantry skyline above the horizon into frame");
+tick(0,0,4);
+run(75);
+assert(frame[7]<-.20,"manual recenter restores the street-focused camera pitch");
 const cameraHeading=()=>Math.atan2(frame[3],frame[11]);
 function handoffCamera(action, riding, aspect) {
   const anchor=cameraEye(), start=cameraHeading();
@@ -656,6 +669,14 @@ const last=frame[27];
 run(180,0,-1); assert(frame[27]<last-3,"reverse displaces the car backwards");
 engine.reset(1); mount(); run(72,0,1);
 const at60=spot();
+run(120,.15,1,1);
+assert(frame[19]<.02,"brake wins over held gas below the handbrake steering threshold");
+const stationary=spot();
+run(90,.15,1,1);
+assert(Math.hypot(frame[26]-stationary[0],frame[27]-stationary[1])<.005,
+  "overlapping touch pedals and minor steering input cannot creep past the brake");
+run(42,0,1);
+assert(frame[27]>stationary[1]+.5,"releasing the brake immediately accepts throttle");
 engine.reset(1); mount(); run(144,0,1,0,step/2);
 for(let i=0;i<2;i++) assert(Math.abs(spot()[i]-at60[i])<.06,"fixed stepping at 60/120Hz");
 assert.deepEqual(view(...world,WORLD_FLOATS,18),scenery,"moving mesh never overwrites scenery");

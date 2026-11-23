@@ -1550,7 +1550,8 @@ unit(u64,u64,i32,bool) roll_out = fn(plane,race,input,pickup) {
 	f32 speed = poses[plane].speed;
 	if (plane == 0) { cockpit_drive = if (held(input,32)) { -1.0 } else { if (held(input,16)) { 1.0 } else { 0.0 } }; };
 	f32 brake = if (held(input,32)) { 7.3 } else { if (held(input,16)) { 0.65 } else { 2.6 } };
-	f32 heading = wrap(poses[plane].heading + bank_control(input)*clamp(speed,0.0,17.0)*0.00052);
+	f32 authority = if (held(input,32)) { 0.00078 } else { 0.00052 };
+	f32 heading = wrap(poses[plane].heading + bank_control(input)*clamp(speed,0.0,17.0)*authority);
 	f32 x = poses[plane].x + speed*sin_small(heading)/30.0;
 	f32 z = poses[plane].z + speed*cos_small(heading)/30.0;
 	poses[plane].x = x;
@@ -2242,6 +2243,57 @@ unit() ring_guides = fn {
 	if (earned_gates != 0) { passed_guides(0,celebrating); };
 };
 
+unit(f32,f32,f32,f32,i32) glide_brackets = fn(cx,threshold,pilot_z,travel,n) {
+	if (n < 6) {
+		f32 index_f = float_i(n);
+		f32 distance = 8.0+index_f*13.0;
+		f32 z = threshold-distance;
+		f32 y = 1.50+distance*0.105;
+		f32 span = 2.8+index_f*0.30;
+		if (pilot_z < z+1.0) {
+			f32 scan = 0.5+0.5*cos_small(wrap(travel+index_f*0.35));
+			f32 bright = 0.63+0.24*scan;
+			quad(cx-span,y,z,cx-span+0.95,y,z,cx-span+0.95,y+0.17,z,cx-span,y+0.17,z,0.23,bright,0.74);
+			quad(cx-span,y,z,cx-span+0.17,y,z,cx-span+0.17,y+0.72,z,cx-span,y+0.72,z,0.23,bright,0.74);
+			quad(cx+span-0.95,y,z,cx+span,y,z,cx+span,y+0.17,z,cx+span-0.95,y+0.17,z,0.23,bright,0.74);
+			quad(cx+span-0.17,y,z,cx+span,y,z,cx+span,y+0.72,z,cx+span-0.17,y+0.72,z,0.23,bright,0.74);
+		};
+		glide_brackets(cx,threshold,pilot_z,travel,n+1);
+	};
+};
+
+unit(f32,f32,f32,i32) windsock_ribbon = fn(x,z,t,n) {
+	if (n < 5) {
+		f32 a = float_i(n);
+		f32 b = float_i(n+1);
+		f32 az = z+a*0.46;
+		f32 bz = z+b*0.46;
+		f32 ax = x-0.20*a+sin_small(wrap(t-a*0.42))*a*0.048;
+		f32 bx = x-0.20*b+sin_small(wrap(t-b*0.42))*b*0.048;
+		f32 ay = 2.6-a*0.07+cos_small(wrap(t-a*0.48))*a*0.048;
+		f32 by = 2.6-b*0.07+cos_small(wrap(t-b*0.48))*b*0.048;
+		f32 aw = 0.29-a*0.04;
+		f32 bw = 0.29-b*0.04;
+		f32 g = if (n%2 == 0) { 0.26 } else { 0.85 };
+		f32 blue = if (n%2 == 0) { 0.12 } else { 0.70 };
+		quad(ax-aw,ay,az,ax,ay+aw,az,bx,by+bw,bz,bx-bw,by,bz,0.96,g,blue);
+		quad(ax,ay+aw,az,ax+aw,ay,az,bx+bw,by,bz,bx,by+bw,bz,0.89,g*0.94,blue*0.9);
+		quad(ax+aw,ay,az,ax,ay-aw,az,bx,by-bw,bz,bx+bw,by,bz,0.83,g*0.84,blue*0.8);
+		quad(ax,ay-aw,az,ax-aw,ay,az,bx-bw,by,bz,bx,by-bw,bz,0.86,g*0.86,blue*0.83);
+		windsock_ribbon(x,z,t,n+1);
+	};
+};
+
+unit(f32,f32,f32) windsock = fn(x,z,t) {
+	f32 dx = presented_pose[0].x-x;
+	f32 dz = presented_pose[0].z-z;
+	if (dx*dx+dz*dz < 11400.0 && vertex_count <= 2300) {
+		box(x-0.085,0.16,z-0.085,0.17,2.48,0.17,0.44,0.45,0.35);
+		box(x-0.4,0.10,z-0.4,0.8,0.14,0.8,0.41,0.38,0.32);
+		windsock_ribbon(x,z,t,0);
+	};
+};
+
 unit(i32,f32,f32) flight_guides = fn(mail_status,impact_x,impact_z) {
 	ring_guides();
 	if (result[0] == 0) {
@@ -2551,6 +2603,21 @@ unit(f32,i32,f32,f32) draw_aircraft = fn(alpha,mail_status,impact_x,impact_z) {
 		if (phase[0] == MissionPhase::supply_approach || phase[0] == MissionPhase::supply_rollout || phase[0] == MissionPhase::cargo_pickup) { wright_supply_cart(scene_alpha); };
 	} else {
 		if (phase[0] == MissionPhase::seine_crossing || phase[0] == MissionPhase::mail_approach) { seine_market_craft(scene_alpha); };
+	};
+	if (wreck_age < 0 && mail_shot <= 0.0 && result[0] == 0) {
+		MissionPhase stage = phase[0];
+		f32 pilot_z = presented_pose[0].z;
+		f32 elapsed = (float_i(stage_tick[0]%60)+scene_alpha)*0.104719755;
+		if ((stage == MissionPhase::landing_approach || stage == MissionPhase::supply_approach) && vertex_count <= 2300) {
+			f32 threshold = if (stage == MissionPhase::landing_approach) { strip_z() } else { pickup_z() };
+			f32 center = if (stage == MissionPhase::landing_approach) { strip_x() } else { pickup_x() };
+			if (pilot_z >= threshold-140.0 && pilot_z < threshold) {
+				glide_brackets(center,threshold,pilot_z,elapsed,0);
+			};
+		};
+		windsock(home_x()+home_w()*0.5+2.3,home_z()+23.0,elapsed);
+		windsock(pickup_x()-pickup_w()*0.5-2.3,pickup_z()+8.0,elapsed+1.45);
+		windsock(strip_x()+strip_w()*0.5+2.3,strip_z()+11.0,elapsed+2.15);
 	};
 	if (wreck_age >= 0) {
 		if (wreck_entered || wreck_age == 0) {
