@@ -95,10 +95,11 @@ f32 pouch_y = 0.0;
 f32 pouch_z = 0.0;
 f32 mail_shot = 0.0;
 WreckPart empty_wreck = { .x=0.0; .y=0.0; .z=0.0; .dx=0.0; .dy=0.0; .dz=0.0; .roll=0.0; .pitch=0.0; };
-WreckPart[3] wreck_parts = [empty_wreck, empty_wreck, empty_wreck];
-WreckPart[3] wreck_previous = [empty_wreck, empty_wreck, empty_wreck];
+WreckPart[6] wreck_parts = [empty_wreck, empty_wreck, empty_wreck, empty_wreck, empty_wreck, empty_wreck];
+WreckPart[6] wreck_previous = [empty_wreck, empty_wreck, empty_wreck, empty_wreck, empty_wreck, empty_wreck];
 i32 wreck_age = -1;
 bool wreck_active = false;
+bool wreck_entered = false;
 f32 wreck_x = 0.0;
 f32 wreck_y = 0.0;
 f32 wreck_z = 0.0;
@@ -1145,45 +1146,83 @@ unit() american_flag = fn {
 	usa_stars(x,y+0.024,z,canton_w,canton_l,0);
 };
 
-unit() paris_steering_surfaces = fn {
-	cloth_sides(-4.74,1.01,-1.57,9.48,0.15,1.50,0.9,0.94,0.86);
-	quad(-4.74,1.16,-1.57,4.74,1.16,-1.57,4.74,1.16,-1.30,-4.74,1.16,-1.30,0.27,0.46,0.37);
-	quad(-4.74,1.16,-1.30,4.74,1.16,-1.30,4.74,1.16,-0.07,-4.74,1.16,-0.07,0.96,0.96,0.86);
-	brazilian_flag(0.48,1.19,-1.245,3.96,1.11);
-	cloth_sides(-1.40,0.99,2.34,2.80,0.16,1.64,0.54,0.70,0.43);
+unit(i32,f32,f32) wing_deck = fn(kind,x,width) {
+	if (kind == 0) {
+		box(x,-0.49,-0.85,width,0.19,1.80,0.91,0.76,0.48);
+		box(x,0.93,-0.85,width,0.19,1.80,0.98,0.83,0.58);
+	} else {
+		f32 edge = x+width;
+		box(x,-0.49,-1.57,width,0.14,1.50,0.80,0.83,0.75);
+		cloth_sides(x,1.01,-1.57,width,0.15,1.50,0.9,0.94,0.86);
+		quad(x,1.16,-1.57,edge,1.16,-1.57,edge,1.16,-1.30,x,1.16,-1.30,0.27,0.46,0.37);
+		quad(x,1.16,-1.30,edge,1.16,-1.30,edge,1.16,-0.07,x,1.16,-0.07,0.96,0.96,0.86);
+	};
 };
 
-unit(i32) plane_model = fn(kind) {
+unit(i32,f32) wing_bracing = fn(kind,side) {
 	if (kind == 0) {
-		box(-4.85,-0.49,-0.85,9.70,0.19,1.80,0.91,0.76,0.48);
-		box(-4.85,0.93,-0.85,9.70,0.19,1.80,0.98,0.83,0.58);
-		american_flag();
-		wing_post(-4.15,-0.58,kind); wing_post(4.15,-0.58,kind); wing_post(-4.15,0.53,kind); wing_post(4.15,0.53,kind);
-		wing_post(-2.20,-0.58,kind); wing_post(2.20,-0.58,kind); wing_post(-2.20,0.53,kind); wing_post(2.20,0.53,kind);
-		wing_post(-0.65,0.26,kind); wing_post(0.65,0.26,kind);
+		wing_post(side*4.15,-0.58,kind); wing_post(side*4.15,0.53,kind);
+		wing_post(side*2.20,-0.58,kind); wing_post(side*2.20,0.53,kind);
+		wing_post(side*0.65,0.26,kind);
+		if (side > 0.0) { american_flag(); };
+	} else {
+		f32 edge = if (side < 0.0) { -4.80 } else { 4.67 };
+		box(edge,-0.40,-1.40,0.13,1.47,1.17,0.28,0.49,0.60);
+		wing_post(side*3.14,-1.38,kind); wing_post(side*3.14,-0.19,kind);
+		if (side > 0.0) { brazilian_flag(0.48,1.19,-1.245,3.96,1.11); };
+	};
+};
+
+unit(i32) plane_core = fn(kind) {
+	if (kind == 0) {
 		box(-0.68,-0.84,-1.66,0.12,0.16,3.36,0.38,0.25,0.16);
 		box(0.55,-0.84,-1.66,0.12,0.16,3.36,0.38,0.25,0.16);
-		box(-1.50,-0.18,2.52,3.00,0.12,0.71,0.98,0.85,0.61);
-		box(-1.50,0.49,2.52,3.00,0.12,0.71,0.96,0.80,0.53);
+	} else { box(-0.55,-0.36,-2.53,1.10,0.19,5.67,0.42,0.29,0.25); };
+};
+
+unit(i32) plane_tail = fn(kind) {
+	if (kind == 0) {
 		box(-0.48,-0.37,-2.76,0.12,0.92,0.77,0.89,0.73,0.52);
 		box(0.36,-0.37,-2.76,0.12,0.92,0.77,0.89,0.73,0.52);
+	} else {
+		cloth_sides(-1.40,0.99,2.34,2.80,0.16,1.64,0.54,0.70,0.43);
+		box(-1.40,-0.34,2.34,2.80,0.14,1.64,0.76,0.82,0.79);
+		box(-1.43,-0.24,2.46,0.15,1.30,1.40,0.38,0.52,0.34);
+		box(1.28,-0.24,2.46,0.15,1.30,1.40,0.38,0.52,0.34);
+	};
+};
+
+unit(i32) plane_nose = fn(kind) {
+	if (kind == 0) {
+		box(-1.50,-0.18,2.52,3.00,0.12,0.71,0.98,0.85,0.61);
+		box(-1.50,0.49,2.52,3.00,0.12,0.71,0.96,0.80,0.53);
+	} else {
+		box(-0.43,-0.16,0.28,0.86,0.68,0.64,0.61,0.40,0.30);
+		diamond(0.0,0.46,0.61,0.24,0.40,0.39,0.28,0.19);
+	};
+};
+
+unit(i32) plane_gear = fn(kind) {
+	if (kind == 0) {
 		box(-0.42,-0.28,-0.32,0.84,0.46,0.96,0.32,0.24,0.19);
 		diamond(0.0,0.13,0.40,0.24,0.32,0.42,0.32,0.24);
 	} else {
-		box(-4.74,-0.49,-1.57,9.48,0.14,1.50,0.80,0.83,0.75);
-		box(-4.80,-0.40,-1.40,0.13,1.47,1.17,0.28,0.49,0.60);
-		box(4.67,-0.40,-1.40,0.13,1.47,1.17,0.28,0.49,0.60);
-		wing_post(-3.14,-1.38,kind); wing_post(3.14,-1.38,kind); wing_post(-3.14,-0.19,kind); wing_post(3.14,-0.19,kind);
-		box(-0.55,-0.36,-2.53,1.10,0.19,5.67,0.42,0.29,0.25);
-		box(-1.40,-0.34,2.34,2.80,0.14,1.64,0.76,0.82,0.79);
-		paris_steering_surfaces();
-		box(-1.43,-0.24,2.46,0.15,1.30,1.40,0.38,0.52,0.34);
-		box(1.28,-0.24,2.46,0.15,1.30,1.40,0.38,0.52,0.34);
-		box(-0.43,-0.16,0.28,0.86,0.68,0.64,0.61,0.40,0.30);
-		diamond(0.0,0.46,0.61,0.24,0.40,0.39,0.28,0.19);
 		box(-0.94,-0.94,-0.15,0.29,0.63,0.61,0.22,0.19,0.17);
 		box(0.65,-0.94,-0.15,0.29,0.63,0.61,0.22,0.19,0.17);
 	};
+};
+
+f32(i32) span_half = fn(kind) { if (kind == 0) { 4.85 } else { 4.74 } };
+
+unit(i32) plane_model = fn(kind) {
+	f32 span = span_half(kind);
+	wing_deck(kind,-span,2.0*span);
+	wing_bracing(kind,-1.0);
+	wing_bracing(kind,1.0);
+	plane_core(kind);
+	plane_tail(kind);
+	plane_nose(kind);
+	plane_gear(kind);
 };
 
 unit(u64) model_attitude = fn(lane) {
@@ -1732,36 +1771,85 @@ bool(i32) impact_result = fn(code) {
 	code == 2 || code == 4 || code == 5 || code == 6 || code == 7 || code == 8 || code == 10
 };
 
+struct copy HullGroup {
+	f32 x; f32 y; f32 z;
+	f32 span; f32 rise; f32 depth;
+	f32 scatter; f32 lift; f32 travel; f32 spin;
+}
+
+HullGroup[6] farm_airframe = [
+	{ .x=0.0; .y=-0.76; .z=0.01; .span=0.68; .rise=0.08; .depth=1.69; .scatter=0.0; .lift=2.9; .travel=0.0; .spin=-0.049; },
+	{ .x=-2.42; .y=0.34; .z=0.05; .span=2.43; .rise=0.84; .depth=0.90; .scatter=-4.8; .lift=5.0; .travel=-0.30; .spin=0.082; },
+	{ .x=2.42; .y=0.34; .z=0.05; .span=2.43; .rise=0.84; .depth=0.90; .scatter=4.25; .lift=5.1; .travel=-0.36; .spin=-0.073; },
+	{ .x=0.0; .y=0.09; .z=-2.38; .span=0.48; .rise=0.46; .depth=0.39; .scatter=-1.25; .lift=3.2; .travel=-2.15; .spin=0.105; },
+	{ .x=0.0; .y=0.22; .z=2.88; .span=1.50; .rise=0.40; .depth=0.36; .scatter=1.25; .lift=2.3; .travel=2.1; .spin=-0.079; },
+	{ .x=0.0; .y=0.09; .z=0.16; .span=0.42; .rise=0.37; .depth=0.48; .scatter=1.5; .lift=2.0; .travel=0.76; .spin=0.13; }
+];
+HullGroup[6] paris_airframe = [
+	{ .x=0.0; .y=-0.265; .z=0.305; .span=0.55; .rise=0.10; .depth=2.84; .scatter=0.0; .lift=2.9; .travel=0.0; .spin=-0.049; },
+	{ .x=-2.40; .y=0.37; .z=-0.82; .span=2.40; .rise=0.88; .depth=0.76; .scatter=-4.8; .lift=5.0; .travel=-0.30; .spin=0.082; },
+	{ .x=2.40; .y=0.37; .z=-0.82; .span=2.40; .rise=0.88; .depth=0.76; .scatter=4.25; .lift=5.1; .travel=-0.36; .spin=-0.073; },
+	{ .x=0.0; .y=0.405; .z=3.16; .span=1.43; .rise=0.75; .depth=0.83; .scatter=-1.25; .lift=3.2; .travel=2.15; .spin=0.105; },
+	{ .x=0.0; .y=0.35; .z=0.565; .span=0.43; .rise=0.52; .depth=0.36; .scatter=1.25; .lift=2.3; .travel=-2.1; .spin=-0.079; },
+	{ .x=0.0; .y=-0.625; .z=0.155; .span=0.94; .rise=0.32; .depth=0.31; .scatter=1.5; .lift=2.0; .travel=0.76; .spin=0.13; }
+];
+
+HullGroup(u64) hull_group = fn(i) { if (course == 0) { farm_airframe[i] } else { paris_airframe[i] } };
+
+unit(f32,f32,f32) model_angles = fn(heading,pitch,roll) {
+	model_hs = sin_small(heading);
+	model_hc = cos_small(heading);
+	model_ps = sin_small(pitch);
+	model_pc = cos_small(pitch);
+	model_rs = sin_small(-roll);
+	model_rc = cos_small(roll);
+};
+
+f32(f32,f32,f32) model_offset_x = fn(x,y,z) {
+	f32 u = x*model_rs+y*model_rc;
+	(x*model_rc-y*model_rs)*model_hc+(z*model_pc-u*model_ps)*model_hs
+};
+f32(f32,f32,f32) model_offset_y = fn(x,y,z) { (x*model_rs+y*model_rc)*model_pc+z*model_ps };
+f32(f32,f32,f32) model_offset_z = fn(x,y,z) {
+	f32 u = x*model_rs+y*model_rc;
+	-(x*model_rc-y*model_rs)*model_hs+(z*model_pc-u*model_ps)*model_hc
+};
+
+unit(u64,f32,bool,RenderPose) seed_wreck = fn(i,speed,solid,pose) {
+	HullGroup g = hull_group(i);
+	f32 forward = if (solid) { -speed*0.34-abs_f(g.travel) } else { speed*0.46+g.travel };
+	WreckPart p = {
+		.x=wreck_x+model_offset_x(g.x,g.y,g.z);
+		.y=wreck_y+model_offset_y(g.x,g.y,g.z);
+		.z=wreck_z+model_offset_z(g.x,g.y,g.z);
+		.dx=forward*model_hs+g.scatter*model_hc;
+		.dy=g.lift;
+		.dz=forward*model_hc-g.scatter*model_hs;
+		.roll=pose.roll; .pitch=pose.pitch;
+	};
+	wreck_parts[i] = p;
+	wreck_previous[i] = p;
+	if (i < 5) { seed_wreck(i+1,speed,solid,pose); };
+};
+
 unit() start_wreck = fn {
 	wreck_age = 0;
 	wreck_active = true;
-	bool solid_hit = result[0] == 2 || result[0] == 8;
-	wreck_h = poses[0].heading;
-	f32 sx = sin_small(wreck_h);
-	f32 sz = cos_small(wreck_h);
-	f32 clearance = if (solid_hit) { 2.75 } else { 0.0 };
-	wreck_x = previous_pose[0].x-sx*clearance;
-	wreck_y = if (solid_hit) { previous_pose[0].y } else { 1.0 };
-	wreck_z = previous_pose[0].z-sz*clearance;
-	f32 speed = clamp(poses[0].speed,3.0,37.0);
-	f32 a = if (solid_hit) { -0.16 } else { 0.46 };
-	WreckPart spine = { .x=wreck_x; .y=wreck_y; .z=wreck_z; .dx=sx*speed*a; .dy=2.9; .dz=sz*speed*a; .roll=0.18; .pitch=0.0; };
-	WreckPart left = { .x=wreck_x-sz*0.67; .y=wreck_y+0.49; .z=wreck_z+sx*0.67; .dx=sx*speed*a-sz*5.4; .dy=6.8; .dz=sz*speed*a+sx*5.4; .roll=0.26; .pitch=0.23; };
-	WreckPart right = { .x=wreck_x+sz*0.57; .y=wreck_y+0.74; .z=wreck_z-sx*0.57; .dx=sx*speed*a+sz*4.35; .dy=5.8; .dz=sz*speed*a-sx*4.35; .roll=-0.31; .pitch=-0.17; };
-	wreck_parts[0] = spine;
-	wreck_parts[1] = left;
-	wreck_parts[2] = right;
-	wreck_previous[0] = spine;
-	wreck_previous[1] = left;
-	wreck_previous[2] = right;
+	wreck_entered = true;
+	bool solid = result[0] == 2 || result[0] == 8;
+	RenderPose pose = previous_pose[0];
+	wreck_h = pose.heading;
+	wreck_x = pose.x;
+	wreck_y = pose.y;
+	wreck_z = pose.z;
+	model_angles(wreck_h,pose.pitch,pose.roll);
+	seed_wreck(0,clamp(poses[0].speed,3.0,37.0),solid,pose);
 };
 
 f32(u64,f32,f32) wreck_floor = fn(i,roll,pitch) {
+	HullGroup g = hull_group(i);
 	f32 vertical = abs_f(cos_small(pitch));
-	f32 deep = abs_f(sin_small(pitch));
-	f32 tall = abs_f(cos_small(roll))*vertical;
-	f32 across = abs_f(sin_small(roll))*vertical;
-	if (i == 0) { 0.11+0.32*tall+0.53*across+2.1*deep } else { 0.11+0.29*tall+1.58*across+0.72*deep }
+	0.018+g.rise*abs_f(cos_small(roll))*vertical+g.span*abs_f(sin_small(roll))*vertical+g.depth*abs_f(sin_small(pitch))
 };
 
 bool(f32,f32,f32,f32,bool) wreck_wall = fn(x,y,z,probe,along_x) {
@@ -1772,6 +1860,21 @@ bool(f32,f32,f32,f32,bool) wreck_wall = fn(x,y,z,probe,along_x) {
 	}
 };
 
+f32(f32,f32,f32,f32,i32) clear_vertical_probe = fn(x,y,z,direction,left) {
+	if (left == 0 || !obstacle(x,y,z)) { y } else {
+		clear_vertical_probe(x,y+direction*0.17,z,direction,left-1)
+	}
+};
+
+f32(f32,f32,f32,f32,i32) contact_edge = fn(x,z,solid,open,left) {
+	if (left == 0) { open } else {
+		f32 mid = (solid+open)*0.5;
+		if (obstacle(x,mid,z)) { contact_edge(x,z,mid,open,left-1) } else {
+			contact_edge(x,z,solid,mid,left-1)
+		}
+	}
+};
+
 unit(u64) move_wreck_part = fn(i) {
 	WreckPart p = wreck_parts[i];
 	wreck_previous[i] = p;
@@ -1779,7 +1882,13 @@ unit(u64) move_wreck_part = fn(i) {
 	f32 tx = p.x+p.dx/30.0;
 	f32 tz = p.z+p.dz/30.0;
 	f32 ty = p.y+gravity/30.0;
-	f32 floor = wreck_floor(i,p.roll,p.pitch);
+	f32 floor0 = wreck_floor(i,p.roll,p.pitch);
+	bool supported = (p.y <= floor0+0.04 || obstacle(p.x,p.y-floor0-0.07,p.z)) && abs_f(p.dy)<0.4;
+	HullGroup geometry = hull_group(i);
+	f32 spin = if (supported) { 0.0 } else { geometry.spin };
+	f32 roll = wrap(p.roll+spin);
+	f32 pitch = wrap(p.pitch-spin*0.54);
+	f32 floor = if (supported) { floor0 } else { wreck_floor(i,roll,pitch) };
 	f32 probe_x = if (p.dx >= 0.0) { 0.35 } else { -0.35 };
 	f32 probe_z = if (p.dz >= 0.0) { 0.35 } else { -0.35 };
 	f32 dx = p.dx*0.986;
@@ -1793,21 +1902,26 @@ unit(u64) move_wreck_part = fn(i) {
 		dx = dx*0.77;
 		dz = dz*0.77;
 	} else {
-		f32 edge = if (gravity < 0.0) { ty-floor+0.11 } else { ty+floor-0.11 };
+		bool descending = gravity < 0.0;
+		f32 side = if (descending) { 1.0 } else { -1.0 };
+		f32 edge = ty-side*(floor-0.018);
 		if (obstacle(tx,edge,tz)) {
-			ty = p.y;
+			f32 prior_edge = p.y-side*(floor0-0.018);
+			f32 outside = clear_vertical_probe(tx,prior_edge,tz,side,10);
+			if (!obstacle(tx,outside,tz)) {
+				ty = contact_edge(tx,tz,edge,outside,5)+side*floor;
+			} else { ty = p.y; };
 			dy = if (abs_f(gravity) > 1.2) { -dy*0.27 } else { 0.0 };
-			if (gravity < 0.0) { dx = dx*0.77; dz = dz*0.77; };
+			if (descending) { dx = dx*0.77; dz = dz*0.77; };
 		};
 	};
-	f32 spin = if ((ty <= floor || obstacle(tx,ty-floor+0.03,tz)) && abs_f(dy) < 0.4) { 0.0 } else { if (i == 1) { 0.104 } else { -0.083 } };
-	WreckPart next = { .x=tx; .y=ty; .z=tz; .dx=dx; .dy=dy; .dz=dz; .roll=wrap(p.roll+spin); .pitch=wrap(p.pitch-spin*0.54); };
+	WreckPart next = { .x=tx; .y=ty; .z=tz; .dx=dx; .dy=dy; .dz=dz; .roll=roll; .pitch=pitch; };
 	wreck_parts[i] = next;
 };
 
 bool(u64) wreck_resting = fn(i) {
 	WreckPart p = wreck_parts[i];
-	(p.y <= wreck_floor(i,p.roll,p.pitch)+0.001 || obstacle(p.x,p.y-wreck_floor(i,p.roll,p.pitch)+0.03,p.z)) &&
+	(p.y <= wreck_floor(i,p.roll,p.pitch)+0.001 || obstacle(p.x,p.y-wreck_floor(i,p.roll,p.pitch)-0.07,p.z)) &&
 	abs_f(p.dx)+abs_f(p.dz) < 0.45 && abs_f(p.dy) < 0.45
 };
 
@@ -1831,19 +1945,17 @@ unit(u64) finish_wreck_part = fn(i) {
 	};
 };
 
+bool(u64,bool) update_fragments = fn(i,all_resting) {
+	move_wreck_part(i);
+	if (wreck_age == 330) { finish_wreck_part(i); };
+	bool resting = all_resting && wreck_resting(i);
+	if (i == 5) { resting } else { update_fragments(i+1,resting) }
+};
+
 unit() step_wreck = fn {
 	wreck_age = wreck_age+1;
-	move_wreck_part(0);
-	move_wreck_part(1);
-	move_wreck_part(2);
-	if (wreck_age == 330) {
-		finish_wreck_part(0);
-		finish_wreck_part(1);
-		finish_wreck_part(2);
-		wreck_active = false;
-	} else {
-		if (wreck_age >= 84 && wreck_resting(0) && wreck_resting(1) && wreck_resting(2)) { wreck_active = false; };
-	};
+	bool ended = update_fragments(0,wreck_age >= 84);
+	if (wreck_age == 330 || ended) { wreck_active = false; };
 };
 
 unit(i32) step = fn(input) {
@@ -2290,26 +2402,23 @@ unit(u64,f32) wreck_art = fn(i,alpha) {
 	WreckPart current = wreck_parts[i];
 	f32 roll = wrap(previous.roll+wrap(current.roll-previous.roll)*alpha);
 	f32 pitch = wrap(previous.pitch+wrap(current.pitch-previous.pitch)*alpha);
+	HullGroup g = hull_group(i);
+	model_angles(wreck_h,pitch,roll);
 	model_local = true;
-	model_x = blend(previous.x,current.x,alpha);
-	model_y = blend(previous.y,current.y,alpha);
-	model_z = blend(previous.z,current.z,alpha);
-	model_hs = sin_small(wreck_h);
-	model_hc = cos_small(wreck_h);
-	model_ps = sin_small(pitch);
-	model_pc = cos_small(pitch);
-	model_rs = sin_small(-roll);
-	model_rc = cos_small(roll);
-	if (i == 0) {
-		box(-0.53,-0.25,-2.1,1.06,0.46,4.2,0.57,0.33,0.24);
-		box(-0.32,0.21,-0.37,0.64,0.57,1.4,0.38,0.26,0.20);
-	} else {
-		f32 cloth = if (course == 0) { 0.73 } else { 0.89 };
-		f32 slat = if (i == 1) { -0.55 } else { 0.35 };
-		box(-1.58,-0.10,-0.68,3.16,0.20,1.36,cloth,0.77,0.63);
-		box(slat,-0.29,-0.72,0.18,0.57,1.48,0.53,0.34,0.24);
+	model_x = blend(previous.x,current.x,alpha)-model_offset_x(g.x,g.y,g.z);
+	model_y = blend(previous.y,current.y,alpha)-model_offset_y(g.x,g.y,g.z);
+	model_z = blend(previous.z,current.z,alpha)-model_offset_z(g.x,g.y,g.z);
+	if (i == 0) { plane_core(course); };
+	if (i == 1 || i == 2) {
+		f32 span = span_half(course);
+		wing_deck(course,if (i == 1) { -span } else { 0.0 },span);
+		wing_bracing(course,if (i == 1) { -1.0 } else { 1.0 });
 	};
+	if (i == 3) { plane_tail(course); };
+	if (i == 4) { plane_nose(course); };
+	if (i == 5) { plane_gear(course); };
 	model_local = false;
+	if (i < 5) { wreck_art(i+1,alpha); };
 };
 
 f32(f32) eased_unit = fn(value) {
@@ -2361,9 +2470,13 @@ unit(f32,i32,f32,f32) draw_aircraft = fn(alpha,mail_status,impact_x,impact_z) {
 		if (phase[0] == MissionPhase::seine_crossing || phase[0] == MissionPhase::mail_approach) { seine_market_craft(scene_alpha); };
 	};
 	if (wreck_age >= 0) {
-		wreck_art(0,alpha);
-		wreck_art(1,alpha);
-		wreck_art(2,alpha);
+		if (wreck_entered || wreck_age == 0) {
+			model_angles(wreck_h,previous_pose[0].pitch,previous_pose[0].roll);
+			model_x = wreck_x; model_y = wreck_y; model_z = wreck_z;
+			model_local = true;
+			plane_model(course);
+			model_local = false;
+		} else { wreck_art(0,alpha); };
 	} else {
 		if (mail_shot > 0.0) { draw_pouch_shot(); };
 
@@ -2410,10 +2523,25 @@ unit(i32) select_view = fn(view) {
 	cockpit_view = view == 1;
 };
 
-f32(f32,f32,f32) spread = fn(a,b,c) {
-	f32 lo = if (a < b) { a } else { b };
-	f32 hi = if (a > b) { a } else { b };
-	(if (hi > c) { hi } else { c })-(if (lo < c) { lo } else { c })
+struct copy WreckFrame {
+	f32 min_x; f32 max_x; f32 min_y; f32 max_y; f32 min_z; f32 max_z;
+}
+
+WreckFrame(u64,f32,WreckFrame) frame_fragments = fn(i,alpha,box0) {
+	WreckPart p = wreck_previous[i];
+	WreckPart q = wreck_parts[i];
+	f32 x = blend(p.x,q.x,alpha);
+	f32 y = blend(p.y,q.y,alpha);
+	f32 z = blend(p.z,q.z,alpha);
+	WreckFrame box1 = {
+		.min_x=if (x < box0.min_x) { x } else { box0.min_x };
+		.max_x=if (x > box0.max_x) { x } else { box0.max_x };
+		.min_y=if (y < box0.min_y) { y } else { box0.min_y };
+		.max_y=if (y > box0.max_y) { y } else { box0.max_y };
+		.min_z=if (z < box0.min_z) { z } else { box0.min_z };
+		.max_z=if (z > box0.max_z) { z } else { box0.max_z };
+	};
+	if (i < 5) { frame_fragments(i+1,alpha,box1) } else { box1 }
 };
 
 unit(i32,f32) frame = fn(mail_status,wreck_alpha) {
@@ -2445,22 +2573,25 @@ unit(i32,f32) frame = fn(mail_status,wreck_alpha) {
 	f32 ex = if (following) { blend(ex_home,pouch_x-sin_small(mail_heading)*7.0,mail_shot) } else { ex_home };
 	f32 ey = if (following) { blend(ey_home,pouch_y+4.52,mail_shot) } else { ey_home };
 	f32 ez = if (following) { blend(ez_home,pouch_z-cos_small(mail_heading)*7.0,mail_shot) } else { ez_home };
-	if (wrecking) {
-		f32 x0 = blend(wreck_previous[0].x,wreck_parts[0].x,wreck_alpha);
-		f32 x1 = blend(wreck_previous[1].x,wreck_parts[1].x,wreck_alpha);
-		f32 x2 = blend(wreck_previous[2].x,wreck_parts[2].x,wreck_alpha);
-		f32 y0 = blend(wreck_previous[0].y,wreck_parts[0].y,wreck_alpha);
-		f32 y1 = blend(wreck_previous[1].y,wreck_parts[1].y,wreck_alpha);
-		f32 y2 = blend(wreck_previous[2].y,wreck_parts[2].y,wreck_alpha);
-		f32 z0 = blend(wreck_previous[0].z,wreck_parts[0].z,wreck_alpha);
-		f32 z1 = blend(wreck_previous[1].z,wreck_parts[1].z,wreck_alpha);
-		f32 z2 = blend(wreck_previous[2].z,wreck_parts[2].z,wreck_alpha);
-		f32 wide = spread(x0,x1,x2)+spread(z0,z1,z2);
-		f32 tall = spread(y0,y1,y2);
-		f32 pullback = clamp(16.5+0.43*wide+1.1*tall,17.5,64.0);
-		ex = (x0+x1+x2)/3.0-hx*pullback;
-		ey = (y0+y1+y2)/3.0+0.29*pullback;
-		ez = (z0+z1+z2)/3.0-hz*pullback;
+	if (wrecking && wreck_entered) {
+		ex = wreck_x-hx*18.0;
+		ey = wreck_y+0.29*18.0;
+		ez = wreck_z-hz*18.0;
+	};
+	if (wrecking && !wreck_entered) {
+		WreckPart p = wreck_previous[0];
+		WreckPart q = wreck_parts[0];
+		f32 x = blend(p.x,q.x,wreck_alpha);
+		f32 y = blend(p.y,q.y,wreck_alpha);
+		f32 z = blend(p.z,q.z,wreck_alpha);
+		WreckFrame origin = { .min_x=x; .max_x=x; .min_y=y; .max_y=y; .min_z=z; .max_z=z; };
+		WreckFrame ext = frame_fragments(1,wreck_alpha,origin);
+		f32 wide = ext.max_x-ext.min_x + ext.max_z-ext.min_z;
+		f32 tall = ext.max_y-ext.min_y;
+		f32 pullback = clamp(15.0+0.73*wide+1.38*tall,17.5,68.0);
+		ex = 0.5*(ext.min_x+ext.max_x)-hx*pullback;
+		ey = 0.5*(ext.min_y+ext.max_y)+0.29*pullback;
+		ez = 0.5*(ext.min_z+ext.max_z)-hz*pullback;
 	};
 	f32 roll = if (following) { presented_pose[0].roll*(1.0-mail_shot) } else { presented_pose[0].roll };
 	f32 rs = if (interior) { sin_small(-roll) } else { 0.0 };
@@ -2553,6 +2684,7 @@ unit(i32) reset = fn(requested) {
 	cockpit_drive = 0.0;
 	wreck_age = -1;
 	wreck_active = false;
+	wreck_entered = false;
 	cancel_drop();
 	spray_tick = -50;
 	earned_gates = 0;
@@ -2576,6 +2708,7 @@ unit(i32) reset = fn(requested) {
 
 unit(f32,i32,f32) tick = fn(dt,input,aspect) {
 	f32 accepted = if (dt >= 0.0 && dt < 0.20) { dt } else { 0.0 };
+	if (accepted > 0.0) { wreck_entered = false; };
 	viewport = if (aspect > 0.25 && aspect < 5.0) { aspect } else { 1.0 };
 	accumulator = clamp(accumulator+accepted,0.0,0.17);
 	if (result[0] == 0 && held(input,128)) { pending_drop = true; };

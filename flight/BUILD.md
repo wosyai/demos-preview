@@ -98,3 +98,13 @@ Frame [36] is ordinary (0), active crash (1), or mail follow (2), with crash tak
 Mission time, failure code, and replay input stop at impact. Wosy advances the debris and camera on the fixed presentation cadence until settled (with a bounded support fallback), and the host keeps drawing but suppresses actionable cues while the flag is set. Cinematic debris uses flat terrain and existing flight-obstacle proxies, not all decorative world geometry.
 
 Accepted Paris releases blend the view to the same Wosy pouch trajectory used for scoring. Impact shows a short marker at the measured contact, then eases back to the selected camera. The aircraft remains controlled by the normal flight loop; the focus shot neither adds a replay command nor changes mission scoring.
+
+Fatal impact retains the intact exterior for its first frame, using the final
+valid aircraft pose even if that public tick catches up multiple substeps. The
+breakup then reuses the same model primitives for the
+core, both complete wing stacks, tail, nose and undercarriage/engine group.
+The six fixed pivots and approximate local bounds drive settled support; this
+is not mesh-to-mesh rigid-body contact. Flags remain on the original wing.
+The normal aircraft still draws unsplit span surfaces; only the wreck introduces
+the two fracture faces. Frame slots, fixed simulation cadence and replay schema
+are unchanged.

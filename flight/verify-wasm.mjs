@@ -526,8 +526,10 @@ function sortie(course, mode = "normal") {
     let movingSeine = false;
     let cartStartZ, movingCart = false;
     const checkedLoadVisibility = new Set();
+    const impactTrace = [];
     function step(input = 0, dt = 1/30, aspect = 1.65) {
         const gates = frame[32];
+        if (mode === "strike") impactTrace.push({input,dt});
         tick(input,dt,aspect);
         observer?.step(gates,input,dt,aspect);
         if (frame[32] > gates) {
@@ -709,6 +711,11 @@ function sortie(course, mode = "normal") {
             input = mode === "no cargo" ? 20 : 128;
         }
         if (phase === 11) {
+            if (mode === "farm impact") {
+                input = pilot(p,0,0.1,-0.08,32);
+                step(input);
+                continue;
+            }
             if (mode === "county") {
                 if (p.y >= 26 && p.z >= 160) surveyCruise = true;
                 if (surveyCruise && p.x < -302 && p.x > -410 && Math.abs(p.z-287) < 44 && p.y > 19) {
@@ -870,7 +877,7 @@ function sortie(course, mode = "normal") {
     if (!comparisonBaseline && course === 1 && (mode === "normal" || mode === "cyan"))
         assert(movingSeine,"ordinary Paris controls observe a real moving market boat and wake");
     if (mode === "riverside" || mode === "county") return {result: frame[22], phase:frame[20], position: aircraftPose(), surveyCruise, surveyEast};
-    return {result:frame[22], course, visited, time:frame[17], data:packet, actions:frame[31], gates:frame[32], route:frame[25], releaseHeading};
+    return {result:frame[22], course, visited, time:frame[17], data:packet, actions:frame[31], gates:frame[32], route:frame[25], releaseHeading, impactTrace};
 }
 const goodFarm = sortie(0), goodParis = sortie(1), cyanParis = sortie(1,"cyan");
 assert.equal(goodFarm.gates,3,"Crop Patrol confirms all three rings on a real flight");
@@ -883,30 +890,75 @@ if (!comparisonBaseline) {
     assert.equal(east.result, "northeast reach", `ordinary flight controls can reach the new Paris northeast district: ${JSON.stringify(east)}`);
 }
 assert.equal(cyanParis.route,1,"the low Paris departure earns the cyan route outcome");
-function wreckYRange(part) {
-    const points=aircraft.subarray(aircraft.length-1080+part*360,aircraft.length-1080+(part+1)*360);
-    assert.equal(points.length,360,"each of the three wreck pieces has two actual boxes");
-    const y=Array.from(points).filter((_,index)=>index%6===1);
+const wreckVertexCounts = [[60,210,348,60,60,42], [30,156,258,114,42,60]];
+const intactVertexCounts = [720,594];
+function wreckMesh(course, intact = false) {
+    const vertices = intact ? intactVertexCounts[course] : wreckVertexCounts[course].reduce((a,b) => a+b,0);
+    const floats = vertices*6;
+    assert(aircraft.length >= floats && aircraft.length <= 2048*6,
+        "actual airframe geometry remains inside the original aircraft arena");
+    return aircraft.subarray(-floats);
+}
+function wreckGroup(course, part) {
+    const counts = wreckVertexCounts[course];
+    const offset = counts.slice(0,part).reduce((a,b) => a+b,0);
+    const points = wreckMesh(course).subarray(offset*6,(offset+counts[part])*6);
+    return Array.from({length: counts[part]}, (_,i) => points.slice(i*6,i*6+3));
+}
+function wreckYRange(course, part) {
+    const y = wreckGroup(course, part).map(([,y]) => y);
     assert(y.every(Number.isFinite));
     return [Math.min(...y),Math.max(...y)];
 }
-function wreckCenters() {
-    return [0,1,2].map(part=>{
-        const piece=aircraft.subarray(aircraft.length-1080+part*360,aircraft.length-1080+(part+1)*360);
-        return [0,1,2].map(axis=>{
-            const values=Array.from(piece).filter((_,index)=>index%6===axis);
+function wreckCenters(course) {
+    return wreckVertexCounts[course].map((_,part) => {
+        const piece = wreckGroup(course,part);
+        return [0,1,2].map(axis => {
+            const values = piece.map(point => point[axis]);
             return (Math.min(...values)+Math.max(...values))/2;
         });
     });
+}
+function intactColors(course) {
+    const points = wreckMesh(course,true);
+    return Array.from({length: points.length/6}, (_,i) => Array.from(points.slice(i*6+3,i*6+6)).join(","));
+}
+const originalColorOrder = [];
+if (!comparisonBaseline) for (const course of [0,1]) {
+    engine.select_view(0);
+    reset(course);
+    originalColorOrder.push(intactColors(course));
 }
 const impact = sortie(1,"strike");
 assert.equal(impact.result,8,"failing to climb out of the low route hits the bridge");
 if (!comparisonBaseline) {
     assert.equal(frame[36],1,"fatal bridge contact starts a separate wreck presentation");
     const atImpact = aircraft.slice();
-    const fragmentVertices=Array.from(atImpact.subarray(-1080));
-    assert(fragmentVertices.every((x,i)=>i%6!==0 || x<54),
-        "bridge-contact pieces begin on the entry side rather than inside the deck");
+    const bridgeTime = frame[17];
+    const trace = impact.impactTrace;
+    const last = trace.at(-1);
+    assert(last.dt === 1/30 && trace.length > 20,"ordinary bridge expects one more flight step at impact");
+    engine.select_view(0);
+    reset(1);
+    for (const sample of trace.slice(0,-1)) tick(sample.input,sample.dt,.45);
+    assert.equal(frame[22],0,"the related ordinary trace really is one step short of impact");
+    tick(last.input,0.124,.45);
+    assert.equal(frame[22],8);
+    assert.equal(frame[17],bridgeTime,"extra hitch substeps are wreck time only");
+    assert.equal(frame[36],1);
+    assert.deepEqual(intactColors(1),originalColorOrder[1],
+        "the first public result preserves the entire exterior even if a hitch already stepped wreck physics twice");
+    const hitchIntact = wreckMesh(1,true).slice();
+    tick(0,0,.45);
+    assert.deepEqual(wreckMesh(1,true),hitchIntact,"a zero-dt reprojection does not consume the intact transition");
+    tick(0,.017,.45);
+    assert.notDeepEqual(wreckMesh(1,true),hitchIntact,"a subsequent timed frame shows the naturally advanced fragments");
+    assert(wreckMesh(1).every(Number.isFinite));
+    assert.equal(sortie(1,"strike").result,8,"restore ordinary bridge after the asymmetric cadence test");
+    assert.deepEqual(intactColors(1),originalColorOrder[1],"first bridge frame is the exact intact Santos Dumont airframe");
+    const first = wreckMesh(1,true);
+    const flags = first.filter((_,i) => i%6===3 && Math.abs(first[i]-.035)<.001);
+    assert.equal(flags.length,6,"the intact Brazilian flag stays visible at impact");
     const clock = frame[17], before = frame.slice();
     engine.select_view(1);
     tick(128,0,.45);
@@ -916,6 +968,10 @@ if (!comparisonBaseline) {
     assert.equal(frame[36],1,"debris is still active after the first second");
     assert.equal(frame[17],clock,"the fixed mission clock is frozen at actual impact");
     assert.notDeepEqual(aircraft,atImpact,"gravity and collision move the real Wosy wreck mesh");
+    const parted = wreckCenters(1);
+    assert(Math.hypot(...parted[1].map((v,i) => v-parted[2][i]))>7,
+        "the actual left and right wing stacks separate rather than replacing the aircraft with slabs");
+    assert(wreckMesh(1).every(Number.isFinite),"all six authentic rendered groups are finite");
     for(let i=0;i<340 && frame[36]!==0;i++) tick(128,1/30,.45);
     assert.equal(frame[36],0,"the result is ready after the visual-only crash clock ends");
     assert.equal(frame[22],8,"cinematic physics never changes the cause of the loss");
@@ -938,16 +994,16 @@ if (!comparisonBaseline) {
 assert.equal(sortie(0,"overrun").result,9,"pickup overrun remains an explicit failure");
 if(!comparisonBaseline) {
     assert.equal(frame[36],0,"rollout overrun is not an impact cinematic");
-    const wreckHeight=()=>Math.max(...marker([.57*1.12,.33*1.12,.24*1.12]).map(([,y])=>y));
+    const wreckMajorHeight=()=>Math.max(...[0,1,2].map(i=>wreckYRange(1,i)[1]));
     const ground=sortie(1,"ground impact");
     assert.equal(ground.result,7,"an ordinary fatal touchdown reaches terrain without a clearance");
     assert.equal(frame[19],1);
     assert.equal(frame[36],1);
     for(let i=0;i<340 && frame[36]!==0;i++) tick(0,1/30,.45);
     assert.equal(frame[36],0);
-    for(let part=0;part<3;part++) {
-        const [low,high]=wreckYRange(part);
-        assert(low>-.08 && high<5,"all three parts of a terrain crash end at ground support");
+    for(let part=0;part<6;part++) {
+        const [low,high]=wreckYRange(1,part);
+        assert(low>-.08 && high<5,"all six parts of a terrain crash end at ground support");
     }
     const tower=sortie(1,"tower impact");
     assert.equal(tower.result,2,"an ordinary high strike reaches a real geometry collider");
@@ -956,16 +1012,33 @@ if(!comparisonBaseline) {
     assert.equal(frame[36],1);
     for(let i=0;i<84;i++) tick(0,1/30,.45);
     assert.equal(frame[36],1,"high debris is still falling past the former cap");
-    assert(wreckHeight() < contactHeight-8,"the live exterior camera follows the actual descending debris");
+    assert(wreckMajorHeight() < contactHeight-8,"the live exterior camera follows the descending core and both wings");
     tick(0,0,1.65);
-    verifyCueProjection("high fall frames all three fragments",wreckCenters,.08,.08);
+    verifyCueProjection("high fall frames all six fragments",()=>wreckCenters(1),.08,.08);
     for(let i=0;i<340 && frame[36]!==0;i++) tick(0,1/30,.45);
     assert.equal(frame[36],0,"the support fallback is bounded");
     tick(0,0,1.65);
-    verifyCueProjection("settled high view fits all three fragments",wreckCenters,.08,.08);
-    for(let part=0;part<3;part++) {
-        const [low,high]=wreckYRange(part);
-        assert(low>-.08 && high<contactHeight-15,"all high-impact parts descend to lower support");
+    verifyCueProjection("settled high view fits all six fragments",()=>wreckCenters(1),.08,.08);
+    for(let part=0;part<6;part++) {
+        const [low,high]=wreckYRange(1,part);
+        const [x,,z] = wreckCenters(1)[part];
+        const deck = Math.abs(x-228)<8.35 && Math.abs(z-359)<8.35 && low>45.66 && low<47 && high<50;
+        assert((low>-.08 && high<contactHeight-15) || deck,
+            `high-impact group ${part} descends to ground/lower support or settles visibly above the real observation deck, never suspended inside it (${low},${high})`);
+    }
+}
+if (!comparisonBaseline) {
+    assert([2,4,5,6,7,8,10].includes(sortie(0,"farm impact").result),
+        "ordinary Wright controls hit terrain on an unsafe low crop leg");
+    assert.equal(frame[36],1);
+    assert.deepEqual(intactColors(0),originalColorOrder[0],"first Wright wreck frame is the original airframe, with US markings");
+    for(let i=0;i<24;i++) tick(0,1/30,.45);
+    assert(wreckMesh(0).every(Number.isFinite),"all six Wright airframe groups remain real geometry");
+    for(let i=0;i<340 && frame[36]!==0;i++) tick(0,1/30,.45);
+    assert.equal(frame[36],0);
+    for(let part=0;part<6;part++) {
+        const [low,high]=wreckYRange(0,part);
+        assert(low>-.08 && high<6,"all six Wright fragments settle on terrain rather than disappearing");
     }
 }
 const noCargo = sortie(0,"no cargo");
