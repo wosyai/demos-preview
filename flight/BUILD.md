@@ -108,3 +108,9 @@ is not mesh-to-mesh rigid-body contact. Flags remain on the original wing.
 The normal aircraft still draws unsplit span surfaces; only the wreck introduces
 the two fracture faces. Frame slots, fixed simulation cadence and replay schema
 are unchanged.
+
+Service sheds use the same local box definitions in rendering and solid
+contact, including their separate roof and sign pieces. Wright barns use
+their sloped roof surfaces and gabled interiors rather than an enclosing
+rectangular volume. Roof overhangs do not fill the air below them. Saved
+replays are still accepted only when their inputs succeed in current physics.

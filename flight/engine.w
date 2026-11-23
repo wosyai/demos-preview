@@ -248,12 +248,31 @@ unit(f32,f32) barn_doors = fn(x,z) {
 	quad(x+4.3,0.18,z+0.08,x+3.9,0.18,z+0.08,x-4.3,7.6,z+0.08,x-3.9,7.6,z+0.08,0.92,0.79,0.60);
 };
 
+f32 barn_half_body = 15.0;
+f32 barn_half_depth = 12.0;
+f32 barn_half_roof = 16.0;
+f32 barn_half_overhang = 13.0;
+f32 barn_eaves = 11.0;
+f32 barn_ridge = 18.0;
+f32 barn_west_x = -61.0;
+f32 barn_west_z = 164.0;
+f32 barn_east_x = 145.0;
+f32 barn_east_z = 97.0;
+
+f32(f32,f32) barn_slope = fn(across,half) {
+	barn_ridge-(barn_ridge-barn_eaves)*across/half
+};
+
 unit(f32, f32) barn = fn(x, z) {
-	box(x-15.0,0.0,z-12.0,30.0,11.0,24.0,0.64,0.27,0.19);
-	quad(x-16.0,11.0,z-13.0,x,18.0,z-13.0,x,18.0,z+13.0,x-16.0,11.0,z+13.0,0.36,0.20,0.20);
-	quad(x,18.0,z-13.0,x+16.0,11.0,z-13.0,x+16.0,11.0,z+13.0,x,18.0,z+13.0,0.29,0.16,0.18);
-	tri(x-15.0,11.0,z-12.0,x+15.0,11.0,z-12.0,x,18.0,z-12.0,0.72,0.36,0.24);
-	tri(x-15.0,11.0,z+12.0,x+15.0,11.0,z+12.0,x,18.0,z+12.0,0.72,0.36,0.24);
+	f32 bx = barn_half_body;
+	f32 bz = barn_half_depth;
+	f32 rx = barn_half_roof;
+	f32 rz = barn_half_overhang;
+	box(x-bx,0.0,z-bz,bx*2.0,barn_eaves,bz*2.0,0.64,0.27,0.19);
+	quad(x-rx,barn_eaves,z-rz,x,barn_ridge,z-rz,x,barn_ridge,z+rz,x-rx,barn_eaves,z+rz,0.36,0.20,0.20);
+	quad(x,barn_ridge,z-rz,x+rx,barn_eaves,z-rz,x+rx,barn_eaves,z+rz,x,barn_ridge,z+rz,0.29,0.16,0.18);
+	tri(x-bx,barn_eaves,z-bz,x+bx,barn_eaves,z-bz,x,barn_ridge,z-bz,0.72,0.36,0.24);
+	tri(x-bx,barn_eaves,z+bz,x+bx,barn_eaves,z+bz,x,barn_ridge,z+bz,0.72,0.36,0.24);
 	barn_doors(x,z+12.07);
 	f32 rear = z-12.07;
 	barn_face(x,rear,10.2,0.1,7.8,0.74);
@@ -613,9 +632,17 @@ f32() pickup_w = fn { map_plan.supply.width };
 f32() pickup_l = fn { map_plan.supply.length };
 f32() service_x = fn { pickup_x()+pickup_w()*0.5+4.0 };
 f32() service_z = fn { pickup_z()+45.0 };
-f32() service_w = fn { 7.0 };
-f32() service_h = fn { 4.32 };
-f32() service_l = fn { 10.0 };
+struct copy SolidBox { f32 x; f32 y; f32 z; f32 w; f32 h; f32 l; }
+SolidBox shed_body = { .x=0.0; .y=0.0; .z=0.0; .w=7.0; .h=4.0; .l=10.0; };
+SolidBox shed_roof = { .x=-0.4; .y=4.0; .z=-0.4; .w=7.8; .h=0.32; .l=10.8; };
+SolidBox shed_paris_sign = { .x=1.0; .y=4.34; .z=3.0; .w=5.0; .h=2.2; .l=3.8; };
+SolidBox shed_wright_sign = { .x=1.2; .y=4.34; .z=3.0; .w=4.6; .h=2.4; .l=4.3; };
+SolidBox shed_wright_cap = { .x=2.7; .y=6.74; .z=4.4; .w=1.6; .h=0.7; .l=1.5; };
+SolidBox shed_wright_side = { .x=4.9; .y=5.1; .z=2.4; .w=1.8; .h=0.24; .l=0.52; };
+
+unit(f32,f32,SolidBox,f32,f32,f32) shed_box = fn(x,z,b,r,g,blue) {
+	box(x+b.x,b.y,z+b.z,b.w,b.h,b.l,r,g,blue);
+};
 f32() home_x = fn { map_plan.home.x };
 f32() home_z = fn { map_plan.home.z };
 f32() home_w = fn { map_plan.home.width };
@@ -1013,10 +1040,10 @@ unit() render_land = fn {
 		quad(-480.0,0.0,-350.0,480.0,0.0,-350.0,480.0,0.0,570.0,-480.0,0.0,570.0,0.44,0.58,0.31);
 		fields(0);
 		forage_edges(0);
-		barn(145.0,97.0);
-		barn(-61.0,164.0);
-		barn_windows(160.085,97.0,0);
-		barn_windows(-45.915,164.0,0);
+		barn(barn_east_x,barn_east_z);
+		barn(barn_west_x,barn_west_z);
+		barn_windows(barn_east_x+barn_half_body+0.085,barn_east_z,0);
+		barn_windows(barn_west_x+barn_half_body+0.085,barn_west_z,0);
 		grain_silo(166.5,114.5,0);
 		box(-100.0,0.05,132.0,270.0,0.10,6.0,0.63,0.53,0.34);
 		box(54.0,0.05,-52.0,7.0,0.10,343.0,0.57,0.48,0.33);
@@ -1057,8 +1084,8 @@ unit() render_land = fn {
 	ground_patch(pickup_x()-pickup_w()*0.46,stop_z,0.85*pickup_w(),0.83,0.26,0.94,0.56,0.26);
 	f32 sx = service_x();
 	f32 sz = service_z();
-	box(sx,0.0,sz,service_w(),service_h()-0.32,service_l(),0.38,0.38,0.31);
-	box(sx-0.4,service_h()-0.32,sz-0.4,service_w()+0.8,0.32,service_l()+0.8,0.41,0.61,0.54);
+	shed_box(sx,sz,shed_body,0.38,0.38,0.31);
+	shed_box(sx,sz,shed_roof,0.41,0.61,0.54);
 	box(sx-0.1,0.2,sz+2.0,0.10,2.1,4.8,0.82,0.72,0.42);
 	if (course == 0) {
 		supply_court(sx,sz);
@@ -1067,13 +1094,13 @@ unit() render_land = fn {
 	if (course == 1) {
 		mail_yard(sx,sz,stop_z);
 		postal_runway_stencil(pickup_x(),pickup_z());
-		box(sx+1.0,4.34,sz+3.0,5.0,2.2,3.8,0.83,0.31,0.15);
+		shed_box(sx,sz,shed_paris_sign,0.83,0.31,0.15);
 		quad(sx+1.5,4.76,sz+2.97,sx+5.5,4.76,sz+2.97,sx+5.5,6.15,sz+2.97,sx+1.5,6.15,sz+2.97,0.97,0.92,0.76);
 		tri(sx+1.5,6.15,sz+2.94,sx+5.5,6.15,sz+2.94,sx+3.5,5.26,sz+2.94,0.73,0.39,0.22);
 	} else {
-		box(sx+1.2,4.34,sz+3.0,4.6,2.4,4.3,0.18,0.74,0.57);
-		box(sx+2.7,6.74,sz+4.4,1.6,0.7,1.5,0.96,0.84,0.42);
-		box(sx+4.9,5.1,sz+2.4,1.8,0.24,0.52,0.96,0.84,0.42);
+		shed_box(sx,sz,shed_wright_sign,0.18,0.74,0.57);
+		shed_box(sx,sz,shed_wright_cap,0.96,0.84,0.42);
+		shed_box(sx,sz,shed_wright_side,0.96,0.84,0.42);
 	};
 	i32 count = vertex_count * 6;
 	unsafe { host.world(core.pointer_cast<*?u8>(&?scenery[0][0][0][0][0]), count); };
@@ -1399,10 +1426,35 @@ bool(f32,f32,f32) tower_hit = fn(px,y,pz) {
 	}
 };
 
+bool(f32,f32,f32,SolidBox) shed_box_hit = fn(x,y,z,b) {
+	y >= b.y && y < b.y+b.h && x >= b.x && x <= b.x+b.w && z >= b.z && z <= b.z+b.l
+};
+
+bool(f32,f32,f32) shed_hit = fn(x,y,z) {
+	f32 sx = x-service_x();
+	f32 sz = z-service_z();
+	if (y < 0.0 || y >= 7.44 || sx < -0.4 || sx > 7.4 || sz < -0.4 || sz > 10.4) { false } else {
+		if (y < 4.34) { shed_box_hit(sx,y,sz,shed_body) || shed_box_hit(sx,y,sz,shed_roof) } else {
+			if (course == 0) {
+				shed_box_hit(sx,y,sz,shed_wright_sign) || shed_box_hit(sx,y,sz,shed_wright_cap) || shed_box_hit(sx,y,sz,shed_wright_side)
+			} else { shed_box_hit(sx,y,sz,shed_paris_sign) }
+		}
+	}
+};
+
+bool(f32,f32,f32,f32,f32) barn_hit = fn(x,y,z,cx,cz) {
+	f32 a = abs_f(x-cx);
+	f32 b = abs_f(z-cz);
+	if (y < 0.0 || y > barn_ridge+0.055 || a > barn_half_roof || b > barn_half_overhang) { false } else {
+		if (a <= barn_half_body && b <= barn_half_depth && y <= barn_slope(a,barn_half_body)) { true } else {
+			abs_f(y-barn_slope(a,barn_half_roof)) <= 0.055
+		}
+	}
+};
+
 bool(f32,f32,f32) obstacle = fn(x,y,z) {
-	bool supply = within(x,y,z,service_x()-0.4,service_z()-0.4,service_w()+0.8,service_l()+0.8,service_h());
-	if (supply) { true } else { if (course == 0) {
-		within(x,y,z,129.0,84.0,32.0,26.0,17.0) || within(x,y,z,-77.0,151.0,32.0,26.0,17.0) ||
+	if (shed_hit(x,y,z)) { true } else { if (course == 0) {
+		barn_hit(x,y,z,barn_east_x,barn_east_z) || barn_hit(x,y,z,barn_west_x,barn_west_z) ||
 		within(x,y,z,163.0,111.0,7.0,7.0,17.0)
 	} else {
 		i32 col = core.float_to_sint_trunc<i32>((x+344.0)/56.0);

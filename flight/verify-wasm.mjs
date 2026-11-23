@@ -1059,6 +1059,38 @@ if (!comparisonBaseline) {
         assert(low>-.08 && high<6,"all six Wright fragments settle on terrain rather than disappearing");
     }
 }
+function inspectSolidRoute(course, targetX, surfaceZ, height) {
+    engine.select_view(0);
+    reset(course);
+    for (let i=0;i<1200 && frame[22]===0;i++) {
+        const p = aircraftPose();
+        if (p.z > surfaceZ+12) return {result:0, position:p};
+        const toward = Math.atan2(targetX-p.x,Math.max(8,surfaceZ-8-p.z));
+        const input = frame[20]===6 ? 20 : pilot(p,toward,height,0,0);
+        tick(input,1/30);
+        if (frame[22]!==0) return {result:frame[22],position:p, alt:frame[19], cinematic:frame[36]};
+    }
+    return {result:frame[22], stall:true};
+}
+if (!comparisonBaseline) {
+    for (const [course,sx,sz] of [[0,3.5,113],[1,-89,-26]]) {
+        const close = inspectSolidRoute(course,sx+3.5,sz+3,5.65);
+        assert.equal(close.result,2,`course ${course}'s roof sign is solid above its roof: ${JSON.stringify(close)}`);
+        assert(Math.abs(close.position.x-sx-3.5)<1.5 && Math.abs(close.position.z-sz-3)<2 &&
+            close.alt>4.34 && close.alt<6.53 && close.cinematic===1,
+            "the actual roof-level strike occurs at the visible sign instead of the shed");
+        const alongside = inspectSolidRoute(course,sx+.28,sz+3,5.65);
+        assert(alongside.result===0 && !alongside.stall,
+            `course ${course} keeps the visible gap to the sign open: ${JSON.stringify(alongside)}`);
+    }
+    const peak = inspectSolidRoute(0,-61,152,17.4);
+    assert.equal(peak.result,2,`the actual west barn gable hits above the former 17m cuboid: ${JSON.stringify(peak)}`);
+    assert(peak.alt>17 && peak.alt<18 && Math.abs(peak.position.x+61)<1.5 &&
+        Math.abs(peak.position.z-152)<2 && peak.cinematic===1);
+    const shoulder = inspectSolidRoute(0,-49,152,16.1);
+    assert(shoulder.result===0 && !shoulder.stall,
+        `ordinary flight threads visible air above the sloped barn shoulder: ${JSON.stringify(shoulder)}`);
+}
 const noCargo = sortie(0,"no cargo");
 assert(noCargo.visited.has(9) && !noCargo.visited.has(10) && !noCargo.data,"throttling without loading cargo never advances the mission");
 assert.equal(sortie(1,"high").result,"invalid release");
