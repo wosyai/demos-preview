@@ -160,14 +160,11 @@ if (process.argv[3]) {
   }}).exports;
   base._start(); base.reset(0);
   assert(previous && scenery.length>previous.length,"the neighborhood adds drawable geometry");
-  const phoneFinish=[],videoFinish=[];
+  assert.equal(scenery.length-previous.length,90*6,"three boxes add only the fixed Pier 8 signal housing");
   for(let i=previous.length;i<scenery.length;i+=6) {
-    const x=scenery[i],y=scenery[i+1],z=scenery[i+2];
-    if(x>2.9&&x<4.8&&y>=.02&&y<2.0&&z>-2.4&&z<-.80) phoneFinish.push(y);
-    if(x>-88.4&&x< -75.4&&y>1.1&&y<2.3&&z>39.73&&z<39.9) videoFinish.push(x);
+    assert(scenery[i]>14.8 && scenery[i+2]>80.35 && scenery[i+2]<80.85,
+      "all new housing stays beside the existing rail");
   }
-  assert(phoneFinish.some(y=>y<.04)&&phoneFinish.some(y=>y>1.65),"same phone gains both pavement and raised booth details");
-  assert(videoFinish.some(x=>x< -85)&&videoFinish.some(x=>x> -77),"both existing video windows display distinct additions");
   assert.deepEqual(scenery.subarray(0,previous.length),previous,
     "the immediate waterfront baseline retains all raw positions, colors and material tags");
 }
@@ -295,10 +292,22 @@ function wakeVertices() {
   }
   return wake;
 }
+function pierAspect() {
+  const points=[];
+  const mesh=rawMoving();
+  for(let i=0;i<mesh.length;i+=6) {
+    if(Math.floor(mesh[i+3]/2)===7) points.push(mesh.subarray(i,i+6));
+  }
+  assert.equal(points.length,6,"one colored lens follows the state without extra batches");
+  for(const [x,y,z] of points) assert(x>14.9&&y>1.8&&z>80.45&&z<80.5);
+  const [, , ,red,green,blue]=points[0];
+  return [red-14,green,blue];
+}
 const boardingTimeLeft = {};
 function boardAndCross(route) {
   assert.equal(frame[20],4,"the pier offers a boarding action on foot");
   assert.equal(wakeVertices().length,0,"a ferry at its berth has no wake");
+  assert(pierAspect()[1]>.95,"green aspect follows the ordinary boarding opportunity");
   const pier=spot(), departureTime=frame[18];
   tick(0,0,2);
   assert.equal(frame[17],5,"boarding starts the playable crossing rather than immediately winning");
@@ -310,6 +319,7 @@ function boardAndCross(route) {
   assert.equal(frame[17],5);
   assert(frame[27]>pier[1]+2&&frame[27]<88,"the player moves along the ramp");
   assert.equal(wakeVertices().length,0,"walking onto a stationary ferry does not create foam");
+  assert(pierAspect()[0]>.95,"boarding changes the pier aspect to amber");
   run(180,0,-1,2);
   assert.equal(frame[17],5,"steering and action cannot leave the ferry in transit");
   assert(frame[27]>93&&frame[27]<116,"the passenger moves across open water with the ferry");
@@ -318,13 +328,17 @@ function boardAndCross(route) {
   assert(movingWake.some(([x])=>x<8)&&movingWake.some(([x])=>x>14));
   assert(movingWake.every(([,z])=>z<frame[27])&&movingWake.map(([,z])=>z).every(Number.isFinite));
   assert(movingWake.some(([, ,opacity])=>opacity>.3)&&movingWake.some(([, ,opacity])=>opacity===0));
+  const underwaySignal=pierAspect();
+  assert(underwaySignal[2]>underwaySignal[1],"cool moving aspect follows ferry departure");
   run(30);
+  assert.notDeepEqual(pierAspect(),underwaySignal,"underway aspect varies with real ferry progress");
   assert(wakeVertices()[0][1]>movingWake[0][1]+1,"foam follows ferry displacement rather than being fixed to the harbor");
   assert.equal(frame[18],departureTime);
   run(300);
   assert.equal(frame[17],6,"arrival waits for a separate disembark action");
   assert.equal(frame[20],5);
   assert.equal(wakeVertices().length,0,"arrived ferry makes no fresh wake");
+  assert(pierAspect()[0]>.95,"the origin berth returns to amber once the ferry docks across the canal");
   assert(frame[27]>114&&frame[27]<116&&Math.abs(frame[26]-10.1)<.1);
   const stopped=spot();
   run(120,0,1);

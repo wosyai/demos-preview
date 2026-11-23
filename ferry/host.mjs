@@ -1,4 +1,4 @@
-export const ENGINE_PATH = "./ferry.wasm?v=ferry-neighborhood-v1";
+export const ENGINE_PATH = "./ferry.wasm?v=ferry-pier-signal-v1";
 const INPUTS = new Map([
   ["KeyA","left"],["ArrowLeft","left"],["KeyD","right"],["ArrowRight","right"],
   ["KeyW","up"],["ArrowUp","up"],["KeyS","down"],["ArrowDown","down"],["Space","brake"],
@@ -171,6 +171,8 @@ function programFor(gl) {
       pixel=vec4(.65,.86,.92,tint.g*(1.-smoothstep(24.,108.,depth)));
     }else if(surface==5){
       pixel=vec4(mix(vec3(1.,.83,.54),vec3(.65,.39,.47),smoothstep(20.,170.,depth)*.45),1.);
+    }else if(surface==7){
+      pixel=vec4(mix(tint,vec3(.65,.39,.47),smoothstep(20.,170.,depth)*.45),1.);
     }else{
       float haze=smoothstep(19.,185.,depth);
       vec3 normal=cross(dFdy(local),dFdx(local));

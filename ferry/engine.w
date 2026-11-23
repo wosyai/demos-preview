@@ -27,6 +27,7 @@ i32 paint_canal = 3;
 i32 paint_light_pool = 4;
 i32 paint_lamp = 5;
 i32 paint_wake = 6;
+i32 paint_pier_signal = 7;
 f32 model_x = 0.0;
 f32 model_y = 0.0;
 f32 model_z = 0.0;
@@ -491,6 +492,14 @@ f32 pier_marquee_x = 6.94;
 f32 pier_marquee_z = 75.10;
 f32 pier_marquee_floor = 3.69;
 f32 pier_marquee_width = 8.19;
+f32 pier_signal_x = 15.22;
+f32 pier_signal_z = 80.50;
+
+unit() pier_signal_housing = fn {
+    box(pier_signal_x-0.07,0.02,pier_signal_z+0.02,0.14,2.29,0.17,0.27,0.31,0.41);
+    box(pier_signal_x-0.31,1.71,pier_signal_z,0.62,0.77,0.23,0.39,0.33,0.43);
+    box(pier_signal_x-0.35,2.47,pier_signal_z-0.11,0.70,0.13,0.35,0.59,0.43,0.44);
+};
 
 unit() draw_landmarks = fn {
     box(7.04,2.77,1.4,0.76,1.50,7.3,0.28,0.22,0.38);
@@ -857,6 +866,7 @@ unit() render_world = fn {
     working_wharf();
     phone_corner();
     video_windows(-88.8,39.81,0);
+    pier_signal_housing();
     unsafe { host.world(core.pointer_cast<*?u8>(&?scenery[0][0][0][0][0]),vertex_count*6); };
     world_ready=true;
 };
@@ -1867,6 +1877,23 @@ unit(f32) ferry_wake = fn(alpha) {
     };
 };
 
+unit(f32) pier_signal_lens = fn(alpha) {
+    bool boarding=stage==MissionStage::reach_pier;
+    bool underway=stage==MissionStage::crossing && board_time>=1.12;
+    f32 pulse=if (underway) {
+        f32 travel=blend(old_ferry_z,ferry_z,alpha)-berth_z;
+        0.81+0.16*sin_small(wrap(travel*0.24-3.14159265))
+    } else { 0.0 };
+    f32 r=if (boarding) { 0.33 } else { if (underway) { 0.36 } else { 1.0 } };
+    f32 g=if (boarding) { 1.0 } else { if (underway) { 0.71*pulse } else { 0.55 } };
+    f32 b=if (boarding) { 0.74 } else { if (underway) { pulse } else { 0.29 } };
+    surface_paint=paint_pier_signal;
+    f32 x=pier_signal_x;
+    f32 z=pier_signal_z-0.018;
+    quad(x-0.22,1.85,z,x+0.22,1.85,z,x+0.22,2.31,z,x-0.22,2.31,z,r,g,b);
+    surface_paint=0;
+};
+
 unit(f32) render_moving = fn(alpha) {
     vertex_count=0; drawing_world=false;
     f32 vis_yaw=wrap(old_yaw+alpha*wrap(car_yaw-old_yaw));
@@ -1887,6 +1914,7 @@ unit(f32) render_moving = fn(alpha) {
     boat(alpha);
     model_local=false;
     ferry_wake(alpha);
+    pier_signal_lens(alpha);
     if (stage==MissionStage::answer_phone) { objective(phone_x,phone_z,1.0,0.77,0.40); };
     if (stage==MissionStage::pickup_tape) {
         if (follows_backstreet()) { objective(tape_guide_x(),tape_guide_z(),0.85,0.95,0.60); }
