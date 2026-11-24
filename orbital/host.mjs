@@ -473,7 +473,8 @@ function hud(){
   tip=["Drift along the hull to the silver rail.","Follow the blue collars along the scaffold.","Reach the gold brace ahead of the cargo." ][leg];
   if(locked){
    const cue=frame[18];
-   if(align===3){objective="Cargo aligned";tip="Cargo seated in its shoes. Green sync confirms transfer readiness.";action="Cargo ready";}
+   if(align===4){objective="Cargo transfer complete";tip="Both keepers are green. The gripper is open and the cradle holds the load.";action="Cargo secure";}
+   else if(align===3){objective="Cargo seated";tip="Close the cradle keepers and release the robot grip.";action="Transfer cargo";compactTip="Close keepers";}
    else if(align===2){objective="Alignment handle secured";tip="Set the handle to lower the load into its shoes.";action="Set alignment";}
    else if(mode===3){objective="Clearing the lock";tip="Drift right to the blue alignment console.";action="Clearing lock";compactTip="Drift right";}
    else if(align===1&&mode===1){objective="Taking the alignment handle";tip="Holding station.";action="Gripping handle";}
@@ -500,7 +501,7 @@ function hud(){
  if($("help").textContent!==tip)$("help").textContent=tip;
  const compact=$("compact-help");
  if(compact.textContent!==compactTip){compact.textContent=compactTip;compact.hidden=!compactTip;}
- $("action").disabled=!active||align===3||!(mode===2||(mode===0&&near===1));
+ $("action").disabled=!active||align===4||!(mode===2||(mode===0&&near===1));
  if($("action").textContent!==action)$("action").textContent=action;
  const task=eva?(locked?"EVA / CARGO ALIGNMENT":"EVA / "+(leg+1)+" OF 3"):"TRAINING 01 / HANDRAIL";
  if($("exercise").textContent!==task)$("exercise").textContent=task;

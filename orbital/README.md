@@ -75,7 +75,10 @@ astronaut asset. The authored Wosy arm is the loading/fallback mesh.
 
 The contact and release states retain world-space rail anchors on all screen
 sizes. At the cargo brace the pin and hand share both Wosy-authored endpoints.
-Each seated control invalidates the stationary batch once. The blue console,
+The blue console first seats the cargo, then a separate press closes both
+cradle keepers and opens the robot jaws at a fixed cargo position. Green
+keeper indicators confirm the completed transfer. Each control invalidates
+the stationary batch once. The blue console,
 recessed lock, suspended cargo shell and manipulator require no per-frame
 geometry updates. The WebGL host interpolates presented camera and arm coordinates around
 the fixed 60 Hz Wosy simulation. Station shadows are cached until actual

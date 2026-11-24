@@ -183,8 +183,23 @@ assert.equal(wristIndicator(beforeLatch),false);
 assert.equal(wristIndicator(room),true,'the local seating endpoint changes the remote gripper status');
 assert.deepEqual([...state.slice(12,15)].map(n=>n.toFixed(2)),['1.09','-0.43','-4.81']);
 assert.equal(roomLoads,countBeforeLatch+2,'only the new seated handle updates the cached alignment piece');
-step();step(64);assert.equal(state[19],3);
+const cradleSeated=room, handoffCamera=[...state.slice(0,8)];
+for(let i=0;i<60;i++)step(64);
+assert.equal(state[19],3,'held seat input never commands the transfer');
 assert.equal(roomLoads,countBeforeLatch+2);
+step();step(64);assert.equal(state[19],4);
+assert.deepEqual([...state.slice(0,8)],handoffCamera,'handoff keeps the restrained eye and aim fixed');
+assert.deepEqual([...state.slice(12,15)].map(n=>n.toFixed(2)),['1.09','-0.36','-4.81']);
+for(const x of [.49,1.71]){
+    assert.ok(hasVertex(cradleSeated,x+.041,-.372,-6.554)&&hasVertex(room,x+.041,-.705,-6.554),'cradle keepers slide down their guides');
+    assert.ok(hasVertex(cradleSeated,x+.061,-.686,-6.655)&&hasVertex(room,x+.061,-.686,-6.655),'both landed cargo lugs stay fixed');
+}
+assert.ok(hasVertex(cradleSeated,1.96,.331,-6.838)&&hasVertex(room,1.96,.471,-6.838),'upper gripper jaw opens away from cargo');
+assert.ok(hasVertex(cradleSeated,1.96,.022,-6.838)&&hasVertex(room,1.96,-.118,-6.838),'lower gripper jaw opens away from cargo');
+assert.ok(hasVertex(room,2.17,.13,-7.13)&&hasVertex(room,2.20,.22,-6.523),'the load and robot wrist hold steady through the handoff');
+for(let i=0;i<60;i++){step();step(64);}
+assert.equal(roomLoads,countBeforeLatch+3,'handoff invalidates cached world once');
+assert.equal(state[19],4,'verified transfer stays safe on extra commands');
 reset();assert.deepEqual(capture(),evaStart,'reset restores the current exercise');
 assert.deepEqual(room,evaRoom);
 until(()=>state[2]<-4.719,4);
@@ -192,7 +207,7 @@ assert.ok(state[2]>-4.721 && state[7]===0,'EVA cannot pass into the radiator');
 step(64);assert.equal(state[17],0,'skipping the rails cannot lock cargo');
 engine.select_deck(0);step(0,0,0,0);
 assert.deepEqual(capture(),initial,'indoor mode round-trips without exterior state');
-assert.equal(roomLoads,6,'only deck changes, lock, alignment and reset republish stationary geometry');
+assert.equal(roomLoads,7,'only deck changes, lock, alignment and reset republish stationary geometry');
 console.log('EVA WASM: geometry, distinct grip, eligibility and release, exterior bulkhead, reset and indoor round-trip passed.');
 
 const raw=readFileSync(new URL('./apollo-arm.bin',import.meta.url));

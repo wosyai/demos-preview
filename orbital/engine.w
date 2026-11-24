@@ -243,7 +243,7 @@ bool cargo_locked=false;
 i32 alignment_stage=0;
 bool alignment_braked=false;
 f32(i32) rail_depth = fn(leg) {if(leg==0){-1.59}else{if(leg==1){-3.43}else{-4.88}}};
-f32() align_pin_y = fn {if(alignment_stage==3){-0.43}else{-0.54}};
+f32() align_pin_y = fn {if(alignment_stage==4){-0.36}else{if(alignment_stage==3){-0.43}else{-0.54}}};
 f32() arm_x = fn {if(alignment_stage>=1){1.09}else{-0.18}};
 f32() arm_y = fn {if(alignment_stage>=1){align_pin_y()}else{if(cargo_locked){-0.45}else{-0.57}}};
 f32() arm_z = fn {if(alignment_stage>=1){-4.81}else{rail_depth(station_leg)}};
@@ -324,7 +324,7 @@ unit(i32) boom_bays = fn(k){
         boom_bays(k+1);
     };
 };
-f32() load_drop = fn {if(alignment_stage==3){-0.40}else{0.0}};
+f32() load_drop = fn {if(alignment_stage>=3){-0.40}else{0.0}};
 f32[8] shell_y = [0.70,1.0,1.0,0.70,-0.70,-1.0,-1.0,-0.70];
 f32[8] shell_z = [1.0,0.70,-0.70,-1.0,-1.0,-0.70,0.70,1.0];
 unit(f32,f32,f32,f32,f32,i32) cargo_skin = fn(x0,x1,y0,r0,r1,k){
@@ -365,9 +365,22 @@ unit(f32,f32) cargo_band = fn(x,dy){
 unit(f32,f32,f32,f32) cargo_mark = fn(x,y,w,h){
     quad(x,y,-6.546,x+w,y,-6.546,x+w,y+h,-6.546,x,y+h,-6.546,0.93);
 };
+unit(f32,f32) cargo_keeper = fn(x,dy){
+    paint(0.32,0.40,0.45,0.66);
+    box(x,-0.699,-6.740,0.25,0.48,0.124);
+    paint(0.75,0.56,0.28,0.34);
+    box(x+0.061,-0.286+dy,-6.655,0.120,0.083,0.096);
+    f32 jaw=if(alignment_stage==4){-0.705}else{-0.372};
+    paint(0.69,0.72,0.68,0.71);
+    box(x+0.041,jaw,-6.554,0.160,0.183,0.038);
+    box(x+0.041,jaw+0.102,-6.648,0.160,0.052,0.098);
+    if(alignment_stage==4){paint(0.20,1.0,0.57,0.96);}else{paint(1.0,0.51,0.18,0.94);};
+    box(x+0.067,-0.469,-6.509,0.108,0.026,0.009);
+};
 unit() suspended_cargo = fn {
     boom_bays(0);
     f32 dy=load_drop();
+    cargo_keeper(0.49,dy);cargo_keeper(1.71,dy);
     paint(0.50,0.56,0.57,0.64);
     cargo_skin(0.20,0.47,0.53+dy,0.27,0.49,0);
     paint(0.58,0.61,0.62,0.62);
@@ -489,14 +502,16 @@ unit() manipulator = fn {
     box(2.13,0.50+dy,-6.88,0.14,0.22,0.25);
     paint(0.19,0.24,0.27,0.62);
     box(2.08,0.36+dy,-6.73,0.28,0.12,0.14);
-    if(alignment_stage==3){paint(0.28,1.0,0.60,0.92);}else{paint(0.28,0.72,0.92,0.92);};
+    if(alignment_stage==4){paint(0.94,0.62,0.23,0.92);}else{if(alignment_stage==3){paint(0.28,1.0,0.60,0.92);}else{paint(0.28,0.72,0.92,0.92);};};
     box(2.14,0.407+dy,-6.581,0.13,0.033,0.010);
     paint(0.56,0.61,0.61,0.62);
-    box(2.04,0.700+dy,-6.889,0.16,0.128,0.140);
-    box(2.04,0.415+dy,-6.889,0.16,0.121,0.140);
+    box(2.16,0.22+dy,-6.892,0.064,0.72,0.092);
+    f32 jaw_open=if(alignment_stage==4){0.14}else{0.0};
+    box(2.04,0.700+dy+jaw_open,-6.889,0.16,0.128,0.140);
+    box(2.04,0.415+dy-jaw_open,-6.889,0.16,0.121,0.140);
     paint(0.71,0.50,0.24,0.35);
-    box(1.96,0.731+dy,-6.838,0.113,0.066,0.115);
-    box(1.96,0.422+dy,-6.838,0.113,0.065,0.115);
+    box(1.96,0.731+dy+jaw_open,-6.838,0.113,0.066,0.115);
+    box(1.96,0.422+dy-jaw_open,-6.838,0.113,0.065,0.115);
 };
 unit() lock_support = fn {
     paint(0.45,0.48,0.50,0.65);
@@ -570,7 +585,7 @@ unit() alignment_console = fn {
     round_shell(0.90,pin,-4.81,1.48,pin,-4.81,0.087,0.087,0,0,26);
     paint(0.29,0.71,0.72,0.61);
     round_shell(1.36,pin,-4.81,1.47,pin,-4.81,0.106,0.106,0,0,20);
-    if(alignment_stage==3){paint(0.27,0.98,0.60,0.99);}else{paint(0.34,0.80,1.0,0.99);};
+    if(alignment_stage==4){paint(0.27,0.98,0.60,0.99);}else{if(alignment_stage==3){paint(1.0,0.58,0.24,0.99);}else{paint(0.34,0.80,1.0,0.99);};};
     box(1.11,-0.274,-4.864,0.29,0.030,0.010);
 };
 unit(i32) airlock_bolts = fn(k){
@@ -968,7 +983,7 @@ unit(f32,i32,f32,f32) tick = fn(dt,keys,look_x,look_y) {
             if(deck==1 && station_leg==2){
                 if(!cargo_locked){cargo_locked=true;mark=2;mesh_grip=-1.0;eva_room();}
                 else{if(alignment_stage==0){mode=3;mark=2;vx=0.36;vz=0.035;}
-                else{if(alignment_stage==2){alignment_stage=3;mesh_grip=-1.0;eva_room();};};};
+                else{if(alignment_stage==2 || alignment_stage==3){alignment_stage=alignment_stage+1;mesh_grip=-1.0;eva_room();};};};
             }else{
                 mode=3;mark=2;
                 vz=if(deck==0){-0.19}else{-0.43};
