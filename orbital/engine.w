@@ -197,7 +197,7 @@ unit(i32) blanket = fn(n) {
         f32 yy=core.sint_to_float<f32>(n%3)*0.86-1.62;
         f32 zz=-11.6+core.sint_to_float<f32>(n/3)*2.48;
         f32 tint=0.77+0.027*core.sint_to_float<f32>(n%4);
-        paint(tint,tint*0.97,tint*0.90,0.18);
+        paint(tint,tint*0.97,tint*0.90,if(n==7){0.18375}else{0.18});
         quilt_panel(yy,zz,0.031+core.sint_to_float<f32>(n%3)*0.014);
         paint(0.37,0.38,0.39,0.15);
         quad(-1.475,yy,zz,-1.475,yy+0.81,zz,-1.475,yy+0.81,zz+0.027,-1.475,yy,zz+0.027,0.69);

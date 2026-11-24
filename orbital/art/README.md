@@ -59,3 +59,12 @@ relief and the hatch lamp bounce are baked into Wosy mesh vertices. The
 practicals do not add a light pass or cast dynamic shadows. Selected rail, capsule and joint sidewalls carry octahedrally
 encoded geometry normals in the same vertex stride; their caps and hard
 service edges do not. The albedo pixels are not used as normal maps.
+
+**Thermal panel N7:** the pale quilt albedo on the closest hull panel was
+generated with OpenAI image tools from a light-neutral orthographic outline
+of the exact Wosy panel. Its exported UV rectangle follows world axes
+(z = −6.64 to −4.22, y = −0.76 to 0.05) on the modeled relief; it is not a
+camera projection or scene image. Only the panel's 36 relief vertices
+select this generated material. Geometry, external shadows, and current
+sunlight still come from the live scene. Pack the reference with
+`python3 art/build-thermal-stamp.py /path/to/generated-ortho.png`.

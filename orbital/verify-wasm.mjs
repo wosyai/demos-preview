@@ -46,6 +46,10 @@ engine.select_deck(1);step(0,0,0,0);
 const evaStart=capture(),evaRoom=room;
 assert.equal(state[15],1);assert.ok(evaRoom.length>=5400*8 && evaRoom.length<=16100*8 && evaRoom.length%24===0);
 assert.ok(evaRoom.every(Number.isFinite) && hand.every(Number.isFinite));
+const maskedPanel=[];
+for(let i=0;i<evaRoom.length;i+=8)if(Math.abs(evaRoom[i+7]-.18375)<.0001)maskedPanel.push(evaRoom.slice(i,i+8));
+assert.equal(maskedPanel.length,36,'only the relief faces of thermal panel n=7 are registered');
+assert.ok(maskedPanel.every(v=>v[0]<-1.41&&v[0]>-1.51&&v[1]>-.761&&v[1]<.051&&v[2]>-6.641&&v[2]<-4.219));
 const unpackStationNormal=(code)=>{
  const n=-code-1,u=Math.floor(n/255)/127-1,v=(n%255)/127-1,z=1-Math.abs(u)-Math.abs(v);
  return z<0?[(1-Math.abs(v))*Math.sign(u+1e-6),(1-Math.abs(u))*Math.sign(v+1e-6),z]:[u,v,z];
