@@ -16,10 +16,33 @@ for name,ratio in zip(names,(.34,.65,.15,.61)):
  bpy.ops.object.modifier_apply(modifier=modifier.name)
  o.select_set(False)
 
-images={n:bpy.data.images[k] for n,k in [('Gloves','astronaut_04_GlovesS_BaseColor.png'),('Body','astronaut_04_jackletS_BaseColor.png')]}
+prefixes={'Gloves':'astronaut_04_GlovesS_', 'Body':'astronaut_04_jackletS_'}
+images={n:bpy.data.images[k+'BaseColor.png'] for n,k in prefixes.items()}
 for k,im in images.items():
  im.scale(512,512)
  a=array.array('f',[0.0])*(512*512*4);im.pixels.foreach_get(a);images[k]=a
+# Export one compact combined mask: authored luminance, normal XY and
+# roughness. The base mesh retains the original per-vertex material chroma.
+# UV row 0 remains the first row, matching WebGL's default upload orientation.
+material_out=os.environ.get('APOLLO_MAP_RAW')
+if material_out:
+ material_samples={}
+ for material,base in prefixes.items():
+  maps=[]
+  for suffix in ('Normal','Roughness'):
+   im=bpy.data.images[base+suffix+'.png']
+   im.scale(512,512)
+   data=array.array('f',[0.0])*(512*512*4);im.pixels.foreach_get(data);maps.append(data)
+  material_samples[material]=(images[material],*maps)
+ packed=array.array('B')
+ for row in range(512):
+  for material in ('Gloves','Body'):
+   color,norm,rough=material_samples[material]
+   for col in range(512):
+    k=(row*512+col)*4
+    luma=.2126*color[k]+.7152*color[k+1]+.0722*color[k+2]
+    packed.extend(round(255*max(0.,min(1.,a))) for a in (luma,norm[k],norm[k+1],rough[k]))
+ with open(material_out,'wb') as handle:packed.tofile(handle)
 def sample(k,u,v):
  im=images[k];ii=((int(v*512)%512)*512+int(u*512)%512)*4
  return tuple(max(.005,min(1.,im[ii+i])) for i in range(3))
@@ -49,9 +72,13 @@ def gathering(grip):
    for vi,li in zip(t.vertices,t.loops):
     co=ev.matrix_world@me.vertices[vi].co; no=ev.matrix_world.to_3x3()@me.corner_normals[li].vector
     v=uv[li].uv
-    if not grip: rgb=sample(o.data.materials[0].name,v.x,v.y)
+    material=o.data.materials[0].name
+    if not grip: rgb=sample(material,v.x,v.y)
     else:rgb=(0,0,0)
-    item.append((tuple(co),tuple(no.normalized()),rgb,name))
+    # Pack two material UV spaces into the available 24-bit lane.
+    u0=max(.001,min(.999,v.x))
+    texcoord=(u0*.5+(.5 if material=='Body' else 0.),max(.001,min(.999,v.y)))
+    item.append((tuple(co),tuple(no.normalized()),rgb,name,texcoord))
   ev.to_mesh_clear()
   parts[name]=item
  return sum((parts[n] for n in names),[])
@@ -77,7 +104,7 @@ for a,b in zip(opened,closed):
  u,v=coords(a[0],aa,sc,shift0),coords(b[0],bb,sc,shift1)
  # Separate a touch of blue from the black rubber and retain the textile's base map.
  rgb=a[2]
- out.extend((*u,*v,*rgb,*rotate_normal(a[1],aa),*rotate_normal(b[1],bb)))
+ out.extend((*u,*v,*rgb,*rotate_normal(a[1],aa),*rotate_normal(b[1],bb),*a[4]))
 path=os.environ.get('APOLLO_OUT','apollo-arm.f32')
 with open(path,'wb')as f:out.tofile(f)
 for g,label in [(opened,'OPEN'),(closed,'CONTACT')]:

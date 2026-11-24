@@ -25,14 +25,16 @@ vec3 assetPoint(vec3 p){return armPose.w<0.?p:mix(p,posClosed,armPose.w)*.0001+a
 `;
 const vs = `#version 300 es
 layout(location=0) in vec3 pos;
-layout(location=1) in vec3 color;
+layout(location=1) in vec4 color;
 layout(location=2) in vec2 mat;
 layout(location=4) in vec3 openNormal;
 layout(location=5) in vec3 closedNormal;
+layout(location=6) in vec2 armUVLow;
 out vec3 surface;
 out vec3 world;
 out vec2 material;
 out vec3 fittedNormal;
+out vec2 armUV;
 ${view}
 ${skinVertex}
 vec3 loadNormal(float code){
@@ -46,8 +48,10 @@ void main(){
  vec3 actual=assetPoint(pos);
  vec3 p=toEye(actual);
  gl_Position=vec4(p.x*optics.x,p.y*optics.y,-1.002*p.z-.10,-p.z);
- surface=color;world=actual;material=armPose.w<0.?mat:vec2(.92,.181);
+ surface=color.rgb;world=actual;material=armPose.w<0.?mat:vec2(.92,.181);
  fittedNormal=armPose.w<0.?(mat.x<0.?loadNormal(mat.x):vec3(0.)):mix(openNormal,closedNormal,armPose.w);
+ uint uvHigh=uint(round(color.a*255.));
+ armUV=armPose.w<0.?vec2(0.):(vec2(uvHigh%16u,uvHigh/16u)*256.+armUVLow)/4095.;
 }`;
 const sun = `
 const vec3 sunDir=vec3(.5674,.6110,.5521);
@@ -75,6 +79,7 @@ uniform highp sampler2DShadow sunMap;
 uniform int detailedShadow;
 uniform float renderFraction;
 uniform highp sampler2DArray surfaceTile;
+uniform bool armSurfaceReady;
 ${sun}
 float shadowAt(vec3 p,vec3 n,float direct){
  if(detailedShadow==0){
@@ -100,26 +105,45 @@ vec3 sunColor(vec3 n){
  bool suit=material.x>=0. && dot(fittedNormal,fittedNormal)>.25;
  bool armor=material.y>.705 && material.y<.735;
  bool solar=surface.b>2.*surface.r && material.y>.4 && material.y<.52;
+ bool skin=suit&&armSurfaceReady;
  vec3 lamp=vec3(1.00,.91,.78);
- float direct=max(dot(n,sunDir),0.);
- float shadow=direct>0. ? shadowAt(world,n,direct):0.;
  bool warm=surface.r>surface.b*1.53 && surface.g<surface.r*.86 && !emitter;
  bool blue=surface.b>surface.r*1.20 && surface.g>surface.r*1.08 && !solar;
  bool dark=max(surface.r,max(surface.g,surface.b))<.34;
- float layer=suit||foil?2.:warm?3.:dark?4.:blue?5.:steel?1.:0.;
- float polish=layer==1.?70.:layer==3.?36.:layer==5.?40.:29.;
- float spec=shadow>0.?pow(max(dot(n,normalize(sunDir+normalize(eye-world))),0.),polish):0.;
- float metal=layer==1.?.49:layer==3.?.21:solar?.18:.075;
+ float layer=skin?(armUV.x<.5?6.:7.):suit||foil?2.:warm?3.:dark?4.:blue?5.:steel?1.:0.;
  vec3 wall=abs(n);
  vec2 tex=wall.x>max(wall.y,wall.z)?world.zy:wall.y>wall.z?world.xz:world.xy;
- vec2 grain=layer==1.?vec2(world.x*.87,(world.y*.78+world.z*.43)*1.42):
+ vec2 uv=vec2(armUV.x*2.-(layer==7.?1.:0.),armUV.y);
+ vec2 grain=skin?uv:layer==1.?vec2(world.x*.87,(world.y*.78+world.z*.43)*1.42):
    suit?tex*vec2(13.5,16.):foil?vec2(world.z*1.92,world.y*3.62):
    layer==4.?tex*1.8:tex*vec2(.91,1.14);
- vec3 sheet=texture(surfaceTile,vec3(grain,layer)).rgb;
+ vec4 texel=texture(surfaceTile,vec3(grain,layer));
+ vec3 sheet=texel.rgb;
+ float polish=layer==1.?70.:layer==3.?36.:layer==5.?40.:29.;
+ float metal=layer==1.?.49:layer==3.?.21:solar?.18:.075;
+ if(skin){
+   vec3 q=cross(dFdy(world),n),p=cross(n,dFdx(world));
+   vec2 a=dFdx(uv),b=dFdy(uv);
+   vec3 t=q*a.x+p*b.x, k=q*a.y+p*b.y;
+   float gain=inversesqrt(max(1.e-8,max(dot(t,t),dot(k,k))));
+   vec2 detail=(sheet.gb*2.-1.);
+   n=normalize(n+(t*detail.x+k*detail.y)*gain*.80);
+   float skinRough=min(1.,texel.a/.85);
+   polish=mix(82.,19.,skinRough);metal=mix(.125,.052,skinRough);
+ }
+ float direct=max(dot(n,sunDir),0.);
+ float shadow=direct>0. ? shadowAt(world,n,direct):0.;
+ float spec=shadow>0.?pow(max(dot(n,normalize(sunDir+normalize(eye-world))),0.),polish):0.;
  vec3 tint=layer==0.?vec3(1.21,1.23,1.25):layer==1.?vec3(1.78,1.80,1.84):
     layer==2.?vec3(1.18,1.23,1.30):layer==3.?vec3(1.22,1.56,2.40):
     layer==4.?vec3(2.70,2.70,2.70):vec3(2.05,1.72,1.59);
  vec3 col=surface*mix(vec3(.87),sheet*tint,suit?.36:foil?.57:.82);
+ if(skin){
+   float vertexLuma=dot(surface,vec3(.2126,.7152,.0722));
+   col=surface*clamp(sheet.r/max(.018,vertexLuma),.25,2.5);
+   float trimWeight=smoothstep(.875,.96,texel.a);
+   col=mix(col,sheet.r*vec3(1.26,.53,.15),trimWeight);
+ }
  if(layer==1.)spec*=.78+.43*sheet.r;
  if(armor){col*=1.045;spec+=.07*direct*sheet.r;}
  if(foil){
@@ -158,6 +182,7 @@ in vec3 surface;
 in vec3 world;
 in vec2 material;
 in vec3 fittedNormal;
+in vec2 armUV;
 out vec4 pix;
 ${view}
 ${exteriorMaterial}
@@ -280,7 +305,7 @@ function program(a,b) {
  }
  gl.linkProgram(p);
  if(!gl.getProgramParameter(p,gl.LINK_STATUS))throw Error(gl.getProgramInfoLog(p));
- return {p, eye:gl.getUniformLocation(p,"eye"), basis:gl.getUniformLocation(p,"basis"), optics:gl.getUniformLocation(p,"optics"), roll:gl.getUniformLocation(p,"roll"), eva:gl.getUniformLocation(p,"eva"), photo:gl.getUniformLocation(p,"photo"), earth:gl.getUniformLocation(p,"earthMap"), backdrop:gl.getUniformLocation(p,"backdrop"), sunMap:gl.getUniformLocation(p,"sunMap"),armPose:gl.getUniformLocation(p,"armPose"), renderFraction:gl.getUniformLocation(p,"renderFraction"),surfaceTile:gl.getUniformLocation(p,"surfaceTile"), detailedShadow:gl.getUniformLocation(p,"detailedShadow")};
+ return {p, eye:gl.getUniformLocation(p,"eye"), basis:gl.getUniformLocation(p,"basis"), optics:gl.getUniformLocation(p,"optics"), roll:gl.getUniformLocation(p,"roll"), eva:gl.getUniformLocation(p,"eva"), photo:gl.getUniformLocation(p,"photo"), earth:gl.getUniformLocation(p,"earthMap"), backdrop:gl.getUniformLocation(p,"backdrop"), sunMap:gl.getUniformLocation(p,"sunMap"),armPose:gl.getUniformLocation(p,"armPose"),armSurfaceReady:gl.getUniformLocation(p,"armSurfaceReady"), renderFraction:gl.getUniformLocation(p,"renderFraction"),surfaceTile:gl.getUniformLocation(p,"surfaceTile"), detailedShadow:gl.getUniformLocation(p,"detailedShadow")};
 }
 const coarseShadow=matchMedia("(pointer:coarse)").matches;
 const maxShadow=gl?gl.getParameter(gl.MAX_TEXTURE_SIZE):1024;
@@ -333,15 +358,15 @@ function update(b,ptr,n,usage){
  }else gl.bufferData(gl.ARRAY_BUFFER,payload,usage);
  b.num=n/8;
 }
-let importedArm=null;
+let importedArm=null,armSurfaceReady=false;
 function uploadArm(bytes){
  const dv=new DataView(bytes);const n=dv.getUint32(4,true),elements=dv.getUint32(8,true);
- if(dv.getUint32(0,true)!==0x3256414b || n>40000 || elements>90000 || elements%3 || 12+n*24+elements*2!==bytes.byteLength)throw Error("Unexpected Apollo arm mesh");
+ if(dv.getUint32(0,true)!==0x3356414b || n>40000 || elements>90000 || elements%3 || 12+n*24+elements*2!==bytes.byteLength)throw Error("Unexpected Apollo arm mesh");
  const vao=gl.createVertexArray();gl.bindVertexArray(vao);
  const verts=gl.createBuffer();gl.bindBuffer(gl.ARRAY_BUFFER,verts);
  gl.bufferData(gl.ARRAY_BUFFER,new Uint8Array(bytes,12,n*24),gl.STATIC_DRAW);
- for(const [location,type,offset,normalized] of [[0,gl.SHORT,0,false],[3,gl.SHORT,6,false],[1,gl.UNSIGNED_BYTE,12,true],[4,gl.BYTE,16,true],[5,gl.BYTE,19,true]]){
-   gl.enableVertexAttribArray(location);gl.vertexAttribPointer(location,3,type,normalized,24,offset);
+ for(const [location,size,type,offset,normalized] of [[0,3,gl.SHORT,0,false],[3,3,gl.SHORT,6,false],[1,4,gl.UNSIGNED_BYTE,12,true],[4,3,gl.BYTE,16,true],[5,3,gl.BYTE,19,true],[6,2,gl.UNSIGNED_BYTE,22,false]]){
+   gl.enableVertexAttribArray(location);gl.vertexAttribPointer(location,size,type,normalized,24,offset);
  }
  const indices=gl.createBuffer();gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER,indices);
  gl.bufferData(gl.ELEMENT_ARRAY_BUFFER,new Uint8Array(bytes,12+n*24),gl.STATIC_DRAW);
@@ -412,7 +437,7 @@ function render(alpha) {
  gl.clear(gl.DEPTH_BUFFER_BIT);
  gl.enable(gl.DEPTH_TEST);bind(scene);
  gl.activeTexture(gl.TEXTURE2);gl.bindTexture(gl.TEXTURE_2D,shadowTexture);gl.uniform1i(scene.sunMap,2);gl.uniform1i(scene.detailedShadow,Number(detailed));
- gl.activeTexture(gl.TEXTURE4);gl.bindTexture(gl.TEXTURE_2D_ARRAY,surfaceTexture);gl.uniform1i(scene.surfaceTile,4);
+ gl.activeTexture(gl.TEXTURE4);gl.bindTexture(gl.TEXTURE_2D_ARRAY,surfaceTexture);gl.uniform1i(scene.surfaceTile,4);gl.uniform1i(scene.armSurfaceReady,Number(armSurfaceReady));
  meshes(scene,eva,pose);
  // The background lies behind the mesh; early depth rejects the sky and globe
  // across the station rather than shading those pixels and drawing over them.
@@ -644,26 +669,46 @@ try{
  configureShadow();
  surfaceTexture=gl.createTexture();
  gl.activeTexture(gl.TEXTURE4);gl.bindTexture(gl.TEXTURE_2D_ARRAY,surfaceTexture);
- gl.texImage3D(gl.TEXTURE_2D_ARRAY,0,gl.RGBA8,1,1,6,0,gl.RGBA,gl.UNSIGNED_BYTE,
-   new Uint8Array([211,204,193,255,143,142,139,255,216,207,189,255,207,150,82,255,84,83,83,255,117,136,150,255]));
+ gl.texImage3D(gl.TEXTURE_2D_ARRAY,0,gl.RGBA8,1,1,8,0,gl.RGBA,gl.UNSIGNED_BYTE,
+   new Uint8Array([211,204,193,255,143,142,139,255,216,207,189,255,207,150,82,255,84,83,83,255,117,136,150,255,128,128,128,200,128,128,128,200]));
  gl.texParameteri(gl.TEXTURE_2D_ARRAY,gl.TEXTURE_MIN_FILTER,gl.LINEAR);
- const surfaces=new Image();
+ const surfaces=new Image(), skinMap=new Image();
+ let stationTextureSide=0,loadingSkin=false;
+ function putLayers(source,start,rows,columns,side){
+  const tile=document.createElement("canvas");tile.width=side;tile.height=side;
+  const ctx=tile.getContext("2d");
+  for(let i=0;i<rows*columns;i++){
+   ctx.clearRect(0,0,side,side);
+   ctx.drawImage(source,(i%columns)*side,Math.floor(i/columns)*side,side,side,0,0,side,side);
+   gl.texSubImage3D(gl.TEXTURE_2D_ARRAY,0,0,0,start+i,side,side,1,gl.RGBA,gl.UNSIGNED_BYTE,tile);
+  }
+ }
+ async function uploadSkin(){
+  if(loadingSkin||stationTextureSide!==512||skinMap.naturalWidth!==1024||skinMap.naturalHeight!==512)return;
+  loadingSkin=true;
+  try{
+   const options={premultiplyAlpha:"none",colorSpaceConversion:"none"};
+   const maps=await Promise.all([0,512].map(x=>createImageBitmap(skinMap,x,0,512,512,options)));
+   gl.activeTexture(gl.TEXTURE4);gl.bindTexture(gl.TEXTURE_2D_ARRAY,surfaceTexture);
+   for(let i=0;i<2;i++){
+    gl.texSubImage3D(gl.TEXTURE_2D_ARRAY,0,0,0,6+i,512,512,1,gl.RGBA,gl.UNSIGNED_BYTE,maps[i]);
+    maps[i].close();
+   }
+   gl.generateMipmap(gl.TEXTURE_2D_ARRAY);armSurfaceReady=true;worldVersion++;
+  }catch(e){console.warn("Apollo material could not be loaded",e);}
+ }
  surfaces.onload=()=>{
   const side=surfaces.width/3;
   if(!Number.isInteger(side)||surfaces.height!==2*side)return;
-  const tile=document.createElement("canvas");tile.width=side;tile.height=side;
-  const ctx=tile.getContext("2d");
   gl.activeTexture(gl.TEXTURE4);gl.bindTexture(gl.TEXTURE_2D_ARRAY,surfaceTexture);
-  gl.texImage3D(gl.TEXTURE_2D_ARRAY,0,gl.RGBA8,side,side,6,0,gl.RGBA,gl.UNSIGNED_BYTE,null);
-  for(let i=0;i<6;i++){
-   ctx.drawImage(surfaces,(i%3)*side,Math.floor(i/3)*side,side,side,0,0,side,side);
-   gl.texSubImage3D(gl.TEXTURE_2D_ARRAY,0,0,0,i,side,side,1,gl.RGBA,gl.UNSIGNED_BYTE,tile);
-  }
-  gl.generateMipmap(gl.TEXTURE_2D_ARRAY);
+  gl.texImage3D(gl.TEXTURE_2D_ARRAY,0,gl.RGBA8,side,side,8,0,gl.RGBA,gl.UNSIGNED_BYTE,null);
+  putLayers(surfaces,0,2,3,side);gl.generateMipmap(gl.TEXTURE_2D_ARRAY);
   gl.texParameteri(gl.TEXTURE_2D_ARRAY,gl.TEXTURE_MIN_FILTER,gl.LINEAR_MIPMAP_LINEAR);
-  worldVersion++;
+  stationTextureSide=side;worldVersion++;uploadSkin();
  };
+ skinMap.onload=uploadSkin;
  surfaces.src=new URL("./surfaces.jpg",import.meta.url).href;
+ skinMap.src=new URL("./apollo-material.png?v=2",import.meta.url).href;
  earthTexture=gl.createTexture();gl.bindTexture(gl.TEXTURE_2D,earthTexture);
  gl.texImage2D(gl.TEXTURE_2D,0,gl.RGB,1,1,0,gl.RGB,gl.UNSIGNED_BYTE,new Uint8Array([0,0,0]));
  gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MIN_FILTER,gl.LINEAR);
@@ -693,7 +738,7 @@ try{
   wasi_snapshot_preview1:{proc_exit(n){throw Error("Station exited: "+n);}}
  });
  engine=instance.exports;engine._start();engine.select_deck(1);engine.tick(0,0,0,0);
- fetch(new URL("./apollo-arm.bin?v=3",import.meta.url)).then(async r=>{
+ fetch(new URL("./apollo-arm.bin?v=4",import.meta.url)).then(async r=>{
   if(!r.ok)throw Error("Apollo arm unavailable.");
   uploadArm(await r.arrayBuffer());
  }).catch(e=>console.warn(e.message));

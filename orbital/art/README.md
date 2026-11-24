@@ -24,18 +24,28 @@ export from a verified upstream release archive using Blender 5.1.1 or
 newer with auto-execution disabled:
 
 ```sh
-APOLLO_OUT=/tmp/apollo-arm.f32 blender -b -Y /path/to/astronaut.blend \
+APOLLO_OUT=/tmp/apollo-arm.f32 APOLLO_MAP_RAW=/tmp/apollo-map.raw \
+  blender -b -Y /path/to/astronaut.blend \
   -P art/bake-apollo-arm.py
 python3 art/pack-apollo-arm.py /tmp/apollo-arm.f32 apollo-arm.bin
+python3 art/build-apollo-map.py /tmp/apollo-map.raw /tmp/apollo-arm.f32 apollo-material.png
 ```
 
-The binary starts with `KAV2` followed by two little-endian uint32 counts.
+The binary starts with `KAV3` followed by two little-endian uint32 counts.
 Each 24-byte indexed vertex carries open/contact positions (six scaled
-int16), RGB, open/contact surface normals (six normalized int8) and padding.
-The index buffer stores uint16 indices. No original Blender file, textures,
-tools, or runtime asset loaders ship. Wosy supplies the frame-space arm origin
-and authoritative pose weight. The authored Wosy mesh remains a fallback if
-the optional packaged forearm cannot load.
+int16), RGB, open/contact surface normals (six normalized int8), and two
+12-bit UV coordinates in three formerly unused bytes. The index buffer
+stores uint16 indices. The compact map contains only material islands used
+by the forearm, padded for filtering. Its channels contain real source
+luminance, tangent-normal XY, and roughness, with an authored cuff band and
+stitched glove seam in the same UV coordinates. It joins the station texture
+array at load; only the fitted Apollo arm samples these two layers.
+
+No original Blender file, full-size maps, tools, or runtime asset loaders
+ship. Wosy supplies the frame-space arm origin and authoritative pose
+weight. The authored Wosy mesh remains a fallback if the packaged forearm
+cannot load; the vertex-colored Apollo arm still draws if its optional
+material map fails.
 
 **Station surfaces:** six generated albedo references (off-white anodized
 alloy, brushed titanium, woven insulation, warm film, graphite composite

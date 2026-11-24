@@ -175,21 +175,27 @@ assert.equal(roomLoads,6,'only deck changes, lock, alignment and reset republish
 console.log('EVA WASM: geometry, distinct grip, eligibility and release, exterior bulkhead, reset and indoor round-trip passed.');
 
 const raw=readFileSync(new URL('./apollo-arm.bin',import.meta.url));
-assert.equal(raw.toString('ascii',0,4),'KAV2');
+assert.equal(raw.toString('ascii',0,4),'KAV3');
 const vn=raw.readUInt32LE(4), ni=raw.readUInt32LE(8);
 assert.ok(vn<=40000 && ni%3===0 && ni>=24000 && ni<=32000 && raw.length<200000);
 assert.equal(raw.length,12+vn*24+ni*2);
 const phase=(i,o)=>raw.readInt16LE(12+i*24+o)/10000;
-let wrapped=0,intersect=0,fittedNormals=0;
+let wrapped=0,intersect=0,fittedNormals=0,sleeveTexels=0,gloveTexels=0;
 for(let i=0;i<vn;i++){
  const y=phase(i,8),z=phase(i,10);
  const radius=Math.hypot(y,z);
  if(z<-.023 && radius>.082 && radius<.119)wrapped++;
  if(radius<.08)intersect++;
  if(Math.hypot(...[16,17,18].map(c=>raw.readInt8(12+i*24+c)))>110)fittedNormals++;
+ const uvBits=raw.readUInt8(12+i*24+15), u=(uvBits%16)*256+raw.readUInt8(12+i*24+22);
+ const v=Math.floor(uvBits/16)*256+raw.readUInt8(12+i*24+23);
+ assert.ok(u>0&&u<4095&&v>0&&v<4095,'UVs remain inside their padded layers');
+ if(u<2048)gloveTexels++;else sleeveTexels++;
+
 }
 assert.ok(wrapped>0.08*vn && intersect<0.02*vn,'baked fingers wrap the rear rail without material collision');
 assert.ok(fittedNormals>vn*.98,'export carries authored normals');
+assert.ok(gloveTexels>1800&&sleeveTexels>1000,'UV lanes select both Apollo material tiles');
 for(let i=0;i<ni;i++)assert.ok(raw.readUInt16LE(12+vn*24+i*2)<vn);
 assert.deepEqual(evaContact.slice(12,15).map(x=>x.toFixed(2)),['-0.18','-0.57','-1.59']);
 console.log('Apollo forearm: two indexed authored poses, contact fit, normals, index bounds and compact asset passed.');
