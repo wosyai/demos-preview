@@ -7,7 +7,7 @@ let room,hand,state,engine,roomLoads=0,handLoads=0;
 function read(p,n){assert.equal(p%4,0);return new Float32Array(engine.memory.buffer,p,n).slice();}
 engine=new WebAssembly.Instance(wasm,{orbital:{
  scenery(p,n){room=read(p,n);roomLoads++;},hands(p,n){hand=read(p,n);handLoads++;},
- frame(p,n){assert.equal(n,18);state=read(p,n);}
+ frame(p,n){assert.equal(n,19);state=read(p,n);}
 }}).exports;
 engine._start();
 const step=(keys=0,yaw=0,pitch=0,dt=1/60)=>engine.tick(dt,keys,yaw,pitch);
@@ -30,8 +30,8 @@ for(let i=0;i<90;i++)step(64|4|2|16);
 assert.deepEqual(capture(),contact,'held action/thrust cannot exit the frozen handrail pose');
 assert.deepEqual(contact.slice(5,10),[0,0,0,1,2]);
 const box = (m) => [0,1,2].map(i=>{const a=m.filter((_,j)=>j%8===i);return [Math.min(...a),Math.max(...a)];});
-assert.notDeepEqual(box(initial.slice(18)),box(contact.slice(18)),'contact has its own authored hand volume');
-const [x,y,z]=box(contact.slice(18));assert.ok(x[0]<.745 && x[1]>.745 && y[1]>-.21 && z[0]<-1.94 && z[1]>-1.94,'contact mesh wraps the handrail');
+assert.notDeepEqual(box(initial.slice(19)),box(contact.slice(19)),'contact has its own authored hand volume');
+const [x,y,z]=box(contact.slice(19));assert.ok(x[0]<.745 && x[1]>.745 && y[1]>-.21 && z[0]<-1.94 && z[1]>-1.94,'contact mesh wraps the handrail');
 step();step(64);assert.equal(state[9],3);assert.equal(state[11],2);assert.ok(state[7]<0);
 const before=state[2];until(()=>state[9]===0,0);assert.ok(state[2]<before);
 reset();assert.deepEqual(capture(),initial,'reset restores exact initial pose');
@@ -46,17 +46,18 @@ engine.select_deck(1);step(0,0,0,0);
 const evaStart=capture(),evaRoom=room;
 assert.equal(state[15],1);assert.ok(evaRoom.length>=5400*8 && evaRoom.length<=16384*8 && evaRoom.length%24===0);
 assert.ok(evaRoom.every(Number.isFinite) && hand.every(Number.isFinite));
-assert.notDeepEqual(initial.slice(18),evaStart.slice(18),'EVA uses a separately authored pressurized glove');
+assert.notDeepEqual(initial.slice(19),evaStart.slice(19),'EVA uses a separately authored pressurized glove');
 assert.ok(evaRoom.some((x,i)=>i%8===4 && x<.14),'station includes the dark solar cell trim');
 step(64);assert.equal(state[9],0);step();
 until(()=>state[10]===1,4);
-step(0,1.15);assert.equal(state[10],0);step(64);assert.equal(state[9],0);
+step(0,1.15);assert.equal(state[10],0);assert.equal(state[18],1,"an off-axis approach gets the optional re-aim cue");step(64);assert.equal(state[9],0);
 step(0,-1.15);assert.equal(state[10],1);
+assert.equal(state[18],2,"a fast but eligible EVA gets the brake cue");
 step(64);until(()=>state[9]===2,64);
 const evaContact=capture();
 assert.deepEqual(evaContact.slice(5,10),[0,0,0,1,2]);
-assert.notDeepEqual(evaStart.slice(18),evaContact.slice(18));
-const extents=box(evaContact.slice(18));
+assert.notDeepEqual(evaStart.slice(19),evaContact.slice(19));
+const extents=box(evaContact.slice(19));
 assert.ok(extents[1][1]>-.472 && extents[2][0]<-1.665 && extents[2][1]>-1.50,'fingers are authored both above and behind the rounded rail');
 const heldUploads=handLoads;
 for(let i=0;i<85;i++)step(64|16|2);assert.deepEqual(capture(),evaContact);

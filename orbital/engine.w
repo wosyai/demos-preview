@@ -9,7 +9,7 @@ f32[8][16] page0 = [vertex, vertex, vertex, vertex, vertex, vertex, vertex, vert
 f32[8][16][16] page1 = [page0, page0, page0, page0, page0, page0, page0, page0, page0, page0, page0, page0, page0, page0, page0, page0];
 f32[8][16][16][16] page2 = [page1, page1, page1, page1, page1, page1, page1, page1, page1, page1, page1, page1, page1, page1, page1, page1];
 f32[8][16][16][16][4] mesh = [page2,page2,page2,page2];
-f32[18] state = [0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0];
+f32[19] state = [0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0];
 i32 count = 0;
 f32 r = 0.0;
 f32 g = 0.0;
@@ -530,7 +530,8 @@ unit(f32,i32,f32,f32) tick = fn(dt,keys,look_x,look_y) {
     f32 dock_y=if(deck==0){-0.04}else{-0.025};
     f32 dock_z=if(deck==0){-1.26}else{rail_depth(station_leg)+0.71};
     f32 reach_limit=if(deck==1 && reach==1.0){0.55}else{0.37};
-    bool nearby=(pilot_x-dock_x)*(pilot_x-dock_x)+(pilot_y-dock_y)*(pilot_y-dock_y)+(pilot_z-dock_z)*(pilot_z-dock_z)<reach_limit;
+    f32 distance_sq=(pilot_x-dock_x)*(pilot_x-dock_x)+(pilot_y-dock_y)*(pilot_y-dock_y)+(pilot_z-dock_z)*(pilot_z-dock_z);
+    bool nearby=distance_sq<reach_limit;
     bool aligned=yaw> -0.46 && yaw<0.71 && pitch> -0.73 && pitch<0.33;
     reach=if(nearby&&aligned){1.0}else{0.0};
     if((keys&64)!=0 && latch==0){
@@ -566,10 +567,15 @@ unit(f32,i32,f32,f32) tick = fn(dt,keys,look_x,look_y) {
     state[13]=if(deck==0){-0.21}else{pilot_y-0.40+(-0.57-pilot_y+0.40)*grip};
     state[14]=if(deck==0){-1.94}else{pilot_z-0.80+(rail_depth(station_leg)-pilot_z+0.80)*grip}; state[15]=core.sint_to_float<f32>(deck);
     state[16]=core.sint_to_float<f32>(station_leg); state[17]=if(cargo_locked){1.0}else{0.0};
+    state[18]=0.0;
+    if(deck==1 && mode==0){
+        if(distance_sq<0.73 && !aligned){state[18]=1.0;};
+        if(distance_sq<0.94 && aligned && vx*vx+vy*vy+vz*vz>0.71){state[18]=2.0;};
+    };
     if((deck==0||!external_arm) && (mesh_x!=pilot_x || mesh_y!=pilot_y || mesh_z!=pilot_z || mesh_grip!=grip || mesh_deck!=deck)){
         if(deck==0){glove();}else{eva_glove();};
         mesh_x=pilot_x;mesh_y=pilot_y;mesh_z=pilot_z;mesh_grip=grip;mesh_deck=deck;
     };
-    unsafe {host.frame(core.pointer_cast<*?u8>(&?state[0]),18);};
+    unsafe {host.frame(core.pointer_cast<*?u8>(&?state[0]),19);};
 };
 %%end

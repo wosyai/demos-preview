@@ -69,3 +69,19 @@ requires a lower resolution. A detected software rasterizer starts with a
 reduced moving resolution. Choose **Full detail** (or add `?quality=full` to
 the URL) to disable dynamic reductions and favor detail; a slower graphics
 device may then drop frames.
+
+## Local performance trace
+
+Open `?quality=full&debug=timing` to display the canvas's actual backing
+dimensions and current requestAnimationFrame P90. The same renderer and
+gameplay run at full detail. Use **Record trace**, complete the three-rail
+route, then **Stop trace** and **Save trace**. The download is local JSON:
+only relative rAF timestamps, backing dimensions, phase/leg numbers, and a
+broad renderer class. It contains no account data, URLs, or device identifiers,
+and is never uploaded by the game.
+
+Run one trace without recording any video to measure play. If testing video,
+repeat separately with your capture tool and compare its source frame
+timestamps. rAF measures the browser's update opportunities, not screen
+presentation or encoder cadence. Keep the tab foregrounded and note the
+device/browser and observed issue separately, only if you choose to share it.

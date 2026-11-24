@@ -366,10 +366,12 @@ function hud(){
   tip=["Drift along the hull to the silver rail.","Follow the blue collars along the scaffold.","Reach the gold brace ahead of the cargo." ][leg];
   if(locked){objective="Cargo lock secured";tip="Green light confirmed. Traverse complete.";action="Lock secured";}
   else if(mode===3){objective="Pushing off";tip="Drift toward the next rail.";action="Pushing off";}
-  else if(mode===2&&leg===2){objective="Cargo lock in reach";tip="Seat the latch until the indicator turns green.";action="Seat cargo lock";}
+  else if(mode===2&&leg===2){objective="Cargo lock in reach";tip="Seat the pin. The amber indicator turns green.";action="Seat cargo lock";}
   else if(mode===2){objective=rail+" secured";tip="Open your hand and push toward the next rail.";action="Release & push";}
   else if(mode===1){objective="Gripping the rail";tip="Your drift is arrested.";}
   else if(near){objective=rail+" in reach";tip="Grip to stop drifting.";}
+  if(mode===0&&frame[18]===1)tip="Turn back toward the rail.";
+  if(mode===0&&frame[18]===2)tip="Ease off thrust or brake to steady the approach.";
  }else if(mark===2){objective="Exercise complete";tip="You pushed off. Reset to practice again.";}
  else if(mode===2){objective="Rail secured";tip="Release the rail to push off.";action="Release & push";}
  else if(mode===1){objective="Gripping the handrail";tip="Your drift is arrested.";}
@@ -380,6 +382,51 @@ function hud(){
  if($("action").textContent!==action)$("action").textContent=action;
  const task=eva?"EVA / "+(leg+1)+" OF 3":"TRAINING 01 / HANDRAIL";
  if($("exercise").textContent!==task)$("exercise").textContent=task;
+}
+const timing=new URLSearchParams(location.search).get("debug")==="timing"?setupTiming():null;
+function setupTiming(){
+ const panel=document.createElement("aside");
+ panel.setAttribute("aria-label","Local timing diagnostics");
+ panel.className="orbital-timing";
+ const readout=document.createElement("output"), start=document.createElement("button"), save=document.createElement("button");
+ start.type=save.type="button";start.textContent="Record trace";save.textContent="Save trace";save.disabled=true;
+ panel.append(readout,start,save);document.querySelector("main").append(panel);
+ let samples=[],on=false,epoch=0,prev=0,refresh=0,buffer=[];
+ const size=()=>[canvas.width,canvas.height];
+ const device=()=>{
+  const ext=gl?.getExtension("WEBGL_debug_renderer_info");
+  if(!ext)return "renderer not reported";
+  const r=String(gl.getParameter(ext.UNMASKED_RENDERER_WEBGL));
+  return /swiftshader|llvmpipe|software/i.test(r)?"software rasterizer":"renderer not identified as software";
+ };
+ const kind=device();
+ start.onclick=()=>{
+   if(on){on=false;start.textContent="Record trace";save.disabled=!samples.length;}
+   else{samples=[];epoch=0;on=true;start.textContent="Stop trace";save.disabled=true;}
+ };
+ save.onclick=()=>{
+   const url=URL.createObjectURL(new Blob([JSON.stringify({
+     format:"orbital-raf-v1",rendererClass:kind, samples,
+     columns:["elapsedMs","rafDeltaMs","backingWidth","backingHeight","deck","leg","phase","locked"]
+   })],{type:"application/json"}));
+   const a=document.createElement("a");a.href=url;a.download="orbital-frame-trace.json";a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);
+ };
+ return t=>{
+   const dt=t-prev;prev=t;
+   if(dt>0&&dt<1000){buffer.push(dt);if(buffer.length>60)buffer.shift();}
+   const [w,h]=size();
+   if(on&&active&&frame&&samples.length<18000){
+    if(!epoch)epoch=t;
+    samples.push([Math.round((t-epoch)*10)/10,Math.round(dt*10)/10,w,h,frame[15],frame[16],frame[9],frame[17]]);
+    if(samples.length===18000)start.click();
+   }
+   if(t-refresh>400){
+    refresh=t;
+    const sorted=buffer.slice().sort((a,b)=>a-b);
+    const p90=sorted.length?sorted[Math.floor((sorted.length-1)*.9)].toFixed(1):"—";
+    readout.textContent=w+"×"+h+" backing · rAF P90 "+p90+" ms";
+   }
+ };
 }
 function animate(t){
  requestAnimationFrame(animate);
@@ -416,6 +463,7 @@ function animate(t){
   hud();
  }else if(!active)remainder=0;
  render(Math.max(0,Math.min(1,remainder*60)));
+ if(timing)timing(t);
 }
 function clear(){held.clear();touch.clear();grabbed=null;dx=0;dy=0;pulse=false;}
 canvas.addEventListener("pointerdown",e=>{
@@ -499,12 +547,12 @@ try{
   gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_T,gl.CLAMP_TO_EDGE);earthReady=1;worldVersion++;
  };
  earth.src=new URL("./earth.jpg",import.meta.url).href;
- const response=await fetch(new URL("./orbital.wasm?v=5",import.meta.url));
+ const response=await fetch(new URL("./orbital.wasm?v=6",import.meta.url));
  if(!response.ok)throw Error("The station engine could not be downloaded.");
  const {instance}=await WebAssembly.instantiate(await response.arrayBuffer(),{
   orbital:{
    scenery(p,n){update(room,p,n,gl.STATIC_DRAW);},hands(p,n){update(hand,p,n,gl.DYNAMIC_DRAW);},
-   frame(p,n){if(n!==18)throw Error("Unexpected station frame");frame=new Float32Array(engine.memory.buffer,p,n).slice();}
+   frame(p,n){if(n!==19)throw Error("Unexpected station frame");frame=new Float32Array(engine.memory.buffer,p,n).slice();}
   },
   wasi_snapshot_preview1:{proc_exit(n){throw Error("Station exited: "+n);}}
  });
