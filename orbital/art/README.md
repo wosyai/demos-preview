@@ -68,3 +68,12 @@ camera projection or scene image. Only the panel's 36 relief vertices
 select this generated material. Geometry, external shadows, and current
 sunlight still come from the live scene. Pack the reference with
 `python3 art/build-thermal-stamp.py /path/to/generated-ortho.png`.
+
+**Airlock pressure skin:** a separate OpenAI-generated UV albedo was registered
+from the exact orthographic guide for the formed courses by the first airlock
+rail (world z = −4.16 to −1.74, y = −0.76 to 0.96). The two relieved courses and
+returns are Wosy geometry, and the split uses an actual open gap over a seam
+backer. Repack the generated guide with `python3 art/build-pressure-skin.py
+/path/to/pressure-skin-ortho.png`. The nearby circular door uses a local
+shadow receiver offset to prevent false radial acne while keeping fixture
+shadows. Engine fit and suit colors are unchanged.

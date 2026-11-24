@@ -81,6 +81,7 @@ uniform float renderFraction;
 uniform highp sampler2DArray surfaceTile;
 uniform bool armSurfaceReady;
 uniform bool panelStampReady;
+uniform bool pressureStampReady;
 ${sun}
 float shadowAt(vec3 p,vec3 n,float direct){
  if(detailedShadow==0){
@@ -109,11 +110,12 @@ vec3 sunColor(vec3 n){
  bool solar=surface.b>2.*surface.r && material.y>.4 && material.y<.52;
  bool skin=suit&&armSurfaceReady;
  bool stamp=maskedPanel&&panelStampReady;
+ bool pressure=pressureStampReady&&abs(material.y-.752)<.0007;
  vec3 lamp=vec3(1.00,.91,.78);
  bool warm=surface.r>surface.b*1.53 && surface.g<surface.r*.86 && !emitter;
  bool blue=surface.b>surface.r*1.20 && surface.g>surface.r*1.08 && !solar;
  bool dark=max(surface.r,max(surface.g,surface.b))<.34;
- float layer=skin?(armUV.x<.5?6.:7.):stamp?8.:suit||foil?2.:warm?3.:dark?4.:blue?5.:steel?1.:0.;
+ float layer=skin?(armUV.x<.5?6.:7.) :pressure?9.:stamp?8.:suit||foil?2.:warm?3.:dark?4.:blue?5.:steel?1.:0.;
  vec3 wall=abs(n);
  vec2 tex=wall.x>max(wall.y,wall.z)?world.zy:wall.y>wall.z?world.xz:world.xy;
  vec2 uv=vec2(armUV.x*2.-(layer==7.?1.:0.),armUV.y);
@@ -127,13 +129,13 @@ vec3 sunColor(vec3 n){
    thermalUV=clamp(registered,vec2(.002),vec2(.998));
   }
  }
- vec2 grain=skin?uv:layer==1.?vec2(world.x*.87,(world.y*.78+world.z*.43)*1.42):
+ vec2 grain=skin?uv:pressure?clamp(vec2((world.z+4.16)/2.42,1.-(world.y+.76)/1.72),.002,.998):layer==1.?vec2(world.x*.87,(world.y*.78+world.z*.43)*1.42):
    suit?tex*vec2(13.5,16.):foil?thermalUV:
    layer==4.?tex*1.8:tex*vec2(.91,1.14);
  vec4 texel=texture(surfaceTile,vec3(grain,layer));
  vec3 sheet=texel.rgb;
- float polish=layer==1.?70.:layer==3.?36.:layer==5.?40.:29.;
- float metal=layer==1.?.49:layer==3.?.21:solar?.18:.075;
+ float polish=pressure?47.:layer==1.?70.:layer==3.?36.:layer==5.?40.:29.;
+ float metal=pressure?.17:layer==1.?.49:layer==3.?.21:solar?.18:.075;
  if(skin){
    vec3 q=cross(dFdy(world),n),p=cross(n,dFdx(world));
    vec2 a=dFdx(uv),b=dFdy(uv);
@@ -145,9 +147,10 @@ vec3 sunColor(vec3 n){
    polish=mix(82.,19.,skinRough);metal=mix(.125,.052,skinRough);
  }
  float direct=max(dot(n,sunDir),0.);
- float shadow=direct>0. ? shadowAt(world,n,direct):0.;
+ bool doorPlate=abs(material.y-.754)<.0007;
+ float shadow=direct>0. ? shadowAt(world+(doorPlate?n*.018:vec3(0.)),n,direct):0.;
  float spec=shadow>0.?pow(max(dot(n,normalize(sunDir+normalize(eye-world))),0.),polish):0.;
- vec3 tint=layer==0.||stamp?vec3(1.21,1.23,1.25):layer==1.?vec3(1.78,1.80,1.84):
+ vec3 tint=layer==0.||stamp||pressure?vec3(1.21,1.23,1.25):layer==1.?vec3(1.78,1.80,1.84):
     layer==2.?vec3(1.18,1.23,1.30):layer==3.?vec3(1.22,1.56,2.40):
     layer==4.?vec3(2.70,2.70,2.70):vec3(2.05,1.72,1.59);
  vec3 col=surface*mix(vec3(.87),sheet*tint,suit?.36:foil?.93:.82);
@@ -312,7 +315,7 @@ function program(a,b) {
  }
  gl.linkProgram(p);
  if(!gl.getProgramParameter(p,gl.LINK_STATUS))throw Error(gl.getProgramInfoLog(p));
- return {p, eye:gl.getUniformLocation(p,"eye"), basis:gl.getUniformLocation(p,"basis"), optics:gl.getUniformLocation(p,"optics"), roll:gl.getUniformLocation(p,"roll"), eva:gl.getUniformLocation(p,"eva"), photo:gl.getUniformLocation(p,"photo"), earth:gl.getUniformLocation(p,"earthMap"), backdrop:gl.getUniformLocation(p,"backdrop"), sunMap:gl.getUniformLocation(p,"sunMap"),armPose:gl.getUniformLocation(p,"armPose"),armSurfaceReady:gl.getUniformLocation(p,"armSurfaceReady"),panelStampReady:gl.getUniformLocation(p,"panelStampReady"), renderFraction:gl.getUniformLocation(p,"renderFraction"),surfaceTile:gl.getUniformLocation(p,"surfaceTile"), detailedShadow:gl.getUniformLocation(p,"detailedShadow")};
+ return {p, eye:gl.getUniformLocation(p,"eye"), basis:gl.getUniformLocation(p,"basis"), optics:gl.getUniformLocation(p,"optics"), roll:gl.getUniformLocation(p,"roll"), eva:gl.getUniformLocation(p,"eva"), photo:gl.getUniformLocation(p,"photo"), earth:gl.getUniformLocation(p,"earthMap"), backdrop:gl.getUniformLocation(p,"backdrop"), sunMap:gl.getUniformLocation(p,"sunMap"),armPose:gl.getUniformLocation(p,"armPose"),armSurfaceReady:gl.getUniformLocation(p,"armSurfaceReady"),panelStampReady:gl.getUniformLocation(p,"panelStampReady"),pressureStampReady:gl.getUniformLocation(p,"pressureStampReady"), renderFraction:gl.getUniformLocation(p,"renderFraction"),surfaceTile:gl.getUniformLocation(p,"surfaceTile"), detailedShadow:gl.getUniformLocation(p,"detailedShadow")};
 }
 const coarseShadow=matchMedia("(pointer:coarse)").matches;
 const maxShadow=gl?gl.getParameter(gl.MAX_TEXTURE_SIZE):1024;
@@ -365,7 +368,7 @@ function update(b,ptr,n,usage){
  }else gl.bufferData(gl.ARRAY_BUFFER,payload,usage);
  b.num=n/8;
 }
-let importedArm=null,armSurfaceReady=false,panelStampReady=false;
+let importedArm=null,armSurfaceReady=false,panelStampReady=false,pressureStampReady=false;
 function uploadArm(bytes){
  const dv=new DataView(bytes);const n=dv.getUint32(4,true),elements=dv.getUint32(8,true);
  if(dv.getUint32(0,true)!==0x3356414b || n>40000 || elements>90000 || elements%3 || 12+n*24+elements*2!==bytes.byteLength)throw Error("Unexpected Apollo arm mesh");
@@ -444,7 +447,7 @@ function render(alpha) {
  gl.clear(gl.DEPTH_BUFFER_BIT);
  gl.enable(gl.DEPTH_TEST);bind(scene);
  gl.activeTexture(gl.TEXTURE2);gl.bindTexture(gl.TEXTURE_2D,shadowTexture);gl.uniform1i(scene.sunMap,2);gl.uniform1i(scene.detailedShadow,Number(detailed));
- gl.activeTexture(gl.TEXTURE4);gl.bindTexture(gl.TEXTURE_2D_ARRAY,surfaceTexture);gl.uniform1i(scene.surfaceTile,4);gl.uniform1i(scene.armSurfaceReady,Number(armSurfaceReady));gl.uniform1i(scene.panelStampReady,Number(panelStampReady));
+ gl.activeTexture(gl.TEXTURE4);gl.bindTexture(gl.TEXTURE_2D_ARRAY,surfaceTexture);gl.uniform1i(scene.surfaceTile,4);gl.uniform1i(scene.armSurfaceReady,Number(armSurfaceReady));gl.uniform1i(scene.panelStampReady,Number(panelStampReady));gl.uniform1i(scene.pressureStampReady,Number(pressureStampReady));
  meshes(scene,eva,pose);
  // The background lies behind the mesh; early depth rejects the sky and globe
  // across the station rather than shading those pixels and drawing over them.
@@ -678,10 +681,10 @@ try{
  configureShadow();
  surfaceTexture=gl.createTexture();
  gl.activeTexture(gl.TEXTURE4);gl.bindTexture(gl.TEXTURE_2D_ARRAY,surfaceTexture);
- gl.texImage3D(gl.TEXTURE_2D_ARRAY,0,gl.RGBA8,1,1,9,0,gl.RGBA,gl.UNSIGNED_BYTE,
-   new Uint8Array([211,204,193,255,143,142,139,255,216,207,189,255,207,150,82,255,84,83,83,255,117,136,150,255,128,128,128,200,128,128,128,200,217,216,212,255]));
+ gl.texImage3D(gl.TEXTURE_2D_ARRAY,0,gl.RGBA8,1,1,10,0,gl.RGBA,gl.UNSIGNED_BYTE,
+   new Uint8Array([211,204,193,255,143,142,139,255,216,207,189,255,207,150,82,255,84,83,83,255,117,136,150,255,128,128,128,200,128,128,128,200,217,216,212,255,213,212,209,255]));
  gl.texParameteri(gl.TEXTURE_2D_ARRAY,gl.TEXTURE_MIN_FILTER,gl.LINEAR);
- const surfaces=new Image(), skinMap=new Image(), panelStamp=new Image();
+ const surfaces=new Image(), skinMap=new Image(), panelStamp=new Image(), pressureStamp=new Image();
  let stationTextureSide=0,loadingSkin=false;
  function putLayers(source,start,rows,columns,side){
   const tile=document.createElement("canvas");tile.width=side;tile.height=side;
@@ -710,10 +713,10 @@ try{
   const side=surfaces.width/3;
   if(!Number.isInteger(side)||surfaces.height!==2*side)return;
   gl.activeTexture(gl.TEXTURE4);gl.bindTexture(gl.TEXTURE_2D_ARRAY,surfaceTexture);
-  gl.texImage3D(gl.TEXTURE_2D_ARRAY,0,gl.RGBA8,side,side,9,0,gl.RGBA,gl.UNSIGNED_BYTE,null);
+  gl.texImage3D(gl.TEXTURE_2D_ARRAY,0,gl.RGBA8,side,side,10,0,gl.RGBA,gl.UNSIGNED_BYTE,null);
   putLayers(surfaces,0,2,3,side);gl.generateMipmap(gl.TEXTURE_2D_ARRAY);
   gl.texParameteri(gl.TEXTURE_2D_ARRAY,gl.TEXTURE_MIN_FILTER,gl.LINEAR_MIPMAP_LINEAR);
-  stationTextureSide=side;worldVersion++;uploadSkin();uploadStamp();
+  stationTextureSide=side;worldVersion++;uploadSkin();uploadStamp();uploadPressure();
  };
  function uploadStamp(){
   if(panelStampReady||stationTextureSide!==512||panelStamp.naturalWidth!==512||panelStamp.naturalHeight!==512)return;
@@ -721,11 +724,19 @@ try{
   putLayers(panelStamp,8,1,1,512);gl.generateMipmap(gl.TEXTURE_2D_ARRAY);
   panelStampReady=true;worldVersion++;
  }
+ function uploadPressure(){
+  if(pressureStampReady||stationTextureSide!==512||pressureStamp.naturalWidth!==512||pressureStamp.naturalHeight!==512)return;
+  gl.activeTexture(gl.TEXTURE4);gl.bindTexture(gl.TEXTURE_2D_ARRAY,surfaceTexture);
+  putLayers(pressureStamp,9,1,1,512);gl.generateMipmap(gl.TEXTURE_2D_ARRAY);
+  pressureStampReady=true;worldVersion++;
+ }
+ pressureStamp.onload=uploadPressure;
  panelStamp.onload=uploadStamp;
  skinMap.onload=uploadSkin;
  surfaces.src=new URL("./surfaces.jpg?v=2",import.meta.url).href;
  skinMap.src=new URL("./apollo-material.png?v=2",import.meta.url).href;
  panelStamp.src=new URL("./thermal-panel.jpg",import.meta.url).href;
+ pressureStamp.src=new URL("./pressure-skin.jpg",import.meta.url).href;
  earthTexture=gl.createTexture();gl.bindTexture(gl.TEXTURE_2D,earthTexture);
  gl.texImage2D(gl.TEXTURE_2D,0,gl.RGB,1,1,0,gl.RGB,gl.UNSIGNED_BYTE,new Uint8Array([0,0,0]));
  gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MIN_FILTER,gl.LINEAR);
@@ -745,7 +756,7 @@ try{
   gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_T,gl.CLAMP_TO_EDGE);earthReady=1;worldVersion++;
  };
  earth.src=new URL("./earth.jpg?v=2",import.meta.url).href;
- const response=await fetch(new URL("./orbital.wasm?v=15",import.meta.url));
+ const response=await fetch(new URL("./orbital.wasm?v=16",import.meta.url));
  if(!response.ok)throw Error("The station engine could not be downloaded.");
  const {instance}=await WebAssembly.instantiate(await response.arrayBuffer(),{
   orbital:{

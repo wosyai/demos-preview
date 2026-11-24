@@ -50,6 +50,12 @@ const maskedPanel=[];
 for(let i=0;i<evaRoom.length;i+=8)if(Math.abs(evaRoom[i+7]-.18375)<.0001)maskedPanel.push(evaRoom.slice(i,i+8));
 assert.equal(maskedPanel.length,36,'only the relief faces of thermal panel n=7 are registered');
 assert.ok(maskedPanel.every(v=>v[0]<-1.41&&v[0]>-1.51&&v[1]>-.761&&v[1]<.051&&v[2]>-6.641&&v[2]<-4.219));
+const pressurePanel=[];
+for(let i=0;i<evaRoom.length;i+=8)if(Math.abs(evaRoom[i+7]-.752)<.0001)pressurePanel.push(evaRoom.slice(i,i+8));
+assert.equal(pressurePanel.length,36,'generated pressure albedo belongs to exactly two formed courses');
+assert.ok(pressurePanel.every(v=>v[0]>=-1.586&&v[0]<=-1.530&&v[1]>=-.761&&v[1]<=.961&&v[2]>=-4.161&&v[2]<=-1.739));
+assert.ok(pressurePanel.every(v=>v[1]<=-.089||v[1]>=-.062),'pressure seam is open in actual mesh');
+
 const unpackStationNormal=(code)=>{
  const n=-code-1,u=Math.floor(n/255)/127-1,v=(n%255)/127-1,z=1-Math.abs(u)-Math.abs(v);
  return z<0?[(1-Math.abs(v))*Math.sign(u+1e-6),(1-Math.abs(u))*Math.sign(v+1e-6),z]:[u,v,z];
