@@ -355,7 +355,7 @@ function batch() {
  return {vao,buffer,num:0};
 }
 function update(b,ptr,n,usage){
- if(n<0 || n%24!==0 || n/8>19000)throw Error("Invalid orbital mesh");
+ if(n<0 || n%24!==0 || n/8>19500)throw Error("Invalid orbital mesh");
  const payload=new Float32Array(engine.memory.buffer,ptr,n);
  worldVersion++;
  gl.bindVertexArray(b.vao);gl.bindBuffer(gl.ARRAY_BUFFER,b.buffer);
@@ -488,7 +488,7 @@ function hud(){
    else if(align===5&&near){objective="Airlock handle in reach";tip="Grip the amber locking bar.";action="Grip hatch";}
    else if(align===5&&cue===3){objective="Brake at the hatch";tip="Hold brake until your drift settles.";action="Brake first";compactTip="Hold BRAKE";}
    else if(align===5&&cue>=4&&cue<8){objective="Face the hatch handle";tip="Drag toward the amber handle.";action="Aim at handle";aim=cue;compactTip="Drag toward handle";}
-   else if(align===5||align===4&&mode===3){objective="Return to the airlock";tip="Ride the push back toward the round hatch, then brake.";action="Out of reach";compactTip=cue>=8?"Look toward hatch":"Drift toward hatch";aim=cue===8?4:cue===9?5:0;}
+   else if(align===5||align===4&&mode===3){objective="Return to the airlock";tip="Ride the push back toward the round hatch, then brake.";action="Out of reach";compactTip=cue>=8?"Find round hatch":"Drift to round hatch";aim=cue===8?4:cue===9?5:0;}
    else if(align===4){objective="Cargo transfer complete";tip="Release the console and return to the round airlock hatch.";action="Release & return";}
    else if(align===3){objective="Cargo seated";tip="Close the cradle keepers and release the robot grip.";action="Transfer cargo";compactTip="Close keepers";}
    else if(align===2){objective="Alignment handle secured";tip="Set the handle to lower the load into its shoes.";action="Set alignment";}
@@ -512,10 +512,11 @@ function hud(){
  else if(mode===2){objective="Rail secured";tip="Release the rail to push off.";action="Release & push";}
  else if(mode===1){objective="Gripping the handrail";tip="Your drift is arrested.";}
  else if(near){objective="Handrail in reach";tip="Grip to stop drifting.";}
- const reticle=$("reticle"), marker=aim?["+","+","+","+","→","←","↑","↓"][aim]:"+";
+ const routeArrow=Boolean(aim)&&align===5&&frame[18]>=8;
+ const reticle=$("reticle"), marker=routeArrow?(aim===4?"❯":"❮"):aim?["+","+","+","+","→","←","↑","↓"][aim]:"+";
  if(reticle.textContent!==marker)reticle.textContent=marker;
  reticle.classList.toggle("aim-cue",Boolean(aim));
- reticle.classList.toggle("route-aim",Boolean(aim)&&align===5&&frame[18]>=8);
+ reticle.classList.toggle("route-aim",routeArrow);
  if($("objective").textContent!==objective)$("objective").textContent=objective;
  if($("help").textContent!==tip)$("help").textContent=tip;
  const compact=$("compact-help");
@@ -780,7 +781,7 @@ try{
   gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_T,gl.CLAMP_TO_EDGE);earthReady=1;worldVersion++;
  };
  earth.src=new URL("./earth.jpg?v=2",import.meta.url).href;
- const response=await fetch(new URL("./orbital.wasm?v=19",import.meta.url));
+ const response=await fetch(new URL("./orbital.wasm?v=20",import.meta.url));
  if(!response.ok)throw Error("The station engine could not be downloaded.");
  const {instance}=await WebAssembly.instantiate(await response.arrayBuffer(),{
   orbital:{

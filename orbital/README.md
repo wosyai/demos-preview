@@ -84,7 +84,8 @@ The blue console first seats the cargo, then a separate press closes both
 cradle keepers and opens the robot jaws at a fixed cargo position. Green
 keeper indicators confirm the completed transfer. Release the console and ride the
 return push, brake at the round airlock, and aim toward the amber locking bar.
-Grip the bar, then lock it into the upper detent to complete the EVA. The
+Grip the machined bar and slide its carriage into the upper detent to complete
+the EVA. Its local status light confirms the lock. The
 airlock stays closed: this exercise ends with an external lock confirmation,
 not a re-entry or pressurization sequence. Each control invalidates
 the stationary batch once. The blue console,
