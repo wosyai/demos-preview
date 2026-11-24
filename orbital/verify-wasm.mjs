@@ -76,6 +76,8 @@ assert.equal(state[16],2);
 until(()=>state[10]===1,4);
 step(64);until(()=>state[9]===2,64);
 const beforeLatch=room, countBeforeLatch=roomLoads;
+const openPin=[...state.slice(12,15)], openGlove=hand, openHandLoads=handLoads;
+assert.ok(room.length<16384*8,'exterior geometry fits without clipping the assembly batch');
 assert.equal(state[14].toFixed(2),'-4.88');
 for(let i=0;i<120;i++)step(64);
 assert.equal(state[17],0,'holding grip does not seat the latch automatically');
@@ -83,10 +85,21 @@ step();step(64);
 assert.equal(state[17],1);assert.equal(state[9],2,'latch is secured with the glove still braced');
 assert.equal(roomLoads,countBeforeLatch+1);
 assert.notDeepEqual(room,beforeLatch,'the contact lever and status light visibly change');
+const seatedPin=[...state.slice(12,15)];
+assert.ok(Math.abs(seatedPin[1]-openPin[1]-.12)<1e-5,'Wosy moves the held wrist exactly with the detent');
+assert.equal(seatedPin[0],openPin[0]);assert.equal(seatedPin[2],openPin[2]);
+assert.notDeepEqual(hand,openGlove,'fallback glove reaches the same seated endpoint');
+assert.equal(handLoads,openHandLoads+1,'fallback uploads the hand exactly once for seating');
+function pinVertices(mesh,pose){
+ return mesh.filter((v,i)=>i%8===1&&Math.abs(mesh[i-1]-pose[0])<.16&&
+   Math.abs(v-pose[1])<.088&&Math.abs(mesh[i+1]-pose[2])<.088&&
+   Math.abs(mesh[i+2]-.51)<1e-5&&Math.abs(mesh[i+6]-.62)<1e-5).length;
+}
+assert.ok(pinVertices(beforeLatch,openPin)>30 && pinVertices(room,seatedPin)>30,'wrist and exposed lock shaft share the same physical anchor in both endpoints');
 function luminanceCode(mesh){
  const found=[];
  for(let i=0;i<mesh.length;i+=8){
-  if(mesh[i]>-.03&&mesh[i]<.20&&mesh[i+1]>.062&&mesh[i+1]<.112&&mesh[i+2]>-5.09&&mesh[i+2]<-5.05&&mesh[i+7]>.98)
+  if(mesh[i]>-.03&&mesh[i]<.20&&mesh[i+1]>-.275&&mesh[i+1]<-.23&&mesh[i+2]>-5.074&&mesh[i+2]<-5.05&&mesh[i+7]>.98)
    found.push([mesh[i+3],mesh[i+4],mesh[i+5]]);
  }
  return found;
@@ -130,6 +143,16 @@ const uploadsForExternal=handLoads;
 until(()=>state[10]===1,4);
 step(64);until(()=>state[9]===2,64);
 assert.equal(handLoads,uploadsForExternal,'a loaded arm omits Wosy fallback tessellation and uploads');
+for (let next=1;next<3;next++) {
+ step();step(64);until(()=>state[9]===0,0);
+ until(()=>state[10]===1,4);
+ step(64);until(()=>state[9]===2,64);
+ assert.equal(state[16],next);
+}
+assert.deepEqual([...state.slice(12,15)],openPin);
+step();step(64);
+assert.deepEqual([...state.slice(12,15)],seatedPin,'the imported forearm receives the same exact pre/post seating endpoints');
+assert.equal(handLoads,uploadsForExternal,'seating the imported forearm never calls the mesh fallback');
 engine.select_arm(0);step();
 assert.equal(handLoads,uploadsForExternal+1,'the authored mesh can be restored without resetting EVA');
 assert.equal(state[9],2);
