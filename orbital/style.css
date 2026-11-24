@@ -23,3 +23,6 @@ footer{position:absolute;bottom:1.35rem;left:50%;transform:translateX(-50%);widt
 /* Explicit URL-only diagnostics; normal play never creates this panel. */
 .orbital-timing{position:absolute;right:.6rem;top:4.3rem;z-index:2;display:flex;align-items:center;gap:.35rem;flex-wrap:wrap;max-width:90vw;padding:.35rem;background:#0b1929e8;border:1px solid #65828b;border-radius:.45rem;color:#e9f6f5;font:650 .72rem system-ui}
 .orbital-timing button{min-height:34px;padding:.2rem .46rem}
+
+.cross.aim-cue{font-weight:800;color:#8bf3ff;text-shadow:0 1px 5px #000,0 0 8px #09c8ec88}
+.touch button.brake{font-size:.60rem;font-weight:850;letter-spacing:.025em;color:#c9fbff}

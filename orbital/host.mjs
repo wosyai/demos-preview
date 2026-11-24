@@ -391,6 +391,7 @@ function render(alpha) {
 function hud(){
  const [, , , , , , , , ,mode,near,mark]=frame;
  const eva=frame[15]===1, leg=frame[16], locked=frame[17]===1, align=frame[19];
+ let aim=0;
  let objective="Approach the amber rail",tip="Drift forward and get within reach.",action="Grip rail";
  const rails=["Airlock rail","Scaffold rail","Cargo brace"];
  if(eva){
@@ -401,12 +402,12 @@ function hud(){
    const cue=frame[18];
    if(align===3){objective="Cargo aligned";tip="Green sync light. Cargo is ready for transfer.";action="Cargo ready";}
    else if(align===2){objective="Alignment handle secured";tip="Seat the handle to set the transfer guides.";action="Set alignment";}
-   else if(mode===3){objective="Clearing the lock";tip="Drift right to the blue alignment console.";}
-   else if(align===1&&mode===1){objective="Taking the alignment handle";tip="Holding station.";}
+   else if(mode===3){objective="Clearing the lock";tip="Drift right to the blue alignment console.";action="Clearing lock";}
+   else if(align===1&&mode===1){objective="Taking the alignment handle";tip="Holding station.";action="Gripping handle";}
    else if(align===1&&near){objective="Alignment handle in reach";tip="Your drift is stopped. Grip the blue handle.";action="Grip handle";}
-   else if(align===1&&cue===3){objective="Brake at the console";tip="Hold brake until your drift settles.";}
-   else if(align===1&&cue===4){objective="Face the alignment console";tip="Look toward its blue light to line up.";}
-   else if(align===1){objective="Approach the alignment console";tip="Move right toward the blue light, then brake.";}
+   else if(align===1&&cue===3){objective="Brake at the console";tip="Hold brake until your drift settles.";action="Brake first";}
+   else if(align===1&&cue>=4){objective="Face the alignment console";tip="Drag toward its blue light to line up.";action="Aim at light";aim=cue;}
+   else if(align===1){objective="Approach the alignment console";tip="Move right toward the blue light, then brake.";action="Out of reach";}
    else {objective="Cargo lock secured";tip="Pin seated. Release toward the blue alignment console.";action="Drift to align";}
   }
   else if(mode===3){objective="Pushing off";tip="Drift toward the next rail.";action="Pushing off";}
@@ -420,6 +421,8 @@ function hud(){
  else if(mode===2){objective="Rail secured";tip="Release the rail to push off.";action="Release & push";}
  else if(mode===1){objective="Gripping the handrail";tip="Your drift is arrested.";}
  else if(near){objective="Handrail in reach";tip="Grip to stop drifting.";}
+ const reticle=$("reticle"), marker=aim?["+","+","+","+","→","←","↑","↓"][aim]:"+";
+ if(reticle.textContent!==marker){reticle.textContent=marker;reticle.classList.toggle("aim-cue",Boolean(aim));}
  if($("objective").textContent!==objective)$("objective").textContent=objective;
  if($("help").textContent!==tip)$("help").textContent=tip;
  $("action").disabled=!active||align===3||!(mode===2||(mode===0&&near===1));
@@ -622,7 +625,7 @@ try{
   gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_T,gl.CLAMP_TO_EDGE);earthReady=1;worldVersion++;
  };
  earth.src=new URL("./earth.jpg",import.meta.url).href;
- const response=await fetch(new URL("./orbital.wasm?v=8",import.meta.url));
+ const response=await fetch(new URL("./orbital.wasm?v=9",import.meta.url));
  if(!response.ok)throw Error("The station engine could not be downloaded.");
  const {instance}=await WebAssembly.instantiate(await response.arrayBuffer(),{
   orbital:{
