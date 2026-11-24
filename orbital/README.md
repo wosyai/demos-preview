@@ -40,8 +40,12 @@ Select **Begin spacewalk** to reach the cargo bay on Kestrel's starboard
 truss. Grip the **airlock rail**, push off to the blue **scaffold rail**, then
 grip the captive pin inside the gold **cargo brace**. With the pin held,
 activate **Seat cargo lock**. The hand stays wrapped around the pin as it snaps
-into its upper detent, and the recessed status light turns green. There is no timer. Choose **Indoor
-training** to repeat the original single-rail exercise. Menu and reset remain
+into its upper detent, and the recessed status light turns green. Then choose
+**Drift to align** and move right to the blue console. Hold the brake until
+you are stationary, then aim at the blue light. Grip the console handle and
+seat it to set the transfer guides. Flying through the capture zone or
+braking while looking elsewhere does not arm the grip. There is no timer.
+Choose **Indoor training** to repeat the original single-rail exercise. Menu and reset remain
 available in both exercises. These are bounded training spaces, not a model of orbital
 flight or spacecraft controls.
 
@@ -62,8 +66,9 @@ astronaut asset. The authored Wosy arm is the loading/fallback mesh.
 
 The contact and release states retain world-space rail anchors on all screen
 sizes. At the cargo brace the pin and hand share both Wosy-authored endpoints.
-Seating only invalidates the stationary batch once; the recessed assembly,
-suspended cargo shell and jointed manipulator require no per-frame updates. The WebGL host interpolates presented camera and arm coordinates around
+Each seated control invalidates the stationary batch once. The blue console,
+recessed lock, suspended cargo shell and manipulator require no per-frame
+geometry updates. The WebGL host interpolates presented camera and arm coordinates around
 the fixed 60 Hz Wosy simulation. Station shadows are cached until actual
 station geometry changes, and the canvas can lower moving resolution on slow
 GPUs while keeping still scenes sharp.

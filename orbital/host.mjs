@@ -265,6 +265,7 @@ let previous=null;
 let worldVersion=0,renderVersion=-1,renderYaw=NaN,renderPitch=NaN,renderW=0,renderH=0,renderX=NaN,renderY=NaN,renderZ=NaN,renderGrip=NaN;
 let scene,space,skyCopy,depth,shadowFbo,shadowTexture,earthTexture,surfaceTexture,earthReady=0,engine,active=false, frame=null, grabbed=null, dx=0, dy=0, last=0, remainder=0, pulse=false;
 const held=new Set(),touch=new Map();
+let actionTouch=null,suppressTouchClick=false;
 const bits={KeyA:1,ArrowLeft:1,KeyD:2,ArrowRight:2,KeyW:4,ArrowUp:4,KeyS:8,ArrowDown:8,Space:16,KeyC:32,ShiftLeft:128,ShiftRight:128};
 function batch() {
  const vao=gl.createVertexArray(), buffer=gl.createBuffer();
@@ -389,14 +390,25 @@ function render(alpha) {
 }
 function hud(){
  const [, , , , , , , , ,mode,near,mark]=frame;
- const eva=frame[15]===1, leg=frame[16], locked=frame[17]===1;
+ const eva=frame[15]===1, leg=frame[16], locked=frame[17]===1, align=frame[19];
  let objective="Approach the amber rail",tip="Drift forward and get within reach.",action="Grip rail";
  const rails=["Airlock rail","Scaffold rail","Cargo brace"];
  if(eva){
   const rail=rails[leg];
   objective="Approach the "+rail.toLowerCase();
   tip=["Drift along the hull to the silver rail.","Follow the blue collars along the scaffold.","Reach the gold brace ahead of the cargo." ][leg];
-  if(locked){objective="Cargo lock secured";tip="Green light confirmed. Traverse complete.";action="Lock secured";}
+  if(locked){
+   const cue=frame[18];
+   if(align===3){objective="Cargo aligned";tip="Green sync light. Cargo is ready for transfer.";action="Cargo ready";}
+   else if(align===2){objective="Alignment handle secured";tip="Seat the handle to set the transfer guides.";action="Set alignment";}
+   else if(mode===3){objective="Clearing the lock";tip="Drift right to the blue alignment console.";}
+   else if(align===1&&mode===1){objective="Taking the alignment handle";tip="Holding station.";}
+   else if(align===1&&near){objective="Alignment handle in reach";tip="Your drift is stopped. Grip the blue handle.";action="Grip handle";}
+   else if(align===1&&cue===3){objective="Brake at the console";tip="Hold brake until your drift settles.";}
+   else if(align===1&&cue===4){objective="Face the alignment console";tip="Look toward its blue light to line up.";}
+   else if(align===1){objective="Approach the alignment console";tip="Move right toward the blue light, then brake.";}
+   else {objective="Cargo lock secured";tip="Pin seated. Release toward the blue alignment console.";action="Drift to align";}
+  }
   else if(mode===3){objective="Pushing off";tip="Drift toward the next rail.";action="Pushing off";}
   else if(mode===2&&leg===2){objective="Cargo lock in reach";tip="Seat the pin. The amber indicator turns green.";action="Seat cargo lock";}
   else if(mode===2){objective=rail+" secured";tip="Open your hand and push toward the next rail.";action="Release & push";}
@@ -410,9 +422,9 @@ function hud(){
  else if(near){objective="Handrail in reach";tip="Grip to stop drifting.";}
  if($("objective").textContent!==objective)$("objective").textContent=objective;
  if($("help").textContent!==tip)$("help").textContent=tip;
- $("action").disabled=!active||locked||!(mode===2||(mode===0&&near===1));
+ $("action").disabled=!active||align===3||!(mode===2||(mode===0&&near===1));
  if($("action").textContent!==action)$("action").textContent=action;
- const task=eva?"EVA / "+(leg+1)+" OF 3":"TRAINING 01 / HANDRAIL";
+ const task=eva?(locked?"EVA / CARGO ALIGNMENT":"EVA / "+(leg+1)+" OF 3"):"TRAINING 01 / HANDRAIL";
  if($("exercise").textContent!==task)$("exercise").textContent=task;
 }
 const timing=new URLSearchParams(location.search).get("debug")==="timing"?setupTiming():null;
@@ -494,7 +506,7 @@ function animate(t){
  render(Math.max(0,Math.min(1,remainder*60)));
  if(timing)timing(t);
 }
-function clear(){held.clear();touch.clear();grabbed=null;dx=0;dy=0;pulse=false;}
+function clear(){held.clear();touch.clear();grabbed=null;actionTouch=null;dx=0;dy=0;pulse=false;}
 canvas.addEventListener("pointerdown",e=>{
  if(!active||grabbed!==null)return;grabbed={id:e.pointerId,x:e.clientX,y:e.clientY};canvas.setPointerCapture(e.pointerId);
 });
@@ -533,7 +545,27 @@ quality.addEventListener("change",()=>{
  if(gl)configureShadow();
  worldVersion++;
 });
-$("action").onclick=()=>{pulse=true;};
+const actionButton=$("action");
+actionButton.addEventListener("pointerdown",e=>{
+ suppressTouchClick=e.pointerType==="touch";
+ if(suppressTouchClick&&!actionButton.disabled)actionTouch={id:e.pointerId,x:e.clientX,y:e.clientY};
+});
+actionButton.addEventListener("pointerup",e=>{
+ if(actionTouch?.id!==e.pointerId)return;
+ const start=actionTouch;
+ actionTouch=null;
+ // Mobile browsers can suppress the compatibility click after a camera drag.
+ // Queue a bounded touch release itself, without double-firing a later click.
+ const hit=actionButton.getBoundingClientRect();
+ if(active&&!actionButton.disabled&&Math.hypot(e.clientX-start.x,e.clientY-start.y)<14&&
+    e.clientX>=hit.left&&e.clientX<=hit.right&&e.clientY>=hit.top&&e.clientY<=hit.bottom)pulse=true;
+});
+for(const type of ["pointercancel","lostpointercapture"])actionButton.addEventListener(type,e=>{
+ if(actionTouch?.id===e.pointerId)actionTouch=null;
+});
+actionButton.onclick=e=>{
+ if(active&&!actionButton.disabled&&!(suppressTouchClick&&e.detail>0))pulse=true;
+};
 function enter(which){
  clear();previous=null;engine.select_deck(which);engine.tick(0,0,0,0);
  active=true;$("intro").hidden=true;$("exercise").textContent=which===1?"EVA 01 / STARBOARD TRUSS":"TRAINING 01 / HANDRAIL";hud();
@@ -590,12 +622,12 @@ try{
   gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_T,gl.CLAMP_TO_EDGE);earthReady=1;worldVersion++;
  };
  earth.src=new URL("./earth.jpg",import.meta.url).href;
- const response=await fetch(new URL("./orbital.wasm?v=7",import.meta.url));
+ const response=await fetch(new URL("./orbital.wasm?v=8",import.meta.url));
  if(!response.ok)throw Error("The station engine could not be downloaded.");
  const {instance}=await WebAssembly.instantiate(await response.arrayBuffer(),{
   orbital:{
    scenery(p,n){update(room,p,n,gl.STATIC_DRAW);},hands(p,n){update(hand,p,n,gl.DYNAMIC_DRAW);},
-   frame(p,n){if(n!==19)throw Error("Unexpected station frame");frame=new Float32Array(engine.memory.buffer,p,n).slice();}
+   frame(p,n){if(n!==20)throw Error("Unexpected station frame");frame=new Float32Array(engine.memory.buffer,p,n).slice();}
   },
   wasi_snapshot_preview1:{proc_exit(n){throw Error("Station exited: "+n);}}
  });

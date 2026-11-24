@@ -7,7 +7,7 @@ let room,hand,state,engine,roomLoads=0,handLoads=0;
 function read(p,n){assert.equal(p%4,0);return new Float32Array(engine.memory.buffer,p,n).slice();}
 engine=new WebAssembly.Instance(wasm,{orbital:{
  scenery(p,n){room=read(p,n);roomLoads++;},hands(p,n){hand=read(p,n);handLoads++;},
- frame(p,n){assert.equal(n,19);state=read(p,n);}
+ frame(p,n){assert.equal(n,20);state=read(p,n);}
 }}).exports;
 engine._start();
 const step=(keys=0,yaw=0,pitch=0,dt=1/60)=>engine.tick(dt,keys,yaw,pitch);
@@ -30,8 +30,8 @@ for(let i=0;i<90;i++)step(64|4|2|16);
 assert.deepEqual(capture(),contact,'held action/thrust cannot exit the frozen handrail pose');
 assert.deepEqual(contact.slice(5,10),[0,0,0,1,2]);
 const box = (m) => [0,1,2].map(i=>{const a=m.filter((_,j)=>j%8===i);return [Math.min(...a),Math.max(...a)];});
-assert.notDeepEqual(box(initial.slice(19)),box(contact.slice(19)),'contact has its own authored hand volume');
-const [x,y,z]=box(contact.slice(19));assert.ok(x[0]<.745 && x[1]>.745 && y[1]>-.21 && z[0]<-1.94 && z[1]>-1.94,'contact mesh wraps the handrail');
+assert.notDeepEqual(box(initial.slice(20)),box(contact.slice(20)),'contact has its own authored hand volume');
+const [x,y,z]=box(contact.slice(20));assert.ok(x[0]<.745 && x[1]>.745 && y[1]>-.21 && z[0]<-1.94 && z[1]>-1.94,'contact mesh wraps the handrail');
 step();step(64);assert.equal(state[9],3);assert.equal(state[11],2);assert.ok(state[7]<0);
 const before=state[2];until(()=>state[9]===0,0);assert.ok(state[2]<before);
 reset();assert.deepEqual(capture(),initial,'reset restores exact initial pose');
@@ -46,7 +46,7 @@ engine.select_deck(1);step(0,0,0,0);
 const evaStart=capture(),evaRoom=room;
 assert.equal(state[15],1);assert.ok(evaRoom.length>=5400*8 && evaRoom.length<=16100*8 && evaRoom.length%24===0);
 assert.ok(evaRoom.every(Number.isFinite) && hand.every(Number.isFinite));
-assert.notDeepEqual(initial.slice(19),evaStart.slice(19),'EVA uses a separately authored pressurized glove');
+assert.notDeepEqual(initial.slice(20),evaStart.slice(20),'EVA uses a separately authored pressurized glove');
 assert.ok(evaRoom.some((x,i)=>i%8===4 && x<.14),'station includes the dark solar cell trim');
 step(64);assert.equal(state[9],0);step();
 until(()=>state[10]===1,4);
@@ -56,8 +56,8 @@ assert.equal(state[18],2,"a fast but eligible EVA gets the brake cue");
 step(64);until(()=>state[9]===2,64);
 const evaContact=capture();
 assert.deepEqual(evaContact.slice(5,10),[0,0,0,1,2]);
-assert.notDeepEqual(evaStart.slice(19),evaContact.slice(19));
-const extents=box(evaContact.slice(19));
+assert.notDeepEqual(evaStart.slice(20),evaContact.slice(20));
+const extents=box(evaContact.slice(20));
 assert.ok(extents[1][1]>-.472 && extents[2][0]<-1.665 && extents[2][1]>-1.50,'fingers are authored both above and behind the rounded rail');
 const heldUploads=handLoads;
 for(let i=0;i<85;i++)step(64|16|2);assert.deepEqual(capture(),evaContact);
@@ -111,7 +111,27 @@ function luminanceCode(mesh){
 }
 assert.ok(luminanceCode(beforeLatch).some(rgb=>rgb[0]>.9&&rgb[1]<.65),'physical latch light starts amber');
 assert.ok(luminanceCode(room).some(rgb=>rgb[0]<.4&&rgb[1]>.90),'physical latch light ends green');
-step();step(64);assert.equal(roomLoads,countBeforeLatch+1,'the seated latch cannot fire again');
+step();step(64);
+assert.equal(roomLoads,countBeforeLatch+1,'releasing the seated lock does not regenerate the station');
+assert.equal(state[9],3);
+until(()=>state[19]===1,0);assert.equal(state[10],0);
+until(()=>state[0]>.77,0);
+assert.equal(state[18],3);assert.equal(state[10],0,'drifting through reach is not sufficient');
+step(64);assert.equal(state[9],0);step(128);
+until(()=>state[18]===4,128);
+assert.equal(state[10],0,'braking does not bypass aim');
+assert.deepEqual([...state.slice(5,8)],[0,0,0],'alignment brake stops residual drift rather than making the player chase a moving target');
+step(64);assert.equal(state[9],0);
+step(128,.35);assert.equal(state[10],1);
+step(64);until(()=>state[19]===2,64);
+assert.deepEqual([...state.slice(12,15)].map(n=>n.toFixed(2)),['1.09','-0.54','-4.81']);
+for(let i=0;i<60;i++)step(64);assert.equal(state[19],2,'holding the grip never seats the alignment handle');
+step();step(64);
+assert.equal(state[19],3);
+assert.deepEqual([...state.slice(12,15)].map(n=>n.toFixed(2)),['1.09','-0.43','-4.81']);
+assert.equal(roomLoads,countBeforeLatch+2,'only the new seated handle updates the cached alignment piece');
+step();step(64);assert.equal(state[19],3);
+assert.equal(roomLoads,countBeforeLatch+2);
 reset();assert.deepEqual(capture(),evaStart,'reset restores the current exercise');
 assert.deepEqual(room,evaRoom);
 until(()=>state[2]<-4.719,4);
@@ -119,7 +139,7 @@ assert.ok(state[2]>-4.721 && state[7]===0,'EVA cannot pass into the radiator');
 step(64);assert.equal(state[17],0,'skipping the rails cannot lock cargo');
 engine.select_deck(0);step(0,0,0,0);
 assert.deepEqual(capture(),initial,'indoor mode round-trips without exterior state');
-assert.equal(roomLoads,5,'only deck changes, latch and reset republish stationary geometry');
+assert.equal(roomLoads,6,'only deck changes, lock, alignment and reset republish stationary geometry');
 console.log('EVA WASM: geometry, distinct grip, eligibility and release, exterior bulkhead, reset and indoor round-trip passed.');
 
 const raw=readFileSync(new URL('./apollo-arm.bin',import.meta.url));
