@@ -16,89 +16,25 @@ cp .wosy/artifacts/app/dev/main/main ferry.wasm
 Set `CLANG` and `WASM_LD` if LLVM 18 is not on your PATH.
 Serve the repository as static files and open `/ferry/` in a WebGL 2 browser.
 
-Wosy produces the two XYZRGB batches and perspective projection, and owns the
-fixed-step simulation, foot and car movement, traffic, collision responses,
-objective state, ramp boarding, the canal crossing, and disembarking, and the one-shot action consumed by the next step. Browser
-code forwards analog and digital input, displays status, and submits batches
-to WebGL. The lobby illustration is not a gameplay capture or a world asset.
-All world objects with volume are modeled in 3D, not stacked sprites. The
-static scene includes a western district anchored by Sunset Video, with two
-links to the original boulevard and an expanded harbor promenade. Windshield
-facets and facade geometry are modeled in Wosy. The browser sky evaluates a
-direction at infinity from the same camera matrix as the world draw, so the
-sun and clouds are stationary when the player moves.
+## Play
 
-World storage reserves nine 4,096-vertex chunks and moving storage 24
-256-vertex chunks. Wosy never writes beyond either capacity, and the
-host checks the reported counts and disjoint byte ranges before upload.
-The six-float vertex format stores explicit material bands in red: ordinary
-base red is 0–1; asphalt, masonry, canal, lamp pool and lamp emit red
-plus 2, 4, 6, 8 or 10 respectively; animated ferry foam adds 12, navigation lights add 14, and reflective glass adds 16. Each triangle has one band, removed
-in the vertex shader before interpolation. Negative blue remains the
-contact-shadow channel. Light-pool and ferry foam green store opacity; each pool is
-centered under its matching lamp. The GPU shades with world coordinates
-so textures do not slide as the camera moves. Player wheel detail phase
-follows signed simulation displacement; the browser does not move wheels.
-A dock terminal and two modeled gantries provide silhouettes beyond the basin.
-Their lights, glass and canal reflections share the dusk palette; the glass
-and wet pavement highlights are procedural rather than texture downloads.
+Answer the phone, collect the tape, and reach Pier 8 before departure. Pickup starts the clock; boarding stops it. Leave the ferry on the far shore to finish. The bypass, waterfront path, and avenue loop share the same clock and collision rules. Follow the map and look for the lit harbor cranes. Free Roam has no destination or timer.
 
-Traffic follows separate north-south and east-west lanes on the boulevard and
-the western district. The player and traffic share two vehicle substeps per
-fixed simulation tick. Each move sweeps the oriented body along its relative
-translation, keeps the motion up to first contact, and does not step through
-another vehicle. A normal response with a clamped nudge for a car hit by
-traffic leaves available tangential motion rather than reversing the car.
-At a facade, the solver keeps the clear part of the approach and slides
-tangentially for the rest of the substep. Brake takes priority over coincident
-pedal input in a straight line; deliberate hard turns still use the
-handbrake. Fast steering is damped and the chase camera gradually gives
-the car more space; free-look can pitch above the horizon. Northbound traffic
-turns south of the separately marked harbor crosswalk. Physical bollards keep
-the end of the road open for people walking from the vehicle approach to Pier 8.
-The objective marker and compass guide toward that crossing on the west side.
-From the phone, the car faces the southern bypass: the painted edge and
-street lamps lead via the separated western service spur and setback building frontage to parking south of Sunset
-Video. The return uses a marked west-side Park & Walk bay before the traffic
-queue. Its normal curbside action hands off to a highlighted path along
-the west pavement and across the harbor zebra crossing. The original
-boulevard remains an open alternative; the bypass does not change
-traffic, collision or timer rules. After pickup, the footprint action at
-the tape apron can instead mark the foot-only waterfront path. Follow the
-teal pavement stripe around the video shop to the seawall and across the
-same harbor crosswalk. Leaving the stripe area or entering a car resumes
-ordinary guidance without restarting the countdown. Mark Avenue at the
-taxi-side turnaround sign to take the west loop before merging into ordinary
-eastbound traffic. The amber off-lane bay hands off to the existing central
-zebra crossing and on-foot pier approach; the service return remains the
-default. No route changes the clock or grants collision immunity.
+Brake overrides straight-line pedal input. Hard turns use the handbrake. Facade contact preserves clear motion and slides along the wall. At speed, steering is damped and the chase camera pulls back; free-look can pitch above the horizon.
 
 ## Browser ABI
 
-- Imports from `ferry`: `world(ptr, floats)`, `moving(ptr, floats)`,
-  `frame(ptr, floats)`. Both mesh batches use six floats per vertex (XYZRGB),
-  with three vertices per triangle. World geometry can be reused across resets.
-- Exports: `_start()`, `reset(mode)`, `tick(dt, steer, drive, controls, aspect)`,
-  `cancel_action()`, and memory. Reset mode 0 is the timed mission and mode 1
-  is free roam. Axes range from -1 to 1; positive steer means right and
-  positive drive means forward. Control bit 0 holds brake or sprint; bit 1
-  queues the contextual action. Cancel it on lifecycle interruption.
-- Frame length 34: view-projection [0–15], walking/driving [16], mission
-  state [17], seconds [18], speed [19], action cue [20], latest contact and
-  sequence [21–22], target range and position [23–25], player position
-  [26–27], heading [28], signed target bearing in radians [29]. Walking step and audible impact sequences [30–31],
-  normalized impact strength [32], and normalized engine load [33].
-  Gameplay counters reset with the mission and change only in fixed simulation steps.
-  Mission states: 0 pickup,
-  1 timed drive/walk to Pier 8, 2 delivered ashore, 3 missed departure,
-  4 free roam, 5 boarding/crossing, 6 docked awaiting disembark,
-  7 walking the far gangway, 8 phone prologue. The phone unlocks the drive-in
-  pickup but does not start the clock. Boarding stops the countdown, and the
-  passenger must leave the ferry to complete the mission.
+- Imports from `ferry`: `world(ptr, floats)`, `moving(ptr, floats)`, and `frame(ptr, floats)`. Mesh vertices use six floats (XYZRGB), three vertices per triangle. World geometry can be reused across resets. The host validates counts and disjoint memory ranges before upload. Red-channel offsets encode asphalt (+2), masonry (+4), canal (+6), lamp pool (+8), lamp emission (+10), ferry foam (+12), navigation lights (+14), and reflective glass (+16). Negative blue marks contact shadows.
+- `reset(0)` starts the mission; `reset(1)` starts Free Roam. Call `_start()` once before reset.
+- `tick(dt, steer, drive, controls, aspect, look_x, look_y)` accepts steering and drive in −1…1 (right and forward positive) and orbit deltas in radians. Control bits 0–2 are brake/sprint, contextual action, and recenter camera. The next simulation step consumes the action; `cancel_action()` clears a queued action.
+- Read road rectangles through `map_value(row, column)`. `route_selection()` identifies the active guide; `route_value(key, row, column)` reads that guide. `navigation_update()` returns the number of computed street-route points; read coordinates with `navigation_point(row, column)`. No route is returned when there is no valid path.
 
-## Lobby art
+| Frame slots | Meaning |
+| --- | --- |
+| 0–15 | View-projection matrix |
+| 16–20 | Driving flag, mission state, seconds, speed, action cue |
+| 21–22 | Latest contact kind and sequence |
+| 23–29 | Target range and X/Z, player X/Z and heading, signed target bearing |
+| 30–33 | Footstep sequence, audible impact sequence, impact strength, engine load |
 
-`art/lobby.webp` is an original illustration generated with the built-in image
-tool and encoded as a 1536 × 1024 WebP. Generation prompt:
-
-> Use case: stylized-concept. Create one wide 1536×1024 or widescreen landscape original game title-menu illustration for Last Ferry (no words in the image). A late-1980s waterfront district at blue hour: a glowing Art Deco drive-in marquee without any readable text, a boxy immaculate cream coupe with a restrained teal side accent, stylized asphalt lane markings, a couple of palm silhouettes and, beyond them, a small warmly lit ferry on the teal canal. Keep the car and main lights on the right third, with the central focal elements kept within the middle 70% vertically for responsive wide crops. The entire left 45% should be quiet dark deep navy negative space and faint pavement for an HTML title set later, with no high-contrast details there. Art direction: intentionally designed angular low-poly shapes with tactile, restrained pixel dithering, navy and dusty rose with small pools of amber and cyan, strong readable silhouette and cohesive dusk atmosphere. One connected illustration, no framing border. Neither a gameplay screenshot nor an imitation of an existing game cover. No letters, logos, watermarks, real vehicle brands, characters, guns, violence, or UI.
+Mission states: 0 tape pickup, 1 timed approach, 2 delivered, 3 missed departure, 4 Free Roam, 5 crossing, 6 docked, 7 far gangway, 8 phone.

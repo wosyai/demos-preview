@@ -12,8 +12,7 @@ cp .wosy/artifacts/app/dev/main/main flight.wasm
 ```
 
 Set `CLANG` and `WASM_LD` if LLVM 18 is not on your PATH. There are no npm
-dependencies. The browser handles input, presentation, and storage. Flight
-physics, scenery, camera, cargo pickup, mail trajectory, farm spray, landings, and replays run in Wosy.
+dependencies.
 
 ## Host ABI
 
@@ -26,7 +25,7 @@ different mission is selected. `aircraft` and `frame` are stable until the next
 `tick`. Persist any `record` bytes before another callback can replace them.
 
 The frame keeps the projection in [0–15], mission in [16], elapsed seconds,
-speed and altitude in [17–19], terminal status in [22], best time in [23],
+speed and altitude in [17–19], best time in [23],
 and score in [24]. Mission-specific fields are:
 
 | Index | Meaning |
@@ -39,7 +38,7 @@ and score in [24]. Mission-specific fields are:
 | 29–31 | Landing instruction (1 align, 2 slow down, 3 ease descent, 4 ready), climb warning, delivered pouch or completed crop rows |
 | 32–34 | Gates earned, current gate index, and seconds remaining for the current gate |
 | 35 | Wosy ring-award flash: 1 during the short confirmation, or 0 |
-| 36 | Presentation state: 0 normal, 2 pouch follow/impact/return (1 reserved for fatal-impact presentation) |
+| 36 | Presentation state: 0 normal, 1 crash, 2 pouch follow; crash takes priority |
 | 37–40 | Actual interpolated aircraft X/Y/Z and heading, independent of camera framing |
 
 Input uses bits 0–5 for left, right, climb, dive, power, brake. For proportional
@@ -50,74 +49,14 @@ axes to ±7. Bit 7 is a one-shot contextual mission action (load, spray, or mail
 `cancel_drop()` clears a not-yet-consumed release when input is interrupted
 without changing the simulation clock or undoing a pouch already launched.
 
-Mission replay format uses magic bytes `WF`, version byte 7 (Wright) or 8
-(Paris overhead drop), mission byte, a
-little-endian 16-bit step count, then one little-endian canonical control word
-per step. The mission action is included in its original step. Only legally completed
-missions on the final step are admitted, up to 8,100 steps and 16,206 bytes.
-The browser preserves Wright's v7 key and uses a new v8 Paris key; old v7
-Paris records are not read or overwritten. The engine rejects old Paris packets
-rather than treating their different release inputs as current replays.
-Older mission and race save keys remain untouched.
+## Replay
 
-Touchdown and rollout use the same strip limits used to draw the markings.
-A touchdown beyond the suggested approach limits can still enter roll-out, but
-severe angle, speed, or descent still fails. Rollout still requires staying on
-the strip and stopping fully; a rough supply touchdown does not load cargo or
-skip take-off. Steering during rollout is slower than airborne banking. The Eiffel Tower
-uses tapered leg, platform, lattice, and arch collision envelopes rather
-than an invisible solid box; these approximate the drawn ironwork.
+Replay packets start with `WF`, a version byte (7 Wright, 8 Paris), a mission byte, and a little-endian 16-bit step count. Each step stores one little-endian control word. Only runs that finish on their last step are valid (at most 8,100 steps and 16,206 bytes). Paris v7 saves are not loaded or overwritten.
 
-Bonus gates are optional. The plane must pass through the opening in the
-forward (positive world Z) direction before its deadline. A missed opening
-stays available until the deadline. Gate points never unlock a mission phase.
+## Play
 
-The Paris route extends beyond the old northeast bank to the quay station.
-The station uses the same typed gable dimensions for its visible walls and flight contact.
-
-The Wright course's western county has a terraced reservoir and gravel service
-track. All new scenery within flyable airspace remains below landing height;
-the raised water tower visibly marks the county boundary beyond it. This visual
-change leaves replay v7 and the route physics unchanged.
-
-Press V or tap Cockpit to switch the aircraft-mounted view and the exterior
-chase view. Speed and altitude use the same Wosy instrument data in either.
-The WebAssembly export `select_view(1)` selects cockpit; zero selects chase.
-It changes presentation only: camera preference is not part of a v7 replay.
-
-In Paris, fly directly over the amber X at 3–14 m. Heading and bank do not
-gate release. The blue mark shows the world point below the aircraft, and
-the pouch falls vertically at the same X/Z through the cinematic impact.
-The HUD says “Drop here” only while the actual release window is open.
-
-The next ring is dashed amber. A scored ring flashes bright green, then remains
-muted green. An expired unscored ring disappears. Replay v7 is unchanged.
-
-Frame [36] is ordinary (0), active crash (1), or mail follow (2), with crash taking priority. Slots [37–40] expose aircraft position and heading independent of the presentation camera.
-
-Mission time, failure code, and replay input stop at impact. Wosy advances the debris and camera on the fixed presentation cadence until settled (with a bounded support fallback), and the host keeps drawing but suppresses actionable cues while the flag is set. Cinematic debris uses flat terrain and existing flight-obstacle proxies, not all decorative world geometry.
-
-Accepted Paris releases blend the view to the same Wosy pouch trajectory used for scoring. Impact shows a short marker at the measured contact, then eases back to the selected camera. The aircraft remains controlled by the normal flight loop; the focus shot neither adds a replay command nor changes mission scoring.
-
-Fatal impact retains the intact exterior for its first frame, using the final
-valid aircraft pose even if that public tick catches up multiple substeps. The
-breakup then reuses the same model primitives for the
-core, both complete wing stacks, tail, nose and undercarriage/engine group.
-The six fixed pivots and approximate local bounds drive settled support; this
-is not mesh-to-mesh rigid-body contact. Flags remain on the original wing.
-The normal aircraft still draws unsplit span surfaces; only the wreck introduces
-the two fracture faces. Frame slots, fixed simulation cadence and replay schema
-are unchanged.
-
-Service sheds use the same local box definitions in rendering and solid
-contact, including their separate roof and sign pieces. Wright barns use
-their sloped roof surfaces and gabled interiors rather than an enclosing
-rectangular volume. Roof overhangs do not fill the air below them. Saved
-replays are still accepted only when their inputs succeed in current physics.
-
-The landing brackets use the selected strip threshold and mark an angled corridor
-toward the touchdown zone. They are guidance only and disappear at rollout.
-Braking increases rollout steering authority; airborne controls, speed limits,
-and stopping conditions are unchanged. Existing replay records are still only
-admitted after a complete re-simulation. The original recordings are not rewritten.
-The decorative windsocks are driven by presentation time, not gameplay wind.
+- Press V or tap Cockpit to switch views. `select_view(0)` selects chase; `select_view(1)` selects cockpit. Camera selection is not replay input.
+- In Paris, fly over the amber X at 3–14 m. The blue marker shows where the pouch will fall. The aircraft remains controllable during the pouch camera.
+- Fly forward through optional bonus gates before they expire. Gates award points, not access to later phases.
+- Green brackets guide the approach to the selected strip and disappear at rollout. Brake for tighter rollout steering and stay on the strip until stopped. A rough supply landing does not load cargo. Decorative windsocks do not model gameplay wind.
+- Fatal impact stops mission time and recording. The engine then presents the breakup; the host hides actionable cues until it ends. Sheds and barns use their drawn geometry for solid contact; debris support is approximate.
