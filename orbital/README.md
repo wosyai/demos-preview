@@ -77,7 +77,11 @@ The contact and release states retain world-space rail anchors on all screen
 sizes. At the cargo brace the pin and hand share both Wosy-authored endpoints.
 The blue console first seats the cargo, then a separate press closes both
 cradle keepers and opens the robot jaws at a fixed cargo position. Green
-keeper indicators confirm the completed transfer. Each control invalidates
+keeper indicators confirm the completed transfer. Release the console and ride the
+return push, brake at the round airlock, and aim toward the amber locking bar.
+Grip the bar, then lock it into the upper detent to complete the EVA. The
+airlock stays closed: this exercise ends with an external lock confirmation,
+not a re-entry or pressurization sequence. Each control invalidates
 the stationary batch once. The blue console,
 recessed lock, suspended cargo shell and manipulator require no per-frame
 geometry updates. The WebGL host interpolates presented camera and arm coordinates around

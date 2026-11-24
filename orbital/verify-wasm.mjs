@@ -44,7 +44,7 @@ console.log('Orbital WASM: station batch, initial/contact poses, reach/aim gatin
 
 engine.select_deck(1);step(0,0,0,0);
 const evaStart=capture(),evaRoom=room;
-assert.equal(state[15],1);assert.ok(evaRoom.length>=5400*8 && evaRoom.length<=18300*8 && evaRoom.length%24===0);
+assert.equal(state[15],1);assert.ok(evaRoom.length>=5400*8 && evaRoom.length<=19000*8 && evaRoom.length%24===0);
 assert.ok(evaRoom.every(Number.isFinite) && hand.every(Number.isFinite));
 const maskedPanel=[];
 for(let i=0;i<evaRoom.length;i+=8)if(Math.abs(evaRoom[i+7]-.18375)<.0001)maskedPanel.push(evaRoom.slice(i,i+8));
@@ -119,7 +119,7 @@ until(()=>state[10]===1,4);
 step(64);until(()=>state[9]===2,64);
 const beforeLatch=room, countBeforeLatch=roomLoads;
 const openPin=[...state.slice(12,15)], openGlove=hand, openHandLoads=handLoads;
-assert.ok(room.length<=18300*8,'exterior geometry fits without clipping the assembly batch');
+assert.ok(room.length<=19000*8,'exterior geometry fits without clipping the assembly batch');
 assert.equal(state[14].toFixed(2),'-4.88');
 for(let i=0;i<120;i++)step(64);
 assert.equal(state[17],0,'holding grip does not seat the latch automatically');
@@ -197,9 +197,32 @@ for(const x of [.49,1.71]){
 assert.ok(hasVertex(cradleSeated,1.96,.331,-6.838)&&hasVertex(room,1.96,.471,-6.838),'upper gripper jaw opens away from cargo');
 assert.ok(hasVertex(cradleSeated,1.96,.022,-6.838)&&hasVertex(room,1.96,-.118,-6.838),'lower gripper jaw opens away from cargo');
 assert.ok(hasVertex(room,2.17,.13,-7.13)&&hasVertex(room,2.20,.22,-6.523),'the load and robot wrist hold steady through the handoff');
-for(let i=0;i<60;i++){step();step(64);}
+for(let i=0;i<60;i++)step(64);
 assert.equal(roomLoads,countBeforeLatch+3,'handoff invalidates cached world once');
-assert.equal(state[19],4,'verified transfer stays safe on extra commands');
+assert.equal(state[19],4,'held transfer does not push off');
+step();step(64);until(()=>state[19]===5,0);
+assert.equal(state[18],0,"release never advertises a stale console brake cue as the hatch");
+step(64);assert.equal(state[9],0,'cargo is too far from hatch to grip');
+assert.equal(state[10],0);
+until(()=>state[18]===3,0,480);
+assert.equal(state[10],0,'coasting past the hatch does not count as a grip');
+step(64);assert.equal(state[9],0);
+until(()=>state[18]===5,128);
+assert.equal(state[10],0,'stopping alone does not count as facing the hatch');
+step(128,-1.43,.20);
+assert.equal(state[10],1,[...state].join(","));
+step(64);until(()=>state[19]===6,64);
+assert.deepEqual([...state.slice(12,15)].map(n=>n.toFixed(2)),['-0.94','-0.14','-2.48']);
+for(let i=0;i<60;i++)step(64);assert.equal(state[19],6,'holding a capture does not lock it');
+const openHatch=room, lockEye=[...state.slice(0,8)];
+step();step(64);assert.equal(state[19],7);
+assert.deepEqual([...state.slice(0,8)],lockEye);
+assert.deepEqual([...state.slice(12,15)].map(n=>n.toFixed(2)),['-0.94','-0.03','-2.48']);
+assert.ok(hasVertex(openHatch,-1.11,-.14,-2.398)&&hasVertex(room,-1.11,-.03,-2.398),'actual hatch bar and glove rise together');
+assert.ok(hasVertex(room,2.17,.13,-7.13)&&hasVertex(room,.49+.041,-.705,-6.554),'cargo stays seated under its closed keepers');
+for(let i=0;i<30;i++){step();step(64);}
+assert.equal(state[19],7);
+assert.equal(roomLoads,countBeforeLatch+4,'only the hatch endpoint republishes geometry');
 reset();assert.deepEqual(capture(),evaStart,'reset restores the current exercise');
 assert.deepEqual(room,evaRoom);
 until(()=>state[2]<-4.719,4);
@@ -207,7 +230,7 @@ assert.ok(state[2]>-4.721 && state[7]===0,'EVA cannot pass into the radiator');
 step(64);assert.equal(state[17],0,'skipping the rails cannot lock cargo');
 engine.select_deck(0);step(0,0,0,0);
 assert.deepEqual(capture(),initial,'indoor mode round-trips without exterior state');
-assert.equal(roomLoads,7,'only deck changes, lock, alignment and reset republish stationary geometry');
+assert.equal(roomLoads,8,'only deck changes, lock, alignment and reset republish stationary geometry');
 console.log('EVA WASM: geometry, distinct grip, eligibility and release, exterior bulkhead, reset and indoor round-trip passed.');
 
 const raw=readFileSync(new URL('./apollo-arm.bin',import.meta.url));

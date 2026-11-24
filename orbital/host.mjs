@@ -336,7 +336,7 @@ let renderLoad=1, slowFrames=0, fastFrames=0, stillFrames=0;
 let balanced=false, software=rasterSoftware;
 let previous=null;
 let worldVersion=0,renderVersion=-1,renderYaw=NaN,renderPitch=NaN,renderW=0,renderH=0,renderX=NaN,renderY=NaN,renderZ=NaN,renderGrip=NaN;
-let scene,space,skyCopy,depth,shadowFbo,shadowTexture,earthTexture,surfaceTexture,earthReady=0,engine,active=false, frame=null, grabbed=null, dx=0, dy=0, last=0, remainder=0, pulse=false;
+let scene,space,skyCopy,depth,shadowFbo,shadowTexture,earthTexture,surfaceTexture,earthReady=0,engine,active=false, frame=null, grabbed=null, dx=0, dy=0, last=0, remainder=0, pulse=false, pulseDown=false;
 const held=new Set(),touch=new Map();
 let actionTouch=null,suppressTouchClick=false;
 const bits={KeyA:1,ArrowLeft:1,KeyD:2,ArrowRight:2,KeyW:4,ArrowUp:4,KeyS:8,ArrowDown:8,Space:16,KeyC:32,ShiftLeft:128,ShiftRight:128};
@@ -347,7 +347,7 @@ function batch() {
  return {vao,buffer,num:0};
 }
 function update(b,ptr,n,usage){
- if(n<0 || n%24!==0 || n/8>18300)throw Error("Invalid orbital mesh");
+ if(n<0 || n%24!==0 || n/8>19000)throw Error("Invalid orbital mesh");
  const payload=new Float32Array(engine.memory.buffer,ptr,n);
  worldVersion++;
  gl.bindVertexArray(b.vao);gl.bindBuffer(gl.ARRAY_BUFFER,b.buffer);
@@ -473,7 +473,14 @@ function hud(){
   tip=["Drift along the hull to the silver rail.","Follow the blue collars along the scaffold.","Reach the gold brace ahead of the cargo." ][leg];
   if(locked){
    const cue=frame[18];
-   if(align===4){objective="Cargo transfer complete";tip="Both keepers are green. The gripper is open and the cradle holds the load.";action="Cargo secure";}
+   if(align===7){objective="EVA complete";tip="Outer hatch locked. Cargo is secured and the station has your confirmation.";action="Hatch locked";}
+   else if(align===6){objective="Airlock handle secured";tip="Lift the locking bar into its upper detent.";action="Lock airlock";}
+   else if(align===5&&mode===1){objective="Taking the airlock handle";tip="Holding station.";action="Gripping handle";}
+   else if(align===5&&near){objective="Airlock handle in reach";tip="Grip the amber locking bar.";action="Grip hatch";}
+   else if(align===5&&cue===3){objective="Brake at the hatch";tip="Hold brake until your drift settles.";action="Brake first";compactTip="Hold BRAKE";}
+   else if(align===5&&cue>=4){objective="Face the hatch handle";tip="Drag toward the amber handle.";action="Aim at handle";aim=cue;compactTip="Drag toward handle";}
+   else if(align===5||align===4&&mode===3){objective="Return to the airlock";tip="Ride the push back toward the round hatch, then brake.";action="Out of reach";compactTip="Back toward hatch";}
+   else if(align===4){objective="Cargo transfer complete";tip="Release the console and return to the round airlock hatch.";action="Release & return";}
    else if(align===3){objective="Cargo seated";tip="Close the cradle keepers and release the robot grip.";action="Transfer cargo";compactTip="Close keepers";}
    else if(align===2){objective="Alignment handle secured";tip="Set the handle to lower the load into its shoes.";action="Set alignment";}
    else if(mode===3){objective="Clearing the lock";tip="Drift right to the blue alignment console.";action="Clearing lock";compactTip="Drift right";}
@@ -501,9 +508,9 @@ function hud(){
  if($("help").textContent!==tip)$("help").textContent=tip;
  const compact=$("compact-help");
  if(compact.textContent!==compactTip){compact.textContent=compactTip;compact.hidden=!compactTip;}
- $("action").disabled=!active||align===4||!(mode===2||(mode===0&&near===1));
+ $("action").disabled=!active||align===7||!(mode===2||(mode===0&&near===1));
  if($("action").textContent!==action)$("action").textContent=action;
- const task=eva?(locked?"EVA / CARGO ALIGNMENT":"EVA / "+(leg+1)+" OF 3"):"TRAINING 01 / HANDRAIL";
+ const task=eva?(align>=5?"EVA / AIRLOCK RETURN":locked?"EVA / CARGO ALIGNMENT":"EVA / "+(leg+1)+" OF 3"):"TRAINING 01 / HANDRAIL";
  if($("exercise").textContent!==task)$("exercise").textContent=task;
 }
 const timing=new URLSearchParams(location.search).get("debug")==="timing"?setupTiming():null;
@@ -577,15 +584,18 @@ function animate(t){
   let lookX=dx,lookY=dy;dx=0;dy=0;
   while(remainder>=1/60){
    previous=frame;
-   engine.tick(1/60,mask|(pulse?64:0),lookX,lookY);
-   pulse=false;lookX=0;lookY=0;remainder-=1/60;
+   // Preserve a release tick between distinct taps, even at one render per tick.
+   const press=pulse&&!pulseDown;
+   engine.tick(1/60,mask|(press?64:0),lookX,lookY);
+   if(press)pulse=false;
+   pulseDown=press;lookX=0;lookY=0;remainder-=1/60;
   }
   hud();
  }else if(!active)remainder=0;
  render(Math.max(0,Math.min(1,remainder*60)));
  if(timing)timing(t);
 }
-function clear(){held.clear();touch.clear();grabbed=null;actionTouch=null;dx=0;dy=0;pulse=false;}
+function clear(){held.clear();touch.clear();grabbed=null;actionTouch=null;dx=0;dy=0;pulse=false;pulseDown=false;}
 canvas.addEventListener("pointerdown",e=>{
  if(!active||grabbed!==null)return;grabbed={id:e.pointerId,x:e.clientX,y:e.clientY};canvas.setPointerCapture(e.pointerId);
 });

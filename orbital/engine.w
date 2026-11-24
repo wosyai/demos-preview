@@ -243,10 +243,10 @@ bool cargo_locked=false;
 i32 alignment_stage=0;
 bool alignment_braked=false;
 f32(i32) rail_depth = fn(leg) {if(leg==0){-1.59}else{if(leg==1){-3.43}else{-4.88}}};
-f32() align_pin_y = fn {if(alignment_stage==4){-0.36}else{if(alignment_stage==3){-0.43}else{-0.54}}};
-f32() arm_x = fn {if(alignment_stage>=1){1.09}else{-0.18}};
-f32() arm_y = fn {if(alignment_stage>=1){align_pin_y()}else{if(cargo_locked){-0.45}else{-0.57}}};
-f32() arm_z = fn {if(alignment_stage>=1){-4.81}else{rail_depth(station_leg)}};
+f32() align_pin_y = fn {if(alignment_stage>=4){-0.36}else{if(alignment_stage==3){-0.43}else{-0.54}}};
+f32() arm_x = fn {if(alignment_stage>=5){-0.94}else{if(alignment_stage>=1){1.09}else{-0.18}}};
+f32() arm_y = fn {if(alignment_stage>=5){if(alignment_stage==7){-0.03}else{-0.14}}else{if(alignment_stage>=1){align_pin_y()}else{if(cargo_locked){-0.45}else{-0.57}}}};
+f32() arm_z = fn {if(alignment_stage>=5){-2.48}else{if(alignment_stage>=1){-4.81}else{rail_depth(station_leg)}}};
 unit(f32,f32,f32,f32) socket_bolt = fn(x,y,z,radius){
     paint(0.28,0.31,0.33,0.62);
     sweep(x,y,z,x,y,z+0.008,radius,radius*0.86,1,0,6);
@@ -370,11 +370,11 @@ unit(f32,f32) cargo_keeper = fn(x,dy){
     box(x,-0.699,-6.740,0.25,0.48,0.124);
     paint(0.75,0.56,0.28,0.34);
     box(x+0.061,-0.286+dy,-6.655,0.120,0.083,0.096);
-    f32 jaw=if(alignment_stage==4){-0.705}else{-0.372};
+    f32 jaw=if(alignment_stage>=4){-0.705}else{-0.372};
     paint(0.69,0.72,0.68,0.71);
     box(x+0.041,jaw,-6.554,0.160,0.183,0.038);
     box(x+0.041,jaw+0.102,-6.648,0.160,0.052,0.098);
-    if(alignment_stage==4){paint(0.20,1.0,0.57,0.96);}else{paint(1.0,0.51,0.18,0.94);};
+    if(alignment_stage>=4){paint(0.20,1.0,0.57,0.96);}else{paint(1.0,0.51,0.18,0.94);};
     box(x+0.067,-0.469,-6.509,0.108,0.026,0.009);
 };
 unit() suspended_cargo = fn {
@@ -502,11 +502,11 @@ unit() manipulator = fn {
     box(2.13,0.50+dy,-6.88,0.14,0.22,0.25);
     paint(0.19,0.24,0.27,0.62);
     box(2.08,0.36+dy,-6.73,0.28,0.12,0.14);
-    if(alignment_stage==4){paint(0.94,0.62,0.23,0.92);}else{if(alignment_stage==3){paint(0.28,1.0,0.60,0.92);}else{paint(0.28,0.72,0.92,0.92);};};
+    if(alignment_stage>=4){paint(0.94,0.62,0.23,0.92);}else{if(alignment_stage==3){paint(0.28,1.0,0.60,0.92);}else{paint(0.28,0.72,0.92,0.92);};};
     box(2.14,0.407+dy,-6.581,0.13,0.033,0.010);
     paint(0.56,0.61,0.61,0.62);
     box(2.16,0.22+dy,-6.892,0.064,0.72,0.092);
-    f32 jaw_open=if(alignment_stage==4){0.14}else{0.0};
+    f32 jaw_open=if(alignment_stage>=4){0.14}else{0.0};
     box(2.04,0.700+dy+jaw_open,-6.889,0.16,0.128,0.140);
     box(2.04,0.415+dy-jaw_open,-6.889,0.16,0.121,0.140);
     paint(0.71,0.50,0.24,0.35);
@@ -585,7 +585,7 @@ unit() alignment_console = fn {
     round_shell(0.90,pin,-4.81,1.48,pin,-4.81,0.087,0.087,0,0,26);
     paint(0.29,0.71,0.72,0.61);
     round_shell(1.36,pin,-4.81,1.47,pin,-4.81,0.106,0.106,0,0,20);
-    if(alignment_stage==4){paint(0.27,0.98,0.60,0.99);}else{if(alignment_stage==3){paint(1.0,0.58,0.24,0.99);}else{paint(0.34,0.80,1.0,0.99);};};
+    if(alignment_stage>=4){paint(0.27,0.98,0.60,0.99);}else{if(alignment_stage==3){paint(1.0,0.58,0.24,0.99);}else{paint(0.34,0.80,1.0,0.99);};};
     box(1.11,-0.274,-4.864,0.29,0.030,0.010);
 };
 unit(i32) airlock_bolts = fn(k){
@@ -625,8 +625,23 @@ unit() airlock = fn {
     box(-1.266,0.454,-2.865,0.087,0.237,0.52);
     paint(0.58,0.65,0.62,0.62);
     box(-1.18,0.496,-2.832,0.031,0.158,0.451);
-    paint(0.37,0.78,0.69,0.92);
+    if(alignment_stage==7){paint(0.28,0.99,0.58,0.96);}
+    else{if(alignment_stage>=4){paint(1.0,0.61,0.22,0.96);}else{paint(0.37,0.78,0.69,0.92);};};
     box(-1.147,0.554,-2.797,0.006,0.052,0.112);
+    paint(0.46,0.50,0.50,0.62);
+    box(-1.23,-0.221,-2.55,0.22,0.39,0.14);
+    f32 bolt=if(alignment_stage==7){-0.03}else{-0.14};
+    paint(0.30,0.36,0.38,0.62);
+    box(-1.08,-0.234,-2.53,0.081,0.42,0.10);
+    paint(0.78,0.61,0.32,0.71);
+    round_shell(-1.11,bolt,-2.48,-0.77,bolt,-2.48,0.082,0.082,0,0,22);
+    paint(0.65,0.69,0.68,0.71);
+    round_shell(-0.84,bolt,-2.48,-0.77,bolt,-2.48,0.101,0.101,0,0,18);
+    sweep(-0.769,bolt,-2.48,-0.769,bolt,-2.48,0.101,0.0,0,0,18);
+    paint(0.23,0.29,0.30,0.62);
+    box(-1.05,-0.199,-2.387,0.077,0.081,0.038);
+    if(alignment_stage==7){paint(0.27,1.0,0.57,0.97);}else{paint(1.0,0.55,0.23,0.97);};
+    box(-0.971,-0.186,-2.381,0.008,0.053,0.029);
     paint(0.46,0.50,0.50,0.62);
     box(-1.265,-0.145,-2.887,0.125,0.138,0.110);
     box(-1.265,-0.145,-2.437,0.125,0.138,0.110);
@@ -949,23 +964,24 @@ unit(f32,i32,f32,f32) tick = fn(dt,keys,look_x,look_y) {
         f32 bulkhead=if(deck==0){-9.34}else{-4.72};
         if(pilot_z<bulkhead || pilot_z>1.63){pilot_z=limit(pilot_z,bulkhead,1.63);vz=0.0;};
     };
-    bool for_alignment=deck==1 && alignment_stage>=1;
-    f32 dock_x=if(for_alignment){1.04}else{if(deck==0){0.12}else{0.05}};
+    bool for_hatch=deck==1 && alignment_stage>=5;
+    bool for_alignment=deck==1 && alignment_stage>=1 && !for_hatch;
+    f32 dock_x=if(for_hatch){-0.39}else{if(for_alignment){1.04}else{if(deck==0){0.12}else{0.05}}};
     f32 dock_y=if(deck==0){-0.04}else{-0.025};
-    f32 dock_z=if(for_alignment){-4.08}else{if(deck==0){-1.26}else{rail_depth(station_leg)+0.71}};
+    f32 dock_z=if(for_hatch){-1.86}else{if(for_alignment){-4.08}else{if(deck==0){-1.26}else{rail_depth(station_leg)+0.71}}};
     f32 reach_limit=if(deck==1 && reach==1.0){0.55}else{0.37};
     f32 distance_sq=(pilot_x-dock_x)*(pilot_x-dock_x)+(pilot_y-dock_y)*(pilot_y-dock_y)+(pilot_z-dock_z)*(pilot_z-dock_z);
     f32 speed_sq=vx*vx+vy*vy+vz*vz;
     bool nearby=distance_sq<reach_limit;
     bool aligned=yaw> -0.46 && yaw<0.71 && pitch> -0.73 && pitch<0.33;
     f32 aim_hint=4.0;
-    if(for_alignment){
+    if(for_alignment || for_hatch){
         nearby=distance_sq<0.18;
-        f32 sight_x=1.255-pilot_x;
-        f32 sight_z=pilot_z+4.864;
+        f32 sight_x=(if(for_hatch){-0.94}else{1.255})-pilot_x;
+        f32 sight_z=pilot_z+(if(for_hatch){2.48}else{4.864});
         f32 ahead=sight_x*sine(yaw)+sight_z*cosine(yaw);
         f32 lateral=sight_x*cosine(yaw)-sight_z*sine(yaw);
-        f32 vertical=(-0.260-pilot_y)*cosine(pitch)-ahead*sine(pitch);
+        f32 vertical=((if(for_hatch){-0.14}else{-0.260})-pilot_y)*cosine(pitch)-ahead*sine(pitch);
         f32 side_error=lateral*lateral;
         f32 height_error=vertical*vertical;
         aligned=ahead>0.0 && side_error<ahead*ahead*0.105 && height_error<ahead*ahead*0.13;
@@ -976,14 +992,15 @@ unit(f32,i32,f32,f32) tick = fn(dt,keys,look_x,look_y) {
             if(nearby && (keys&128)!=0 && speed_sq<0.0256){alignment_braked=true;vx=0.0;vy=0.0;vz=0.0;};
         };
     };
-    reach=if(nearby&&aligned&&(!for_alignment||alignment_braked)){1.0}else{0.0};
+    reach=if(nearby&&aligned&&((!for_alignment && !for_hatch)||alignment_braked)){1.0}else{0.0};
     if((keys&64)!=0 && latch==0){
         if(mode==0 && reach==1.0){mode=1;mark=1;timer=0.0;carry=pilot_x;dock_yaw=yaw;dock_pitch=pitch;};
         if(mode==2){
             if(deck==1 && station_leg==2){
                 if(!cargo_locked){cargo_locked=true;mark=2;mesh_grip=-1.0;eva_room();}
                 else{if(alignment_stage==0){mode=3;mark=2;vx=0.36;vz=0.035;}
-                else{if(alignment_stage==2 || alignment_stage==3){alignment_stage=alignment_stage+1;mesh_grip=-1.0;eva_room();};};};
+                else{if(alignment_stage==2 || alignment_stage==3 || alignment_stage==6){alignment_stage=alignment_stage+1;mesh_grip=-1.0;eva_room();}
+                else{if(alignment_stage==4){mode=3;mark=2;vx=-0.49;vz=0.76;alignment_braked=false;};};};};
             }else{
                 mode=3;mark=2;
                 vz=if(deck==0){-0.19}else{-0.43};
@@ -994,12 +1011,12 @@ unit(f32,i32,f32,f32) tick = fn(dt,keys,look_x,look_y) {
     if(mode==1){
         timer=limit(timer+d*2.85,0.0,1.0);
         grip=timer*timer*(3.0-2.0*timer);
-        f32 end_heading=if(for_alignment){0.30}else{if(deck==0){0.60}else{if(station_leg==2){-0.015}else{if(station_leg==1){0.13}else{-0.105}}}};
-        f32 end_pitch=if(for_alignment){-0.34}else{if(deck==0){-0.20}else{if(station_leg==2){-0.285}else{if(station_leg==1){-0.13}else{-0.30}}}};
+        f32 end_heading=if(for_hatch){-0.76}else{if(for_alignment){0.30}else{if(deck==0){0.60}else{if(station_leg==2){-0.015}else{if(station_leg==1){0.13}else{-0.105}}}}};
+        f32 end_pitch=if(for_hatch){-0.15}else{if(for_alignment){-0.34}else{if(deck==0){-0.20}else{if(station_leg==2){-0.285}else{if(station_leg==1){-0.13}else{-0.30}}}}};
         yaw=dock_yaw+(end_heading-dock_yaw)*grip;pitch=dock_pitch+(end_pitch-dock_pitch)*grip;
         pilot_x=carry+(dock_x-carry)*grip;pilot_y=pilot_y+(dock_y-pilot_y)*d*12.0;pilot_z=pilot_z+(dock_z-pilot_z)*d*12.0;
         vx=0.0;vy=0.0;vz=0.0;
-        if(timer>=1.0){mode=2;pilot_y=dock_y;pilot_z=dock_z;if(for_alignment){alignment_stage=2;};};
+        if(timer>=1.0){mode=2;pilot_y=dock_y;pilot_z=dock_z;if(for_hatch){alignment_stage=6;}else{if(for_alignment){alignment_stage=2;};};};
     };
     if(mode==3){
         grip=limit(grip-d*(if(deck==0){3.5}else{2.8}),0.0,1.0);
@@ -1007,6 +1024,7 @@ unit(f32,i32,f32,f32) tick = fn(dt,keys,look_x,look_y) {
             mode=0;
             if(deck==1 && station_leg<2){station_leg=station_leg+1;mark=0;reach=0.0;};
             if(deck==1 && cargo_locked && alignment_stage==0){alignment_stage=1;reach=0.0;};
+            if(deck==1 && alignment_stage==4){alignment_stage=5;reach=0.0;};
         };
     };
     state[0]=pilot_x; state[1]=pilot_y; state[2]=pilot_z; state[3]=yaw; state[4]=pitch; state[5]=vx; state[6]=vy; state[7]=vz; state[8]=grip; state[9]=core.sint_to_float<f32>(mode); state[10]=reach; state[11]=core.sint_to_float<f32>(mark); state[12]=if(deck==0){0.745}else{pilot_x-0.23+(arm_x()-pilot_x+0.23)*grip};
@@ -1014,10 +1032,10 @@ unit(f32,i32,f32,f32) tick = fn(dt,keys,look_x,look_y) {
     state[14]=if(deck==0){-1.94}else{pilot_z-0.80+(arm_z()-pilot_z+0.80)*grip}; state[15]=core.sint_to_float<f32>(deck);
     state[16]=core.sint_to_float<f32>(station_leg); state[17]=if(cargo_locked){1.0}else{0.0};
     state[18]=0.0;
-    if(deck==1 && mode==0){
+    if(deck==1 && mode==0 && (alignment_stage<5 || for_hatch)){
         if(distance_sq<0.73 && !aligned){state[18]=1.0;};
         if(distance_sq<0.94 && aligned && speed_sq>0.71){state[18]=2.0;};
-        if(for_alignment){
+        if(for_alignment || for_hatch){
             state[18]=0.0;
             if(nearby && !alignment_braked){state[18]=3.0;};
             if(nearby && alignment_braked && !aligned){state[18]=aim_hint;};
