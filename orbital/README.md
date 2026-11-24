@@ -59,3 +59,6 @@ sizes. The WebGL host interpolates presented camera and arm coordinates around
 the fixed 60 Hz Wosy simulation. Station shadows are cached until actual
 station geometry changes, and the canvas can lower moving resolution on slow
 GPUs while keeping still scenes sharp.
+The planet is reprojected into a reusable backdrop only when the view direction
+or render size changes. Single-sample WebGL keeps slow-device movement from
+paying a multisample resolve every frame.
