@@ -357,7 +357,7 @@ function batch() {
  return {vao,buffer,num:0};
 }
 function update(b,ptr,n,usage){
- if(n<0 || n%24!==0 || n/8>19500)throw Error("Invalid orbital mesh");
+ if(n<0 || n%24!==0 || n/24>=6650)throw Error("Invalid orbital mesh");
  const payload=new Float32Array(engine.memory.buffer,ptr,n);
  worldVersion++;
  gl.bindVertexArray(b.vao);gl.bindBuffer(gl.ARRAY_BUFFER,b.buffer);
