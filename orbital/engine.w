@@ -9,7 +9,7 @@ f32[8][16] page0 = [vertex, vertex, vertex, vertex, vertex, vertex, vertex, vert
 f32[8][16][16] page1 = [page0, page0, page0, page0, page0, page0, page0, page0, page0, page0, page0, page0, page0, page0, page0, page0];
 f32[8][16][16][16] page2 = [page1, page1, page1, page1, page1, page1, page1, page1, page1, page1, page1, page1, page1, page1, page1, page1];
 f32[8][16][16][16][5] mesh = [page2,page2,page2,page2,page2];
-f32[20] state = [0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0];
+f32[21] state = [0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0];
 i32 count = 0;
 f32 r = 0.0;
 f32 g = 0.0;
@@ -266,8 +266,15 @@ unit(f32,f32,f32) rail_foot = fn(x,z,length){
     round_shell(x+0.044,-0.57,z,x+0.067,-0.57,z,0.137,0.130,0,0,10);
     socket_bolt(x,base+0.064,z+0.079,0.025);
 };
+unit(f32,f32,f32,f32) route_lens = fn(x,y,z,address){
+    paint(0.15,0.22,0.24,0.62);
+    box(x-0.019,y-0.031,z-0.072,0.202,0.073,0.073);
+    paint(0.32,0.70,0.79,address);
+    quad(x,y,z+0.003,x+0.131,y,z+0.003,x+0.162,y+0.031,z+0.003,x,y+0.031,z+0.003,0.92);
+};
 unit(i32) traversal_rail = fn(leg) {
     f32 z=rail_depth(leg);
+    if(leg<2){route_lens(0.12,-0.505,z+0.103,1.10+core.sint_to_float<f32>(leg)*0.01);};
     paint(0.53,0.54,0.54,0.62);
     if(leg==2){
         round_shell(-1.55,-0.57,z,-0.55,-0.57,z,0.087,0.087,0,0,36);
@@ -537,6 +544,7 @@ unit(f32,f32) captive_bolt = fn(x,y){
 unit() cargo_fixture = fn {
     f32 z=rail_depth(2);
     f32 pin=-0.57+seat_offset();
+    route_lens(-0.16,-0.234,-5.063,1.12);
     paint(0.26,0.29,0.30,0.66);
     box(-0.59,-0.83,-5.45,0.93,0.62,0.29);
     paint(0.095,0.12,0.13,0.08);
@@ -574,6 +582,7 @@ unit() cargo_fixture = fn {
 };
 unit() alignment_console = fn {
     f32 pin=align_pin_y();
+    route_lens(1.10,-0.282,-4.84,1.13);
     paint(0.22,0.27,0.32,0.65);
     box(0.73,-0.73,-5.19,0.77,0.19,0.19);
     box(0.99,-0.70,-5.15,0.54,0.54,0.19);
@@ -638,6 +647,10 @@ unit() airlock = fn {
     paint(0.65,0.69,0.68,0.71);
     round_shell(-0.84,bolt,-2.48,-0.77,bolt,-2.48,0.101,0.101,0,0,18);
     sweep(-0.769,bolt,-2.48,-0.769,bolt,-2.48,0.101,0.0,0,0,18);
+    paint(0.17,0.23,0.25,0.62);
+    box(-1.078,0.039,-2.521,0.106,0.081,0.100);
+    paint(0.93,0.58,0.25,1.14);
+    quad(-0.972,0.047,-2.428,-0.972,0.112,-2.428,-0.972,0.112,-2.514,-0.972,0.047,-2.514,0.92);
     paint(0.23,0.29,0.30,0.62);
     box(-1.05,-0.199,-2.387,0.077,0.081,0.038);
     if(alignment_stage==7){paint(0.27,1.0,0.57,0.97);}else{paint(1.0,0.55,0.23,0.97);};
@@ -830,7 +843,7 @@ unit() eva_room = fn {
 f32 pilot_x=0.0;f32 pilot_y=0.0;f32 pilot_z=0.37;
 f32 vx=0.0;f32 vy=0.0;f32 vz=0.0;
 f32 yaw=0.0;f32 pitch=0.0;f32 timer=0.0;
-f32 grip=0.0; f32 reach=0.0; f32 carry=0.0;
+f32 grip=0.0; f32 reach=0.0; f32 carry=0.0;f32 carry_y=0.0;f32 carry_z=0.0;
 f32 dock_yaw=0.0; f32 dock_pitch=0.0;
 i32 mode=0;i32 mark=0;i32 latch=0;
 bool ready=false;
@@ -975,6 +988,7 @@ unit(f32,i32,f32,f32) tick = fn(dt,keys,look_x,look_y) {
     bool nearby=distance_sq<reach_limit;
     bool aligned=yaw> -0.46 && yaw<0.71 && pitch> -0.73 && pitch<0.33;
     f32 aim_hint=4.0;
+    f32 travel_hint=0.0;
     if(for_alignment || for_hatch){
         nearby=distance_sq<0.18;
         f32 sight_x=(if(for_hatch){-0.94}else{1.255})-pilot_x;
@@ -984,6 +998,7 @@ unit(f32,i32,f32,f32) tick = fn(dt,keys,look_x,look_y) {
         f32 vertical=((if(for_hatch){-0.14}else{-0.260})-pilot_y)*cosine(pitch)-ahead*sine(pitch);
         f32 side_error=lateral*lateral;
         f32 height_error=vertical*vertical;
+        if(for_hatch && !nearby && (ahead<=0.0 || side_error>ahead*ahead*0.41)){travel_hint=if(lateral>=0.0){8.0}else{9.0};};
         aligned=ahead>0.0 && side_error<ahead*ahead*0.105 && height_error<ahead*ahead*0.13;
         aim_hint=if(ahead<=0.0 || side_error>=height_error){if(lateral>=0.0){4.0}else{5.0}}
             else{if(vertical>=0.0){6.0}else{7.0}};
@@ -994,7 +1009,7 @@ unit(f32,i32,f32,f32) tick = fn(dt,keys,look_x,look_y) {
     };
     reach=if(nearby&&aligned&&((!for_alignment && !for_hatch)||alignment_braked)){1.0}else{0.0};
     if((keys&64)!=0 && latch==0){
-        if(mode==0 && reach==1.0){mode=1;mark=1;timer=0.0;carry=pilot_x;dock_yaw=yaw;dock_pitch=pitch;};
+        if(mode==0 && reach==1.0){mode=1;mark=1;timer=0.0;carry=pilot_x;carry_y=pilot_y;carry_z=pilot_z;dock_yaw=yaw;dock_pitch=pitch;};
         if(mode==2){
             if(deck==1 && station_leg==2){
                 if(!cargo_locked){cargo_locked=true;mark=2;mesh_grip=-1.0;eva_room();}
@@ -1014,7 +1029,7 @@ unit(f32,i32,f32,f32) tick = fn(dt,keys,look_x,look_y) {
         f32 end_heading=if(for_hatch){-0.76}else{if(for_alignment){0.30}else{if(deck==0){0.60}else{if(station_leg==2){-0.015}else{if(station_leg==1){0.13}else{-0.105}}}}};
         f32 end_pitch=if(for_hatch){-0.15}else{if(for_alignment){-0.34}else{if(deck==0){-0.20}else{if(station_leg==2){-0.285}else{if(station_leg==1){-0.13}else{-0.30}}}}};
         yaw=dock_yaw+(end_heading-dock_yaw)*grip;pitch=dock_pitch+(end_pitch-dock_pitch)*grip;
-        pilot_x=carry+(dock_x-carry)*grip;pilot_y=pilot_y+(dock_y-pilot_y)*d*12.0;pilot_z=pilot_z+(dock_z-pilot_z)*d*12.0;
+        pilot_x=carry+(dock_x-carry)*grip;pilot_y=carry_y+(dock_y-carry_y)*grip;pilot_z=carry_z+(dock_z-carry_z)*grip;
         vx=0.0;vy=0.0;vz=0.0;
         if(timer>=1.0){mode=2;pilot_y=dock_y;pilot_z=dock_z;if(for_hatch){alignment_stage=6;}else{if(for_alignment){alignment_stage=2;};};};
     };
@@ -1036,7 +1051,7 @@ unit(f32,i32,f32,f32) tick = fn(dt,keys,look_x,look_y) {
         if(distance_sq<0.73 && !aligned){state[18]=1.0;};
         if(distance_sq<0.94 && aligned && speed_sq>0.71){state[18]=2.0;};
         if(for_alignment || for_hatch){
-            state[18]=0.0;
+            state[18]=travel_hint;
             if(nearby && !alignment_braked){state[18]=3.0;};
             if(nearby && alignment_braked && !aligned){state[18]=aim_hint;};
         };
@@ -1046,6 +1061,10 @@ unit(f32,i32,f32,f32) tick = fn(dt,keys,look_x,look_y) {
         if(deck==0){glove();}else{eva_glove();};
         mesh_x=pilot_x;mesh_y=pilot_y;mesh_z=pilot_z;mesh_grip=grip;mesh_deck=deck;
     };
-    unsafe {host.frame(core.pointer_cast<*?u8>(&?state[0]),20);};
+    state[20]=0.0;
+    if(deck==1 && mode==0){
+        state[20]=if(alignment_stage==5){5.0}else{if(alignment_stage==1){4.0}else{if(alignment_stage==0){1.0+core.sint_to_float<f32>(station_leg)}else{0.0}}};
+    };
+    unsafe {host.frame(core.pointer_cast<*?u8>(&?state[0]),21);};
 };
 %%end

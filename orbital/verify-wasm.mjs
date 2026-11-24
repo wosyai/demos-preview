@@ -7,7 +7,7 @@ let room,hand,state,engine,roomLoads=0,handLoads=0;
 function read(p,n){assert.equal(p%4,0);return new Float32Array(engine.memory.buffer,p,n).slice();}
 engine=new WebAssembly.Instance(wasm,{orbital:{
  scenery(p,n){room=read(p,n);roomLoads++;},hands(p,n){hand=read(p,n);handLoads++;},
- frame(p,n){assert.equal(n,20);state=read(p,n);}
+ frame(p,n){assert.equal(n,21);state=read(p,n);}
 }}).exports;
 engine._start();
 const step=(keys=0,yaw=0,pitch=0,dt=1/60)=>engine.tick(dt,keys,yaw,pitch);
@@ -30,8 +30,8 @@ for(let i=0;i<90;i++)step(64|4|2|16);
 assert.deepEqual(capture(),contact,'held action/thrust cannot exit the frozen handrail pose');
 assert.deepEqual(contact.slice(5,10),[0,0,0,1,2]);
 const box = (m) => [0,1,2].map(i=>{const a=m.filter((_,j)=>j%8===i);return [Math.min(...a),Math.max(...a)];});
-assert.notDeepEqual(box(initial.slice(20)),box(contact.slice(20)),'contact has its own authored hand volume');
-const [x,y,z]=box(contact.slice(20));assert.ok(x[0]<.745 && x[1]>.745 && y[1]>-.21 && z[0]<-1.94 && z[1]>-1.94,'contact mesh wraps the handrail');
+assert.notDeepEqual(box(initial.slice(21)),box(contact.slice(21)),'contact has its own authored hand volume');
+const [x,y,z]=box(contact.slice(21));assert.ok(x[0]<.745 && x[1]>.745 && y[1]>-.21 && z[0]<-1.94 && z[1]>-1.94,'contact mesh wraps the handrail');
 step();step(64);assert.equal(state[9],3);assert.equal(state[11],2);assert.ok(state[7]<0);
 const before=state[2];until(()=>state[9]===0,0);assert.ok(state[2]<before);
 reset();assert.deepEqual(capture(),initial,'reset restores exact initial pose');
@@ -44,6 +44,10 @@ console.log('Orbital WASM: station batch, initial/contact poses, reach/aim gatin
 
 engine.select_deck(1);step(0,0,0,0);
 const evaStart=capture(),evaRoom=room;
+assert.equal(state[20],1,'the Wosy route starts with only the first grip visible as active');
+const lenses=Array.from({length:5},(_,i)=>1.10+i*.01);
+for(const material of lenses)assert.ok(evaRoom.some((n,i)=>i%8===7&&Math.abs(n-material)<.0001),'every cue has actual tagged 3D geometry');
+assert.ok(evaRoom.length/24<6350,'route indicators stay within the original static batch');
 assert.equal(state[15],1);assert.ok(evaRoom.length>=5400*8 && evaRoom.length<=19000*8 && evaRoom.length%24===0);
 assert.ok(evaRoom.every(Number.isFinite) && hand.every(Number.isFinite));
 const maskedPanel=[];
@@ -83,18 +87,28 @@ assert.ok(localBounce.every(v=>v[0]<-.51&&v[0]>-1.95&&v[2]<-6.06&&v[2]>-7.23&&v[
 
 
 
-assert.notDeepEqual(initial.slice(20),evaStart.slice(20),'EVA uses a separately authored pressurized glove');
+assert.notDeepEqual(initial.slice(21),evaStart.slice(21),'EVA uses a separately authored pressurized glove');
 assert.ok(evaRoom.some((x,i)=>i%8===4 && x<.14),'station includes the dark solar cell trim');
 step(64);assert.equal(state[9],0);step();
 until(()=>state[10]===1,4);
 step(0,1.15);assert.equal(state[10],0);assert.equal(state[18],1,"an off-axis approach gets the optional re-aim cue");step(64);assert.equal(state[9],0);
 step(0,-1.15);assert.equal(state[10],1);
 assert.equal(state[18],2,"a fast but eligible EVA gets the brake cue");
-step(64);until(()=>state[9]===2,64);
+step(64);
+const startEase=[...state.slice(0,5)], weight=state[8];
+const targetEase=[0.05,-0.025,-0.88,-0.105,-0.30];
+for(let i=0;i<8;i++){
+   step(64);
+   for(let axis=0;axis<5;axis++){
+      const currentRatio=(1-state[8])/(1-weight);
+      assert.ok(Math.abs(state[axis]-targetEase[axis]-(startEase[axis]-targetEase[axis])*currentRatio)<1e-5,'position and aim share one camera easing curve');
+   }
+}
+until(()=>state[9]===2,64);
 const evaContact=capture();
 assert.deepEqual(evaContact.slice(5,10),[0,0,0,1,2]);
-assert.notDeepEqual(evaStart.slice(20),evaContact.slice(20));
-const extents=box(evaContact.slice(20));
+assert.notDeepEqual(evaStart.slice(21),evaContact.slice(21));
+const extents=box(evaContact.slice(21));
 assert.ok(extents[1][1]>-.472 && extents[2][0]<-1.665 && extents[2][1]>-1.50,'fingers are authored both above and behind the rounded rail');
 const heldUploads=handLoads;
 for(let i=0;i<85;i++)step(64|16|2);assert.deepEqual(capture(),evaContact);
@@ -102,11 +116,11 @@ assert.equal(handLoads,heldUploads,'a still grip does not re-upload meshes or in
 step();
 step(64);assert.equal(state[11],2);assert.ok(state[7]<0);
 until(()=>state[9]===0,0);
-assert.equal(state[16],1);assert.equal(state[17],0);
+assert.equal(state[16],1);assert.equal(state[17],0);assert.equal(state[20],2);
 step(64);assert.equal(state[9],0,'cannot trigger the next rail as soon as released');step();
 until(()=>state[10]===1,4);
 step(64);until(()=>state[9]===2,64);
-assert.equal(state[16],1);assert.equal(state[17],0);
+assert.equal(state[16],1);assert.equal(state[17],0);assert.equal(state[20],0);
 assert.equal(state[14].toFixed(2),'-3.43');
 assert.equal(state[3].toFixed(2),'0.13','the scaffold settle frames the outboard suspended load');
 assert.equal(state[4].toFixed(2),'-0.13');
@@ -202,6 +216,8 @@ assert.equal(roomLoads,countBeforeLatch+3,'handoff invalidates cached world once
 assert.equal(state[19],4,'held transfer does not push off');
 step();step(64);until(()=>state[19]===5,0);
 assert.equal(state[18],0,"release never advertises a stale console brake cue as the hatch");
+assert.equal(state[20],5,'hatch guidance is selected after release');
+step();assert.equal(state[18],9,'the still-offscreen hatch gets a left cue before braking');
 step(64);assert.equal(state[9],0,'cargo is too far from hatch to grip');
 assert.equal(state[10],0);
 until(()=>state[18]===3,0,480);

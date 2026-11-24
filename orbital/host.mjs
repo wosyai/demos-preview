@@ -82,6 +82,8 @@ uniform highp sampler2DArray surfaceTile;
 uniform bool armSurfaceReady;
 uniform bool panelStampReady;
 uniform bool pressureStampReady;
+uniform int routeLens;
+uniform bool routeReach;
 ${sun}
 float shadowAt(vec3 p,vec3 n,float direct){
  if(detailedShadow==0){
@@ -199,6 +201,12 @@ ${exteriorMaterial}
 void main(){
  vec3 normal=normalize(cross(dFdx(world),dFdy(world)));
  if(eva==1){
+   if(material.y>=1.098){
+     int address=int(round((material.y-1.10)*100.))+1;
+     vec3 idle=vec3(.15,.23,.24);
+     vec3 litLens=address==5?vec3(1.0,.63,.28):address==4?vec3(.40,.81,1.):vec3(.43,.89,.90);
+     pix=vec4(address==routeLens?mix(litLens,vec3(.84,1.,.90),routeReach?.48:.0):idle,1.);return;
+   }
    if(dot(fittedNormal,fittedNormal)>.2)normal=normalize(fittedNormal);
    if(dot(normal,eye-world)<0.)normal=-normal;
    pix=vec4(sunColor(normal),1.);return;
@@ -315,7 +323,7 @@ function program(a,b) {
  }
  gl.linkProgram(p);
  if(!gl.getProgramParameter(p,gl.LINK_STATUS))throw Error(gl.getProgramInfoLog(p));
- return {p, eye:gl.getUniformLocation(p,"eye"), basis:gl.getUniformLocation(p,"basis"), optics:gl.getUniformLocation(p,"optics"), roll:gl.getUniformLocation(p,"roll"), eva:gl.getUniformLocation(p,"eva"), photo:gl.getUniformLocation(p,"photo"), earth:gl.getUniformLocation(p,"earthMap"), backdrop:gl.getUniformLocation(p,"backdrop"), sunMap:gl.getUniformLocation(p,"sunMap"),armPose:gl.getUniformLocation(p,"armPose"),armSurfaceReady:gl.getUniformLocation(p,"armSurfaceReady"),panelStampReady:gl.getUniformLocation(p,"panelStampReady"),pressureStampReady:gl.getUniformLocation(p,"pressureStampReady"), renderFraction:gl.getUniformLocation(p,"renderFraction"),surfaceTile:gl.getUniformLocation(p,"surfaceTile"), detailedShadow:gl.getUniformLocation(p,"detailedShadow")};
+ return {p, eye:gl.getUniformLocation(p,"eye"), basis:gl.getUniformLocation(p,"basis"), optics:gl.getUniformLocation(p,"optics"), roll:gl.getUniformLocation(p,"roll"), eva:gl.getUniformLocation(p,"eva"), photo:gl.getUniformLocation(p,"photo"), earth:gl.getUniformLocation(p,"earthMap"), backdrop:gl.getUniformLocation(p,"backdrop"), sunMap:gl.getUniformLocation(p,"sunMap"),armPose:gl.getUniformLocation(p,"armPose"),armSurfaceReady:gl.getUniformLocation(p,"armSurfaceReady"),panelStampReady:gl.getUniformLocation(p,"panelStampReady"),pressureStampReady:gl.getUniformLocation(p,"pressureStampReady"), renderFraction:gl.getUniformLocation(p,"renderFraction"),surfaceTile:gl.getUniformLocation(p,"surfaceTile"), routeLens:gl.getUniformLocation(p,"routeLens"), routeReach:gl.getUniformLocation(p,"routeReach"), detailedShadow:gl.getUniformLocation(p,"detailedShadow")};
 }
 const coarseShadow=matchMedia("(pointer:coarse)").matches;
 const maxShadow=gl?gl.getParameter(gl.MAX_TEXTURE_SIZE):1024;
@@ -335,7 +343,7 @@ let shadowDirty=true;
 let renderLoad=1, slowFrames=0, fastFrames=0, stillFrames=0;
 let balanced=false, software=rasterSoftware;
 let previous=null;
-let worldVersion=0,renderVersion=-1,renderYaw=NaN,renderPitch=NaN,renderW=0,renderH=0,renderX=NaN,renderY=NaN,renderZ=NaN,renderGrip=NaN;
+let worldVersion=0,renderVersion=-1,renderYaw=NaN,renderPitch=NaN,renderW=0,renderH=0,renderX=NaN,renderY=NaN,renderZ=NaN,renderGrip=NaN,renderRoute=-1,renderReach=-1;
 let scene,space,skyCopy,depth,shadowFbo,shadowTexture,earthTexture,surfaceTexture,earthReady=0,engine,active=false, frame=null, grabbed=null, dx=0, dy=0, last=0, remainder=0, pulse=false, pulseDown=false;
 const held=new Set(),touch=new Map();
 let actionTouch=null,suppressTouchClick=false;
@@ -419,8 +427,8 @@ function render(alpha) {
  gl.viewport(0,0,w,h);
  const pose=previous&&frame[15]===previous[15] ? frame.map((n,i)=>i<5||i===8||(i>=12&&i<=14)?previous[i]+(n-previous[i])*alpha:n):frame;
  const [x,y,z,heading,pitch]=pose;
- if(renderVersion===worldVersion && renderYaw===heading && renderPitch===pitch && renderW===w && renderH===h && renderX===x && renderY===y && renderZ===z && renderGrip===pose[8])return;
- renderVersion=worldVersion;renderYaw=heading;renderPitch=pitch;renderW=w;renderH=h;renderX=x;renderY=y;renderZ=z;renderGrip=pose[8];
+ if(renderVersion===worldVersion && renderYaw===heading && renderPitch===pitch && renderW===w && renderH===h && renderX===x && renderY===y && renderZ===z && renderGrip===pose[8] && renderRoute===pose[20] && renderReach===pose[10])return;
+ renderVersion=worldVersion;renderYaw=heading;renderPitch=pitch;renderW=w;renderH=h;renderX=x;renderY=y;renderZ=z;renderGrip=pose[8];renderRoute=pose[20];renderReach=pose[10];
  const eva=frame[15]===1;
  if(eva&&shadowDirty){
    shadowDirty=false;
@@ -446,6 +454,7 @@ function render(alpha) {
  if(holdingAngle)bakeBackdrop(bind,w,h,eva,heading,pitch);
  gl.clear(gl.DEPTH_BUFFER_BIT);
  gl.enable(gl.DEPTH_TEST);bind(scene);
+ gl.uniform1i(scene.routeLens,pose[20]);gl.uniform1i(scene.routeReach,pose[10]);
  gl.activeTexture(gl.TEXTURE2);gl.bindTexture(gl.TEXTURE_2D,shadowTexture);gl.uniform1i(scene.sunMap,2);gl.uniform1i(scene.detailedShadow,Number(detailed));
  gl.activeTexture(gl.TEXTURE4);gl.bindTexture(gl.TEXTURE_2D_ARRAY,surfaceTexture);gl.uniform1i(scene.surfaceTile,4);gl.uniform1i(scene.armSurfaceReady,Number(armSurfaceReady));gl.uniform1i(scene.panelStampReady,Number(panelStampReady));gl.uniform1i(scene.pressureStampReady,Number(pressureStampReady));
  meshes(scene,eva,pose);
@@ -478,8 +487,8 @@ function hud(){
    else if(align===5&&mode===1){objective="Taking the airlock handle";tip="Holding station.";action="Gripping handle";}
    else if(align===5&&near){objective="Airlock handle in reach";tip="Grip the amber locking bar.";action="Grip hatch";}
    else if(align===5&&cue===3){objective="Brake at the hatch";tip="Hold brake until your drift settles.";action="Brake first";compactTip="Hold BRAKE";}
-   else if(align===5&&cue>=4){objective="Face the hatch handle";tip="Drag toward the amber handle.";action="Aim at handle";aim=cue;compactTip="Drag toward handle";}
-   else if(align===5||align===4&&mode===3){objective="Return to the airlock";tip="Ride the push back toward the round hatch, then brake.";action="Out of reach";compactTip="Back toward hatch";}
+   else if(align===5&&cue>=4&&cue<8){objective="Face the hatch handle";tip="Drag toward the amber handle.";action="Aim at handle";aim=cue;compactTip="Drag toward handle";}
+   else if(align===5||align===4&&mode===3){objective="Return to the airlock";tip="Ride the push back toward the round hatch, then brake.";action="Out of reach";compactTip=cue>=8?"Look toward hatch":"Drift toward hatch";aim=cue===8?4:cue===9?5:0;}
    else if(align===4){objective="Cargo transfer complete";tip="Release the console and return to the round airlock hatch.";action="Release & return";}
    else if(align===3){objective="Cargo seated";tip="Close the cradle keepers and release the robot grip.";action="Transfer cargo";compactTip="Close keepers";}
    else if(align===2){objective="Alignment handle secured";tip="Set the handle to lower the load into its shoes.";action="Set alignment";}
@@ -496,14 +505,17 @@ function hud(){
   else if(mode===2){objective=rail+" secured";tip="Open your hand and push toward the next rail.";action="Release & push";}
   else if(mode===1){objective="Gripping the rail";tip="Your drift is arrested.";}
   else if(near){objective=rail+" in reach";tip="Grip to stop drifting.";}
-  if(mode===0&&frame[18]===1)tip="Turn back toward the rail.";
-  if(mode===0&&frame[18]===2)tip="Ease off thrust or brake to steady the approach.";
+  if(!locked&&mode===0&&!near)compactTip="Drift to lit rail";
+  if(mode===0&&frame[18]===1){tip="Turn back toward the rail.";compactTip="Turn to lit rail";}
+  if(mode===0&&frame[18]===2){tip="Ease off thrust or brake to steady the approach.";compactTip="Ease off or brake";}
  }else if(mark===2){objective="Exercise complete";tip="You pushed off. Reset to practice again.";}
  else if(mode===2){objective="Rail secured";tip="Release the rail to push off.";action="Release & push";}
  else if(mode===1){objective="Gripping the handrail";tip="Your drift is arrested.";}
  else if(near){objective="Handrail in reach";tip="Grip to stop drifting.";}
  const reticle=$("reticle"), marker=aim?["+","+","+","+","→","←","↑","↓"][aim]:"+";
- if(reticle.textContent!==marker){reticle.textContent=marker;reticle.classList.toggle("aim-cue",Boolean(aim));}
+ if(reticle.textContent!==marker)reticle.textContent=marker;
+ reticle.classList.toggle("aim-cue",Boolean(aim));
+ reticle.classList.toggle("route-aim",Boolean(aim)&&align===5&&frame[18]>=8);
  if($("objective").textContent!==objective)$("objective").textContent=objective;
  if($("help").textContent!==tip)$("help").textContent=tip;
  const compact=$("compact-help");
@@ -768,12 +780,12 @@ try{
   gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_T,gl.CLAMP_TO_EDGE);earthReady=1;worldVersion++;
  };
  earth.src=new URL("./earth.jpg?v=2",import.meta.url).href;
- const response=await fetch(new URL("./orbital.wasm?v=18",import.meta.url));
+ const response=await fetch(new URL("./orbital.wasm?v=19",import.meta.url));
  if(!response.ok)throw Error("The station engine could not be downloaded.");
  const {instance}=await WebAssembly.instantiate(await response.arrayBuffer(),{
   orbital:{
    scenery(p,n){update(room,p,n,gl.STATIC_DRAW);},hands(p,n){update(hand,p,n,gl.DYNAMIC_DRAW);},
-   frame(p,n){if(n!==20)throw Error("Unexpected station frame");frame=new Float32Array(engine.memory.buffer,p,n).slice();}
+   frame(p,n){if(n!==21)throw Error("Unexpected station frame");frame=new Float32Array(engine.memory.buffer,p,n).slice();}
   },
   wasi_snapshot_preview1:{proc_exit(n){throw Error("Station exited: "+n);}}
  });

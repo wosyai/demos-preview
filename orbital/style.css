@@ -25,6 +25,7 @@ footer{position:absolute;bottom:1.35rem;left:50%;transform:translateX(-50%);widt
 .orbital-timing button{min-height:34px;padding:.2rem .46rem}
 
 .cross.aim-cue{font-weight:800;color:#8bf3ff;text-shadow:0 1px 5px #000,0 0 8px #09c8ec88}
+.cross.route-aim{font-size:1.32rem;color:#ffcb81;text-shadow:0 1px 4px #000,0 0 7px #211607}
 .touch button.brake{font-size:.60rem;font-weight:850;letter-spacing:.025em;color:#c9fbff}
 
 #compact-help{display:none}

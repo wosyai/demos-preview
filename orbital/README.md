@@ -73,6 +73,11 @@ The exterior first-person arm uses a compact, indexed export of the Apollo
 astronaut asset. The authored Wosy arm is the loading/fallback mesh.
 [Art sources, credit, and two-pose export](art/README.md).
 
+Only the next usable grip is lit. The locator lenses are built into the rails,
+console and hatch; on the return leg a small reticle arrow points to the hatch
+when it is off to the side. The pilot eye, aim and hand ease in on the same
+fixed-step capture curve.
+
 The contact and release states retain world-space rail anchors on all screen
 sizes. At the cargo brace the pin and hand share both Wosy-authored endpoints.
 The blue console first seats the cargo, then a separate press closes both
