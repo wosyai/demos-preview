@@ -347,7 +347,7 @@ function batch() {
  return {vao,buffer,num:0};
 }
 function update(b,ptr,n,usage){
- if(n<0 || n%24!==0 || n/8>16384)throw Error("Invalid orbital mesh");
+ if(n<0 || n%24!==0 || n/8>18300)throw Error("Invalid orbital mesh");
  const payload=new Float32Array(engine.memory.buffer,ptr,n);
  worldVersion++;
  gl.bindVertexArray(b.vao);gl.bindBuffer(gl.ARRAY_BUFFER,b.buffer);
@@ -696,9 +696,10 @@ try{
   }
  }
  async function uploadSkin(){
-  if(loadingSkin||stationTextureSide!==512||skinMap.naturalWidth!==1024||skinMap.naturalHeight!==512)return;
+  if(loadingSkin||stationTextureSide!==512||!skinMap.complete||skinMap.naturalWidth!==1024||skinMap.naturalHeight!==512)return;
   loadingSkin=true;
   try{
+   await skinMap.decode();
    const options={premultiplyAlpha:"none",colorSpaceConversion:"none"};
    const maps=await Promise.all([0,512].map(x=>createImageBitmap(skinMap,x,0,512,512,options)));
    gl.activeTexture(gl.TEXTURE4);gl.bindTexture(gl.TEXTURE_2D_ARRAY,surfaceTexture);
@@ -707,7 +708,7 @@ try{
     maps[i].close();
    }
    gl.generateMipmap(gl.TEXTURE_2D_ARRAY);armSurfaceReady=true;worldVersion++;
-  }catch(e){console.warn("Apollo material could not be loaded",e);}
+  }catch(e){loadingSkin=false;console.warn("Apollo material could not be loaded",e);}
  }
  surfaces.onload=()=>{
   const side=surfaces.width/3;
@@ -719,13 +720,13 @@ try{
   stationTextureSide=side;worldVersion++;uploadSkin();uploadStamp();uploadPressure();
  };
  function uploadStamp(){
-  if(panelStampReady||stationTextureSide!==512||panelStamp.naturalWidth!==512||panelStamp.naturalHeight!==512)return;
+  if(panelStampReady||stationTextureSide!==512||!panelStamp.complete||panelStamp.naturalWidth!==512||panelStamp.naturalHeight!==512)return;
   gl.activeTexture(gl.TEXTURE4);gl.bindTexture(gl.TEXTURE_2D_ARRAY,surfaceTexture);
   putLayers(panelStamp,8,1,1,512);gl.generateMipmap(gl.TEXTURE_2D_ARRAY);
   panelStampReady=true;worldVersion++;
  }
  function uploadPressure(){
-  if(pressureStampReady||stationTextureSide!==512||pressureStamp.naturalWidth!==512||pressureStamp.naturalHeight!==512)return;
+  if(pressureStampReady||stationTextureSide!==512||!pressureStamp.complete||pressureStamp.naturalWidth!==512||pressureStamp.naturalHeight!==512)return;
   gl.activeTexture(gl.TEXTURE4);gl.bindTexture(gl.TEXTURE_2D_ARRAY,surfaceTexture);
   putLayers(pressureStamp,9,1,1,512);gl.generateMipmap(gl.TEXTURE_2D_ARRAY);
   pressureStampReady=true;worldVersion++;
@@ -756,7 +757,7 @@ try{
   gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_T,gl.CLAMP_TO_EDGE);earthReady=1;worldVersion++;
  };
  earth.src=new URL("./earth.jpg?v=2",import.meta.url).href;
- const response=await fetch(new URL("./orbital.wasm?v=16",import.meta.url));
+ const response=await fetch(new URL("./orbital.wasm?v=18",import.meta.url));
  if(!response.ok)throw Error("The station engine could not be downloaded.");
  const {instance}=await WebAssembly.instantiate(await response.arrayBuffer(),{
   orbital:{

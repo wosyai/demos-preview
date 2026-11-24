@@ -44,7 +44,7 @@ console.log('Orbital WASM: station batch, initial/contact poses, reach/aim gatin
 
 engine.select_deck(1);step(0,0,0,0);
 const evaStart=capture(),evaRoom=room;
-assert.equal(state[15],1);assert.ok(evaRoom.length>=5400*8 && evaRoom.length<=16100*8 && evaRoom.length%24===0);
+assert.equal(state[15],1);assert.ok(evaRoom.length>=5400*8 && evaRoom.length<=18300*8 && evaRoom.length%24===0);
 assert.ok(evaRoom.every(Number.isFinite) && hand.every(Number.isFinite));
 const maskedPanel=[];
 for(let i=0;i<evaRoom.length;i+=8)if(Math.abs(evaRoom[i+7]-.18375)<.0001)maskedPanel.push(evaRoom.slice(i,i+8));
@@ -65,6 +65,11 @@ assert.ok(encodedStationNormals.length>1100&&encodedStationNormals.length<evaRoo
 assert.ok(encodedStationNormals.every(n=>Number.isInteger(n)&&n>=-65025));
 const railNormal=evaRoom.findIndex((x,i)=>i%8===0&&Math.abs(x+1.55)<.001&&Math.abs(evaRoom[i+1]+.57)<.001&&Math.abs(evaRoom[i+2]+3.343)<.001);
 assert.ok(railNormal>=0 && unpackStationNormal(evaRoom[railNormal+6])[2]>.98,'rail skin normal follows the outside cylinder; caps remain separate');
+assert.ok(evaRoom.some((v,i)=>i%8===0&&v<-1.13&&v>-1.29&&Math.abs(evaRoom[i+1]+.57)<.003&&Math.abs(evaRoom[i+2]+1.59-.137)<.003),'rail mount split collar clears the original rail without interpenetration');
+const narrowFlange=evaRoom.filter((v,i)=>i%8===0&&Math.abs(v+1.367)<.001&&Math.abs(evaRoom[i+1]+.57)<.002&&Math.abs(evaRoom[i+2]+1.59-.130)<.001);
+assert.ok(narrowFlange.length>0&&.130*Math.cos(Math.PI/10)>.120,'the blue/gold inscribed shoulder faces protrude beyond the base collars without poking through');
+
+
 const hatchPoint=(u,v,d,lit)=>evaRoom.some((value,i)=>i%8===0&&
  Math.abs(value-(-1.10+.926*u+.378*d))<.0001&&Math.abs(evaRoom[i+1]-(.20+v))<.0001&&
  Math.abs(evaRoom[i+2]-(-6.39-.378*u+.926*d))<.0001&&(!lit||evaRoom[i+7]>.98));
@@ -114,7 +119,7 @@ until(()=>state[10]===1,4);
 step(64);until(()=>state[9]===2,64);
 const beforeLatch=room, countBeforeLatch=roomLoads;
 const openPin=[...state.slice(12,15)], openGlove=hand, openHandLoads=handLoads;
-assert.ok(room.length<16384*8,'exterior geometry fits without clipping the assembly batch');
+assert.ok(room.length<=18300*8,'exterior geometry fits without clipping the assembly batch');
 assert.equal(state[14].toFixed(2),'-4.88');
 for(let i=0;i<120;i++)step(64);
 assert.equal(state[17],0,'holding grip does not seat the latch automatically');

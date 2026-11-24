@@ -77,3 +77,8 @@ backer. Repack the generated guide with `python3 art/build-pressure-skin.py
 /path/to/pressure-skin-ortho.png`. The nearby circular door uses a local
 shadow receiver offset to prevent false radial acne while keeping fixture
 shadows. Engine fit and suit colors are unchanged.
+
+The closed airlock and open transfer hatch each have a modeled structural
+ring and fasteners. The grip rails retain their original hand-contact
+surfaces; formed shoes and crossmembers support the outer collars. The
+additional geometry stays in the same indexed scenery batch.
