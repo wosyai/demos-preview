@@ -33,3 +33,21 @@ The behavior check launches the exact WASM, verifies the room and hand meshes
 and checks that grip requires both range and aim, throttle cannot displace a
 held pose, held action cannot accidentally release, push-off imparts drift,
 and reset restores the exact initial pose.
+
+## Exterior EVA
+
+Select **Begin spacewalk** to practice on Kestrel's starboard truss. Approach
+the silver rail, grip to arrest drift, then push off. Choose **Indoor
+training** to repeat the starting exercise. The menu and reset buttons are
+always available. These are bounded training spaces, not a model of orbital
+flight or spacecraft controls.
+
+The visual design uses authored Wosy geometry, separate open and closed glove
+poses, WebGL sun shadows, and a spherical Earth backdrop. Earth imagery:
+[NASA Goddard Space Flight Center, Blue Marble 2015](https://svs.gsfc.nasa.gov/30763/),
+Amy Moran and Jesse Allen, from Suomi NPP VIIRS. The image is presented in a
+fictional orbit and does not imply NASA endorsement.
+
+The exterior first-person arm uses a compact, indexed export of the Apollo
+astronaut asset. The authored Wosy arm is the loading/fallback mesh.
+[Art sources, credit, and two-pose export](art/README.md).

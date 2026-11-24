@@ -29,6 +29,7 @@ run_runner = "web"
 [targets.app.artifacts.main.profiles.dev.exports]
 reset = "reset"
 tick = "tick"
+select_deck = "select_deck"
 
 [targets.app.profiles.dev]
 main_artifact = "main"
