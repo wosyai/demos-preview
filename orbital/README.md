@@ -85,3 +85,8 @@ repeat separately with your capture tool and compare its source frame
 timestamps. rAF measures the browser's update opportunities, not screen
 presentation or encoder cadence. Keep the tab foregrounded and note the
 device/browser and observed issue separately, only if you choose to share it.
+
+The exterior preserves the existing cached shadow budget in Auto and on
+software graphics. Full detail on a detected hardware renderer enables
+higher-precision contact shadows. Mipmapped surfaces and smoother round
+hardware are available at both settings without a screen-wide blur.

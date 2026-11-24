@@ -33,5 +33,5 @@ and authoritative pose weight. The authored Wosy mesh remains a fallback if
 the optional packaged forearm cannot load.
 
 **Station surfaces:** `python3 art/build-surfaces.py` rebuilds the seeded,
-seamless alloy/insulation/brush tile. The browser mipmaps that one lightweight
+seamless 512px alloy/insulation/brush tile. The browser mipmaps that one lightweight
 texture; it does not recalculate procedural grain for each frame.

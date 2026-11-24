@@ -2,6 +2,10 @@ const $ = id => document.getElementById(id);
 const canvas = $("view");
 let nativeQuality=new URLSearchParams(location.search).get("quality")==="full";
 const gl = canvas.getContext("webgl2", {alpha:false, antialias:false, preserveDrawingBuffer:false});
+const rendererInfo=gl?.getExtension("WEBGL_debug_renderer_info");
+const rendererLabel=rendererInfo?String(gl.getParameter(rendererInfo.UNMASKED_RENDERER_WEBGL)):"";
+const rasterSoftware=/swiftshader|llvmpipe|swrast|software|warp|basic render driver/i.test(rendererLabel);
+const detailHardware=Boolean(rendererLabel&&!rasterSoftware);
 const view = `
 uniform vec3 eye;
 uniform vec4 basis;
@@ -46,6 +50,7 @@ vec3 lightClip(vec3 p){
              dot(q,vec3(-.4378,.7920,-.4262))/6.4,
             -dot(q,sunDir)/14.);
 }
+
 `;
 const depthVS=`#version 300 es
 layout(location=0) in vec3 pos;
@@ -60,42 +65,51 @@ void main(){}
 const exteriorMaterial=`
 uniform int eva;
 uniform highp sampler2DShadow sunMap;
+uniform int detailedShadow;
 uniform float renderFraction;
 uniform sampler2D surfaceTile;
 ${sun}
-float shadowAt(vec3 p,vec3 n){
- vec3 u=lightClip(p+n*.012)*.5+.5;
- if(any(greaterThan(u,vec3(1.)))||any(lessThan(u,vec3(0.))))return 1.;
- float shade=texture(sunMap,vec3(u.xy,u.z-.00112));
- if(renderFraction>.69){
-  vec2 o=vec2(.00115,.00073);
-  shade=shade*.50+texture(sunMap,vec3(u.xy+o,u.z-.00132))*.25+texture(sunMap,vec3(u.xy-o,u.z-.00132))*.25;
+float shadowAt(vec3 p,vec3 n,float direct){
+ if(detailedShadow==0){
+   vec3 u=lightClip(p+n*.012)*.5+.5;
+   if(any(greaterThan(u,vec3(1.)))||any(lessThan(u,vec3(0.))))return 1.;
+   float shade=texture(sunMap,vec3(u.xy,u.z-.00112));
+   if(renderFraction>.69){
+     vec2 o=vec2(.00115,.00073);
+     shade=shade*.50+texture(sunMap,vec3(u.xy+o,u.z-.00132))*.25+texture(sunMap,vec3(u.xy-o,u.z-.00132))*.25;
+   }
+   return shade;
  }
- return shade;
+ float incline=1.-direct;
+ vec3 u=lightClip(p+n*(.004+.005*incline))*.5+.5;
+ if(any(greaterThan(u,vec3(1.)))||any(lessThan(u,vec3(0.))))return 1.;
+ float depth=u.z-(.00021+.00030*incline);
+ return texture(sunMap,vec3(u.xy,depth));
 }
 vec3 sunColor(vec3 n){
  bool steel=material.y>.56 && material.y<.69;
  bool emitter=material.y>.8;
  bool foil=material.y>.165 && material.y<.188 && surface.r>.52 && abs(n.x)>.86 && world.x<-1.3;
+ bool suit=dot(fittedNormal,fittedNormal)>.25;
  bool armor=material.y>.705 && material.y<.735;
  bool solar=surface.b>2.*surface.r && material.y>.4 && material.y<.52;
  vec3 lamp=vec3(1.00,.91,.78);
- vec3 viewDir=normalize(eye-world);
- float shadow=shadowAt(world,n);
  float direct=max(dot(n,sunDir),0.);
- vec3 halfV=normalize(sunDir+viewDir);
- float spec=pow(max(dot(n,halfV),0.),steel?72.:24.);
+ float shadow=direct>0. ? shadowAt(world,n,direct):0.;
+ float spec=shadow>0. ? pow(max(dot(n,normalize(sunDir+normalize(eye-world))),0.),steel?66.:28.):0.;
  float metal=steel?.45:solar?.18:.075;
  vec3 wall=abs(n);
  vec2 tex=wall.x>max(wall.y,wall.z)?world.zy:wall.y>wall.z?world.xz:world.xy;
- vec3 sheet=texture(surfaceTile,tex*vec2(.56,.82)).rgb;
+ vec2 grain=steel?vec2(world.x*.76,(world.y*.85+world.z*.43)*1.95):suit?tex*vec2(3.2,4.1):tex*vec2(.89,1.12);
+ vec3 sheet=texture(surfaceTile,grain).rgb;
  vec3 col=surface*(.84+.26*sheet.r);
- if(steel) col=surface*(.91+.16*sheet.b);
- if(armor){col*=.92+.14*sheet.g;spec+=.14*direct*sheet.r;}
+ if(steel) col=surface*(.85+.24*sheet.b);
+ if(suit) col=surface*(.88+.19*sheet.r+.07*sheet.g);
+ if(armor){col*=.89+.22*sheet.g;spec+=.15*direct*sheet.r;}
  if(foil){
     vec2 uv=vec2(world.z*.88,world.y*1.16);
     vec2 lines=abs(fract(uv)-.5)*2.;
-    float seam=smoothstep(.88,.984,max(lines.x,lines.y));
+    float seam=smoothstep(.89-max(fwidth(uv.x),fwidth(uv.y)),.98,max(lines.x,lines.y));
     col*=.91+.22*sheet.g-.17*seam;
     spec+=.13*sheet.g*direct;
  }
@@ -107,6 +121,10 @@ vec3 sunColor(vec3 n){
     col=mix(col*(.78+sheet.r*.40),vec3(.42,.33,.21),thin*.89);
  }
  vec3 ambient=mix(vec3(.09,.12,.18),vec3(.23,.39,.51),max(0.,-n.y)*.75+max(0.,n.x)*.19);
+ if(steel){
+   float skyReflect=smoothstep(-.5,.6,n.y);
+   ambient+=mix(vec3(.06,.125,.20),vec3(.026,.028,.022),skyReflect)*(.40+.60*sheet.b);
+ }
  vec3 energy=col*(ambient+lamp*direct*shadow*1.44)+metal*spec*shadow*lamp;
  if(emitter) energy+=col*.53;
  return pow(max(vec3(0.),energy/(energy*.48+vec3(.85))),vec3(.79));
@@ -224,12 +242,25 @@ function program(a,b) {
  }
  gl.linkProgram(p);
  if(!gl.getProgramParameter(p,gl.LINK_STATUS))throw Error(gl.getProgramInfoLog(p));
- return {p, eye:gl.getUniformLocation(p,"eye"), basis:gl.getUniformLocation(p,"basis"), optics:gl.getUniformLocation(p,"optics"), roll:gl.getUniformLocation(p,"roll"), eva:gl.getUniformLocation(p,"eva"), photo:gl.getUniformLocation(p,"photo"), earth:gl.getUniformLocation(p,"earthMap"), backdrop:gl.getUniformLocation(p,"backdrop"), sunMap:gl.getUniformLocation(p,"sunMap"),armPose:gl.getUniformLocation(p,"armPose"), renderFraction:gl.getUniformLocation(p,"renderFraction"),surfaceTile:gl.getUniformLocation(p,"surfaceTile")};
+ return {p, eye:gl.getUniformLocation(p,"eye"), basis:gl.getUniformLocation(p,"basis"), optics:gl.getUniformLocation(p,"optics"), roll:gl.getUniformLocation(p,"roll"), eva:gl.getUniformLocation(p,"eva"), photo:gl.getUniformLocation(p,"photo"), earth:gl.getUniformLocation(p,"earthMap"), backdrop:gl.getUniformLocation(p,"backdrop"), sunMap:gl.getUniformLocation(p,"sunMap"),armPose:gl.getUniformLocation(p,"armPose"), renderFraction:gl.getUniformLocation(p,"renderFraction"),surfaceTile:gl.getUniformLocation(p,"surfaceTile"), detailedShadow:gl.getUniformLocation(p,"detailedShadow")};
 }
-const shadowSize=matchMedia("(pointer:coarse)").matches ? 1024 : 1536;
+const coarseShadow=matchMedia("(pointer:coarse)").matches;
+const maxShadow=gl?gl.getParameter(gl.MAX_TEXTURE_SIZE):1024;
+let shadowSize=0, detailed=false;
+function configureShadow(){
+ const chooseDetail=nativeQuality&&detailHardware;
+ const standard=coarseShadow?1024:1536;
+ const desired=Math.min(maxShadow,chooseDetail?(coarseShadow?2048:3584):standard);
+ if(shadowSize===desired&&detailed===chooseDetail)return;
+ const oldTexture=shadowTexture, oldFbo=shadowFbo;
+ [shadowTexture,shadowFbo]=shadowBuffer(desired);
+ if(oldTexture)gl.deleteTexture(oldTexture);
+ if(oldFbo)gl.deleteFramebuffer(oldFbo);
+ shadowSize=desired;detailed=chooseDetail;shadowDirty=true;worldVersion++;
+}
 let shadowDirty=true;
 let renderLoad=1, slowFrames=0, fastFrames=0, stillFrames=0;
-let balanced=false, software=false;
+let balanced=false, software=rasterSoftware;
 let previous=null;
 let worldVersion=0,renderVersion=-1,renderYaw=NaN,renderPitch=NaN,renderW=0,renderH=0,renderX=NaN,renderY=NaN,renderZ=NaN,renderGrip=NaN;
 let scene,space,skyCopy,depth,shadowFbo,shadowTexture,earthTexture,surfaceTexture,earthReady=0,engine,active=false, frame=null, grabbed=null, dx=0, dy=0, last=0, remainder=0, pulse=false;
@@ -318,10 +349,11 @@ function render(alpha) {
  renderVersion=worldVersion;renderYaw=heading;renderPitch=pitch;renderW=w;renderH=h;renderX=x;renderY=y;renderZ=z;renderGrip=pose[8];
  const eva=frame[15]===1;
  if(eva&&shadowDirty){
-   shadowDirty=false;gl.bindFramebuffer(gl.FRAMEBUFFER,shadowFbo);
+   shadowDirty=false;
+   gl.bindFramebuffer(gl.FRAMEBUFFER,shadowFbo);
    gl.viewport(0,0,shadowSize,shadowSize);gl.enable(gl.DEPTH_TEST);
    gl.clear(gl.DEPTH_BUFFER_BIT);gl.useProgram(depth.p);
-   gl.enable(gl.POLYGON_OFFSET_FILL);gl.polygonOffset(1.25,1.8);
+   gl.enable(gl.POLYGON_OFFSET_FILL);gl.polygonOffset(detailed?1.1:1.25,detailed?1.3:1.8);
    meshes(depth,eva,pose,true);
    gl.disable(gl.POLYGON_OFFSET_FILL);gl.bindFramebuffer(gl.FRAMEBUFFER,null);gl.viewport(0,0,w,h);
  }
@@ -340,7 +372,7 @@ function render(alpha) {
  if(holdingAngle)bakeBackdrop(bind,w,h,eva,heading,pitch);
  gl.clear(gl.DEPTH_BUFFER_BIT);
  gl.enable(gl.DEPTH_TEST);bind(scene);
- gl.activeTexture(gl.TEXTURE2);gl.bindTexture(gl.TEXTURE_2D,shadowTexture);gl.uniform1i(scene.sunMap,2);
+ gl.activeTexture(gl.TEXTURE2);gl.bindTexture(gl.TEXTURE_2D,shadowTexture);gl.uniform1i(scene.sunMap,2);gl.uniform1i(scene.detailedShadow,Number(detailed));
  gl.activeTexture(gl.TEXTURE4);gl.bindTexture(gl.TEXTURE_2D,surfaceTexture);gl.uniform1i(scene.surfaceTile,4);
  meshes(scene,eva,pose);
  // The background lies behind the mesh; early depth rejects the sky and globe
@@ -397,7 +429,7 @@ function setupTiming(){
   const ext=gl?.getExtension("WEBGL_debug_renderer_info");
   if(!ext)return "renderer not reported";
   const r=String(gl.getParameter(ext.UNMASKED_RENDERER_WEBGL));
-  return /swiftshader|llvmpipe|software/i.test(r)?"software rasterizer":"renderer not identified as software";
+  return /swiftshader|llvmpipe|swrast|software|warp|basic render driver/i.test(r)?"software rasterizer":"renderer not identified as software";
  };
  const kind=device();
  start.onclick=()=>{
@@ -437,9 +469,6 @@ function animate(t){
    if(!balanced){
      // Common software implementations report ANGLE / SwiftShader or llvmpipe.
      // Seed their moving resolution lower; normal GPUs start at full budget.
-     const debug=gl.getExtension("WEBGL_debug_renderer_info");
-     const name=debug?String(gl.getParameter(debug.UNMASKED_RENDERER_WEBGL)):"";
-     software=/swiftshader|llvmpipe|software/i.test(name);
      if(software)renderLoad=.65;
      balanced=true;
    }
@@ -492,6 +521,7 @@ quality.addEventListener("change",()=>{
  const url=new URL(location.href);
  if(nativeQuality)url.searchParams.set("quality","full");else url.searchParams.delete("quality");
  history.replaceState(null,"",url);
+ if(gl)configureShadow();
  worldVersion++;
 });
 $("action").onclick=()=>{pulse=true;};
@@ -504,6 +534,20 @@ $("menu").onclick=()=>{clear();active=false;$("intro").hidden=false;};
 $("start").onclick=()=>enter(1);
 $("training").onclick=()=>enter(0);
 let room,hand;
+function shadowBuffer(size){
+   const tex=gl.createTexture();gl.bindTexture(gl.TEXTURE_2D,tex);
+   gl.texStorage2D(gl.TEXTURE_2D,1,gl.DEPTH_COMPONENT24,size,size);
+   for(const mode of [gl.TEXTURE_MIN_FILTER,gl.TEXTURE_MAG_FILTER])gl.texParameteri(gl.TEXTURE_2D,mode,gl.LINEAR);
+   for(const axis of [gl.TEXTURE_WRAP_S,gl.TEXTURE_WRAP_T])gl.texParameteri(gl.TEXTURE_2D,axis,gl.CLAMP_TO_EDGE);
+   gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_COMPARE_MODE,gl.COMPARE_REF_TO_TEXTURE);
+   gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_COMPARE_FUNC,gl.LEQUAL);
+   const fbo=gl.createFramebuffer();gl.bindFramebuffer(gl.FRAMEBUFFER,fbo);
+   gl.framebufferTexture2D(gl.FRAMEBUFFER,gl.DEPTH_ATTACHMENT,gl.TEXTURE_2D,tex,0);
+   gl.drawBuffers([gl.NONE]);gl.readBuffer(gl.NONE);
+   if(gl.checkFramebufferStatus(gl.FRAMEBUFFER)!==gl.FRAMEBUFFER_COMPLETE)throw Error("Sun shadow buffer is unavailable.");
+   gl.bindFramebuffer(gl.FRAMEBUFFER,null);
+   return [tex,fbo];
+ }
 try{
  if(!gl)throw Error("WebGL 2 is required to render the station.");
  scene=program(vs,fs);space=program(svs,sfs);skyCopy=program(svs,skyCopyFS);depth=program(depthVS,depthFS);room=batch();hand=batch();
@@ -515,17 +559,7 @@ try{
  gl.framebufferTexture2D(gl.FRAMEBUFFER,gl.COLOR_ATTACHMENT0,gl.TEXTURE_2D,skyTexture,0);
  if(gl.checkFramebufferStatus(gl.FRAMEBUFFER)!==gl.FRAMEBUFFER_COMPLETE)throw Error("Orbit backdrop buffer is unavailable.");
  gl.bindFramebuffer(gl.FRAMEBUFFER,null);
- shadowTexture=gl.createTexture();gl.bindTexture(gl.TEXTURE_2D,shadowTexture);
- gl.texStorage2D(gl.TEXTURE_2D,1,gl.DEPTH_COMPONENT24,shadowSize,shadowSize);
- for(const mode of [gl.TEXTURE_MIN_FILTER,gl.TEXTURE_MAG_FILTER])gl.texParameteri(gl.TEXTURE_2D,mode,gl.LINEAR);
- for(const axis of [gl.TEXTURE_WRAP_S,gl.TEXTURE_WRAP_T])gl.texParameteri(gl.TEXTURE_2D,axis,gl.CLAMP_TO_EDGE);
- gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_COMPARE_MODE,gl.COMPARE_REF_TO_TEXTURE);
- gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_COMPARE_FUNC,gl.LEQUAL);
- shadowFbo=gl.createFramebuffer();gl.bindFramebuffer(gl.FRAMEBUFFER,shadowFbo);
- gl.framebufferTexture2D(gl.FRAMEBUFFER,gl.DEPTH_ATTACHMENT,gl.TEXTURE_2D,shadowTexture,0);
- gl.drawBuffers([gl.NONE]);gl.readBuffer(gl.NONE);
- if(gl.checkFramebufferStatus(gl.FRAMEBUFFER)!==gl.FRAMEBUFFER_COMPLETE)throw Error("Sun shadow buffer is unavailable.");
- gl.bindFramebuffer(gl.FRAMEBUFFER,null);
+ configureShadow();
  surfaceTexture=gl.createTexture();gl.bindTexture(gl.TEXTURE_2D,surfaceTexture);
  gl.texImage2D(gl.TEXTURE_2D,0,gl.RGB,1,1,0,gl.RGB,gl.UNSIGNED_BYTE,new Uint8Array([132,132,132]));
  gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MIN_FILTER,gl.LINEAR);
@@ -535,7 +569,7 @@ try{
   gl.texImage2D(gl.TEXTURE_2D,0,gl.RGB,gl.RGB,gl.UNSIGNED_BYTE,surfaces);
   gl.generateMipmap(gl.TEXTURE_2D);gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MIN_FILTER,gl.LINEAR_MIPMAP_LINEAR);worldVersion++;
  };
- surfaces.src=new URL("./surfaces.png?v=1",import.meta.url).href;
+ surfaces.src=new URL("./surfaces.png?v=2",import.meta.url).href;
  earthTexture=gl.createTexture();gl.bindTexture(gl.TEXTURE_2D,earthTexture);
  gl.texImage2D(gl.TEXTURE_2D,0,gl.RGB,1,1,0,gl.RGB,gl.UNSIGNED_BYTE,new Uint8Array([0,0,0]));
  gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MIN_FILTER,gl.LINEAR);
@@ -547,7 +581,7 @@ try{
   gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_T,gl.CLAMP_TO_EDGE);earthReady=1;worldVersion++;
  };
  earth.src=new URL("./earth.jpg",import.meta.url).href;
- const response=await fetch(new URL("./orbital.wasm?v=6",import.meta.url));
+ const response=await fetch(new URL("./orbital.wasm?v=7",import.meta.url));
  if(!response.ok)throw Error("The station engine could not be downloaded.");
  const {instance}=await WebAssembly.instantiate(await response.arrayBuffer(),{
   orbital:{
