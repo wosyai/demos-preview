@@ -1,0 +1,34 @@
+[package]
+name = "orbital"
+default_target = "app"
+
+[comments]
+categories = []
+
+[builders.web]
+command = ["python3", "./build-wasm.py"]
+args = []
+toolchain_identity = "llvm-18.1.8;wosy-orbital-browser-v1"
+
+[runners.web]
+command = ["node", "./verify-wasm.mjs"]
+args = []
+
+[targets.app]
+root = "engine.w"
+
+[targets.app.artifacts.main]
+artifact = "Main"
+
+[targets.app.artifacts.main.profiles.dev]
+backend = "llvm"
+output = "wasm-wasip1"
+builder = "web"
+run_runner = "web"
+
+[targets.app.artifacts.main.profiles.dev.exports]
+reset = "reset"
+tick = "tick"
+
+[targets.app.profiles.dev]
+main_artifact = "main"

@@ -1,0 +1,15 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="theme-color" content="#0f1a20"><title>Orbital / Kestrel Station</title><link rel="stylesheet" href="style.css?v=1"><script type="module" src="host.mjs?v=1"></script></head>
+<body><main aria-label="Orbital station simulator">
+<canvas id="view" aria-label="First-person view of Kestrel Station"></canvas>
+<header><div class="lockup"><div class="orb" aria-hidden="true">◉</div><div><strong>ORBITAL</strong><small>KESTREL STATION</small></div></div><div class="telemetry"><span aria-hidden="true"></span><b>SYSTEMS ONLINE</b><button id="reset" aria-label="Reset exercise" title="Reset exercise">↺</button></div></header>
+<section class="task"><small>TRAINING 01 / HANDRAIL</small><strong id="objective" aria-live="polite">Approach the amber rail</strong><p id="help">Drift forward and get within reach.</p></section>
+<div class="cross" aria-hidden="true">+</div>
+<button id="action" class="action" disabled>Grip rail</button>
+<div class="touch" aria-label="Touch flight controls">
+ <div class="pad"><button data-mask="4" aria-label="Forward">↑</button><button data-mask="1" aria-label="Left">←</button><button data-mask="8" aria-label="Backward">↓</button><button data-mask="2" aria-label="Right">→</button></div>
+ <div class="vertical"><button data-mask="16" aria-label="Rise">＋</button><button data-mask="32" aria-label="Descend">−</button><button data-mask="128" aria-label="Brake">⏸</button></div>
+</div>
+<footer id="controls">WASD <span>drift</span> · SPACE / C <span>rise / descend</span> · SHIFT <span>brake</span> · DRAG <span>look</span> · E <span>grip / release</span></footer>
+<div id="intro"><section><small>KESTREL STATION · TRAINING DECK</small><h1>Orbital<span>.</span></h1><p>Learn to move in zero gravity. Drift to the amber handrail, grab it, then push off.</p><button id="start" disabled>Enter the station <span aria-hidden="true">↗</span></button><p id="error" role="alert"></p></section></div>
+</main></body></html>
