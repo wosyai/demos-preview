@@ -55,7 +55,9 @@ flight or spacecraft controls.
 
 From the scaffold rail you can see the cartridge separated from the hull by a
 visible gap. Its yoke suspends it from the starboard truss while the two-link
-manipulator braces its end fitting. The latch has its own mount; the close-up
+manipulator braces its end fitting. C07 has an eight-sided shell, raised
+front channels, carry bands, and a plated actuator housing; the jaw stays
+around the same attachment in both endpoint poses. The latch has its own mount; the close-up
 grip and seating endpoints have not moved. An open, recessed service hatch
 and its conduit feeds are visible beyond the scaffold. The cabin behind the
 hatch is stationary visual scenery, not an additional route.

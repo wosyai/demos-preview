@@ -155,6 +155,7 @@ assert.equal(state[19],3);
 const nearEq=(x,y)=>Math.abs(x-y)<.0001;
 const hasVertex=(m,x,y,z)=>m.some((v,i)=>i%8===0&&nearEq(x,v)&&nearEq(y,m[i+1])&&nearEq(z,m[i+2]));
 assert.ok(hasVertex(suspended,2.17,.53,-7.13)&&hasVertex(room,2.17,.13,-7.13),'capsule travels from suspension to the capture shoes');
+assert.ok(hasVertex(suspended,.47,.873,-6.64)&&hasVertex(room,.47,.473,-6.64),'freight shell bevel moves with the same registered cargo stroke');
 assert.ok(hasVertex(suspended,2.20,.62,-6.523)&&hasVertex(room,2.20,.22,-6.523),'the captive wrist tracks the same travel');
 assert.ok(hasVertex(suspended,.49,-.404,-7.45)&&hasVertex(room,.49,-.404,-7.45),'capture shoes remain fixed to the truss');
 const span=(a,b)=>Math.hypot(...a.map((x,i)=>x-b[i]));

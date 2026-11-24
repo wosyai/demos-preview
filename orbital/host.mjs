@@ -730,7 +730,7 @@ try{
   gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_T,gl.CLAMP_TO_EDGE);earthReady=1;worldVersion++;
  };
  earth.src=new URL("./earth.jpg?v=2",import.meta.url).href;
- const response=await fetch(new URL("./orbital.wasm?v=13",import.meta.url));
+ const response=await fetch(new URL("./orbital.wasm?v=14",import.meta.url));
  if(!response.ok)throw Error("The station engine could not be downloaded.");
  const {instance}=await WebAssembly.instantiate(await response.arrayBuffer(),{
   orbital:{
