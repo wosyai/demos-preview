@@ -44,7 +44,7 @@ console.log('Orbital WASM: station batch, initial/contact poses, reach/aim gatin
 
 engine.select_deck(1);step(0,0,0,0);
 const evaStart=capture(),evaRoom=room;
-assert.equal(state[15],1);assert.ok(evaRoom.length>=5400*8 && evaRoom.length<=16384*8 && evaRoom.length%24===0);
+assert.equal(state[15],1);assert.ok(evaRoom.length>=5400*8 && evaRoom.length<=16100*8 && evaRoom.length%24===0);
 assert.ok(evaRoom.every(Number.isFinite) && hand.every(Number.isFinite));
 assert.notDeepEqual(initial.slice(19),evaStart.slice(19),'EVA uses a separately authored pressurized glove');
 assert.ok(evaRoom.some((x,i)=>i%8===4 && x<.14),'station includes the dark solar cell trim');
@@ -71,6 +71,11 @@ until(()=>state[10]===1,4);
 step(64);until(()=>state[9]===2,64);
 assert.equal(state[16],1);assert.equal(state[17],0);
 assert.equal(state[14].toFixed(2),'-3.43');
+assert.equal(state[3].toFixed(2),'0.13','the scaffold settle frames the outboard suspended load');
+assert.equal(state[4].toFixed(2),'-0.13');
+const scaffoldBatches=roomLoads;
+for(let i=0;i<8;i++)step(64);
+assert.equal(roomLoads,scaffoldBatches,'looking out at the cargo never republishes the stationary world');
 step();step(64);until(()=>state[9]===0,0);
 assert.equal(state[16],2);
 until(()=>state[10]===1,4);

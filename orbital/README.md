@@ -45,6 +45,11 @@ training** to repeat the original single-rail exercise. Menu and reset remain
 available in both exercises. These are bounded training spaces, not a model of orbital
 flight or spacecraft controls.
 
+From the scaffold rail you can see the cartridge separated from the hull by a
+visible gap. Its yoke suspends it from the starboard truss while the two-link
+manipulator braces its end fitting. The latch has its own mount; the close-up
+grip and seating endpoints have not moved.
+
 The visual design uses authored Wosy geometry, separate open and closed glove
 poses, WebGL sun shadows, and a spherical Earth backdrop. Earth imagery:
 [NASA Goddard Space Flight Center, Blue Marble 2015](https://svs.gsfc.nasa.gov/30763/),
@@ -58,7 +63,7 @@ astronaut asset. The authored Wosy arm is the loading/fallback mesh.
 The contact and release states retain world-space rail anchors on all screen
 sizes. At the cargo brace the pin and hand share both Wosy-authored endpoints.
 Seating only invalidates the stationary batch once; the recessed assembly,
-staggered cargo fin banks and jointed manipulator require no per-frame updates. The WebGL host interpolates presented camera and arm coordinates around
+suspended cargo shell and jointed manipulator require no per-frame updates. The WebGL host interpolates presented camera and arm coordinates around
 the fixed 60 Hz Wosy simulation. Station shadows are cached until actual
 station geometry changes, and the canvas can lower moving resolution on slow
 GPUs while keeping still scenes sharp.
