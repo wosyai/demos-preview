@@ -101,7 +101,7 @@ float shadowAt(vec3 p,vec3 n,float direct){
 vec3 sunColor(vec3 n){
  bool steel=material.y>.56 && material.y<.69;
  bool emitter=material.y>.8;
- bool foil=material.y>.165 && material.y<.188 && surface.r>.52 && abs(n.x)>.86 && world.x<-1.3;
+ bool foil=material.y>.165 && material.y<.188 && surface.r>.52 && surface.b>surface.r*.78 && abs(n.x)>.86 && world.x<-1.3;
  bool suit=material.x>=0. && dot(fittedNormal,fittedNormal)>.25;
  bool armor=material.y>.705 && material.y<.735;
  bool solar=surface.b>2.*surface.r && material.y>.4 && material.y<.52;
@@ -114,8 +114,14 @@ vec3 sunColor(vec3 n){
  vec3 wall=abs(n);
  vec2 tex=wall.x>max(wall.y,wall.z)?world.zy:wall.y>wall.z?world.xz:world.xy;
  vec2 uv=vec2(armUV.x*2.-(layer==7.?1.:0.),armUV.y);
+ vec2 panelUV=vec2(0.),thermalUV=vec2(0.);
+ if(foil){
+  panelUV=vec2((world.z+11.6)/2.48,(world.y+1.62)/.86);
+  bool alternate=mod(floor(panelUV.x)+floor(panelUV.y),2.)>.5;
+  thermalUV=vec2(alternate?1.-panelUV.x:panelUV.x,panelUV.y);
+ }
  vec2 grain=skin?uv:layer==1.?vec2(world.x*.87,(world.y*.78+world.z*.43)*1.42):
-   suit?tex*vec2(13.5,16.):foil?vec2(world.z*1.92,world.y*3.62):
+   suit?tex*vec2(13.5,16.):foil?thermalUV:
    layer==4.?tex*1.8:tex*vec2(.91,1.14);
  vec4 texel=texture(surfaceTile,vec3(grain,layer));
  vec3 sheet=texel.rgb;
@@ -137,7 +143,7 @@ vec3 sunColor(vec3 n){
  vec3 tint=layer==0.?vec3(1.21,1.23,1.25):layer==1.?vec3(1.78,1.80,1.84):
     layer==2.?vec3(1.18,1.23,1.30):layer==3.?vec3(1.22,1.56,2.40):
     layer==4.?vec3(2.70,2.70,2.70):vec3(2.05,1.72,1.59);
- vec3 col=surface*mix(vec3(.87),sheet*tint,suit?.36:foil?.57:.82);
+ vec3 col=surface*mix(vec3(.87),sheet*tint,suit?.36:foil?.93:.82);
  if(skin){
    float vertexLuma=dot(surface,vec3(.2126,.7152,.0722));
    col=surface*clamp(sheet.r/max(.018,vertexLuma),.25,2.5);
@@ -147,17 +153,10 @@ vec3 sunColor(vec3 n){
  if(layer==1.)spec*=.78+.43*sheet.r;
  if(armor){col*=1.045;spec+=.07*direct*sheet.r;}
  if(foil){
-    vec2 uv=vec2((world.z+11.6)/2.48,(world.y+1.62)/.86);
-    vec2 local=fract(uv);
-    vec2 edges=min(local,1.-local);
-    vec2 footprint=fwidth(uv);
-    float edge=min(edges.x,edges.y);
-    float relief=smoothstep(max(.004,max(footprint.x,footprint.y)*.68),.10,edge);
-    float seam=smoothstep(.012,max(.024,max(footprint.x,footprint.y)+.014),edge);
-    float crease=abs(local.y-.46-.14*sin(local.x*5.6));
-    float fold=exp(-29.*crease)*smoothstep(.08,.39,edges.x);
-    col*=(.78+.24*relief)*(.87+.13*seam)*(1.-.075*fold);
-    spec+=.065*sheet.r*direct*(.38+.62*relief);
+    vec2 edgeDelta=abs(fract(panelUV)-.5);
+    float binding=smoothstep(.445,.499,max(edgeDelta.x,edgeDelta.y));
+    col*=1.-binding*.11;
+    spec+=.058*direct*(1.-binding*.74);
  }
  if(solar){
     vec2 uv=world.xy*vec2(9.,7.5);
@@ -172,6 +171,7 @@ vec3 sunColor(vec3 n){
    ambient+=mix(vec3(.06,.125,.20),vec3(.026,.028,.022),skyReflect)*(.40+.60*sheet.b);
  }
  vec3 energy=col*(ambient+lamp*direct*shadow*1.44)+metal*spec*shadow*lamp;
+ if(material.x>1.)energy+=(material.x-1.)*col*vec3(1.24,.66,.28);
  if(emitter) energy+=col*.53;
  return pow(max(vec3(0.),energy/(energy*.48+vec3(.85))),vec3(.79));
 }
@@ -709,7 +709,7 @@ try{
   stationTextureSide=side;worldVersion++;uploadSkin();
  };
  skinMap.onload=uploadSkin;
- surfaces.src=new URL("./surfaces.jpg",import.meta.url).href;
+ surfaces.src=new URL("./surfaces.jpg?v=2",import.meta.url).href;
  skinMap.src=new URL("./apollo-material.png?v=2",import.meta.url).href;
  earthTexture=gl.createTexture();gl.bindTexture(gl.TEXTURE_2D,earthTexture);
  gl.texImage2D(gl.TEXTURE_2D,0,gl.RGB,1,1,0,gl.RGB,gl.UNSIGNED_BYTE,new Uint8Array([0,0,0]));
@@ -730,7 +730,7 @@ try{
   gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_T,gl.CLAMP_TO_EDGE);earthReady=1;worldVersion++;
  };
  earth.src=new URL("./earth.jpg?v=2",import.meta.url).href;
- const response=await fetch(new URL("./orbital.wasm?v=12",import.meta.url));
+ const response=await fetch(new URL("./orbital.wasm?v=13",import.meta.url));
  if(!response.ok)throw Error("The station engine could not be downloaded.");
  const {instance}=await WebAssembly.instantiate(await response.arrayBuffer(),{
   orbital:{

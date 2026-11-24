@@ -181,13 +181,16 @@ unit(f32,f32,f32) quilt_panel = fn(y,z,billow){
     f32 h=y+0.81; f32 far=z+2.42;
     f32 lip0=z+0.09;f32 lip1=far-0.11;
     f32 low=y+0.074; f32 high=h-0.083;
-    f32 line=y+0.33; f32 ridge=loft-0.010;
-    quad(skin,y,z,skin,y,far,loft,low,lip1,loft,low,lip0,0.86);
-    quad(skin,y,z,loft,low,lip0,loft,high,lip0,skin,h,z,0.78);
-    quad(skin,y,far,skin,h,far,loft,high,lip1,loft,low,lip1,0.81);
-    quad(skin,h,z,loft,high,lip0,loft,high,lip1,skin,h,far,0.86);
-    quad(loft,low,lip0,loft,low,lip1,ridge,line+0.018,lip1,ridge,line,lip0,0.86);
-    quad(ridge,line,lip0,ridge,line+0.018,lip1,loft,high,lip1,loft,high,lip0,0.93);
+    f32 line=y+0.31;
+    f32 lo_a=loft-0.014; f32 lo_b=loft+0.005;
+    f32 hi_a=loft+0.006; f32 hi_b=loft-0.016;
+    f32 ridge=loft-0.024; f32 ridge_b=loft-0.011;
+    quad(skin,y,z,skin,y,far,lo_b,low,lip1,lo_a,low,lip0,0.86);
+    quad(skin,y,z,lo_a,low,lip0,hi_a,high,lip0,skin,h,z,0.78);
+    quad(skin,y,far,skin,h,far,hi_b,high,lip1,lo_b,low,lip1,0.81);
+    quad(skin,h,z,hi_a,high,lip0,hi_b,high,lip1,skin,h,far,0.86);
+    quad(lo_a,low,lip0,lo_b,low,lip1,ridge_b,line+0.10,lip1,ridge,line,lip0,0.86);
+    quad(ridge,line,lip0,ridge_b,line+0.10,lip1,hi_b,high,lip1,hi_a,high,lip0,0.93);
 };
 unit(i32) blanket = fn(n) {
     if(n<10) {
@@ -196,8 +199,8 @@ unit(i32) blanket = fn(n) {
         f32 tint=0.77+0.027*core.sint_to_float<f32>(n%4);
         paint(tint,tint*0.97,tint*0.90,0.18);
         quilt_panel(yy,zz,0.031+core.sint_to_float<f32>(n%3)*0.014);
-        paint(0.24,0.26,0.27,0.04);
-        quad(-1.475,yy,zz,-1.475,yy+0.81,zz,-1.475,yy+0.81,zz+0.042,-1.475,yy,zz+0.042,0.69);
+        paint(0.37,0.38,0.39,0.15);
+        quad(-1.475,yy,zz,-1.475,yy+0.81,zz,-1.475,yy+0.81,zz+0.027,-1.475,yy,zz+0.027,0.69);
         quad(-1.475,yy+0.76,zz+0.04,-1.475,yy+0.794,zz+0.04,-1.475,yy+0.794,zz+2.38,-1.475,yy+0.76,zz+2.38,0.69);
         paint(0.44,0.39,0.30,0.11);
         quad(-1.442,yy+0.27,zz+0.32,-1.442,yy+0.362,zz+0.32,-1.442,yy+0.362,zz+0.93,-1.442,yy+0.27,zz+0.93,0.69);
@@ -494,8 +497,19 @@ unit() airlock = fn {
     paint(0.71,0.48,0.16,0.19);
     sweep(-1.17,-0.07,-2.84,-1.17,-0.07,-2.42,0.037,0.037,1,0,20);
 };
+f32(f32,f32,f32) lamp_field = fn(du,dv,dd){
+    0.052/(0.109+du*du+dv*dv+dd*dd)
+};
 unit(f32,f32,f32) port_vertex = fn(u,v,depth){
-    pt(-1.10+u*0.926+depth*0.378,0.20+v,-6.39-u*0.378+depth*0.926,0.88);
+    f32 exposure=0.88;
+    if(depth<0.10 && lit<0.8 && u*u+v*v<0.383){
+        f32 bounce=lamp_field(u-0.364,v-0.288,depth+0.47)
+                  +lamp_field(u+0.372,v+0.236,depth+0.47)
+                  +lamp_field(u,v-0.65,depth-0.16)*0.55
+                  +lamp_field(u,v+0.64,depth-0.16)*0.51;
+        exposure=1.0+bounce;
+    };
+    pt(-1.10+u*0.926+depth*0.378,0.20+v,-6.39-u*0.378+depth*0.926,exposure);
 };
 unit(f32,f32,f32,f32,f32,f32,f32,f32,f32,f32,f32,f32) port_quad = fn(u0,v0,d0,u1,v1,d1,u2,v2,d2,u3,v3,d3){
     port_vertex(u0,v0,d0);port_vertex(u1,v1,d1);port_vertex(u2,v2,d2);
@@ -529,7 +543,7 @@ unit() transfer_hatch = fn {
     paint(0.78,0.76,0.67,0.71);port_skin(0.79,0.158,0.64,0.158,0);
     paint(0.12,0.16,0.19,0.62);port_skin(0.64,0.157,0.60,0.096,0);
     paint(0.28,0.24,0.19,0.63);port_skin(0.60,0.096,0.57,-0.65,0);
-    paint(0.071,0.081,0.085,0.66);port_skin(0.57,-0.65,0.0,-0.65,0);
+    paint(0.142,0.139,0.124,0.66);port_skin(0.57,-0.65,0.0,-0.65,0);
     paint(0.29,0.31,0.32,0.62);port_skin(0.568,-0.642,0.44,-0.641,0);
     paint(0.48,0.40,0.28,0.65);port_skin(0.588,-0.265,0.554,-0.286,0);
     paint(0.46,0.35,0.20,0.63);

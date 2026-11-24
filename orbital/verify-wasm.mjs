@@ -61,6 +61,11 @@ const hatchPoint=(u,v,d,lit)=>evaRoom.some((value,i)=>i%8===0&&
 assert.ok(hatchPoint(0,0,-.65,false),'the hatch has a recessed bulkhead, not a flat painted aperture');
 assert.ok(!hatchPoint(0,0,.158,false),'the apertural front ring is open');
 assert.ok(hatchPoint(-.063,.611,.177,true)&&hatchPoint(-.432,-.274,-.473,true),'warm lamp fixtures are present at the rim and inside the recess');
+const localBounce=[];
+for(let i=0;i<evaRoom.length;i+=8)if(evaRoom[i+6]>1)localBounce.push(evaRoom.slice(i,i+8));
+assert.ok(localBounce.length>=200&&localBounce.length<500,'practical warmth is baked only into the hatch interior');
+assert.ok(localBounce.every(v=>v[0]<-.51&&v[0]>-1.95&&v[2]<-6.06&&v[2]>-7.23&&v[7]<.8));
+
 
 
 assert.notDeepEqual(initial.slice(20),evaStart.slice(20),'EVA uses a separately authored pressurized glove');

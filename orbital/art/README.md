@@ -53,7 +53,9 @@ and blue enamel). The editing master was generated with OpenAI image tools;
 it is a fictional material reference, not NASA photography. Run
 `python3 art/build-surfaces.py /path/to/material-master.png` to prepare the
 compact RGB sheet. The browser decodes it into a single mipmapped texture
-array, with no cross-layer bleed. Real panel relief and seams are modeled
-in Wosy. Selected rail, capsule and joint sidewalls carry octahedrally
+array, with no cross-layer bleed. The thermal tile uses restrained weave, stitched binding, and anchored
+macro creases rather than repeating weave at a large size. Matching panel
+relief and the hatch lamp bounce are baked into Wosy mesh vertices. The
+practicals do not add a light pass or cast dynamic shadows. Selected rail, capsule and joint sidewalls carry octahedrally
 encoded geometry normals in the same vertex stride; their caps and hard
 service edges do not. The albedo pixels are not used as normal maps.
