@@ -265,7 +265,7 @@ let previous=null;
 let worldVersion=0,renderVersion=-1,renderYaw=NaN,renderPitch=NaN,renderW=0,renderH=0,renderX=NaN,renderY=NaN,renderZ=NaN,renderGrip=NaN;
 let scene,space,skyCopy,depth,shadowFbo,shadowTexture,earthTexture,surfaceTexture,earthReady=0,engine,active=false, frame=null, grabbed=null, dx=0, dy=0, last=0, remainder=0, pulse=false;
 const held=new Set(),touch=new Map();
-const bits={KeyA:1,ArrowLeft:1,KeyD:2,ArrowRight:2,KeyW:4,ArrowUp:4,KeyS:8,ArrowDown:8,Space:16,KeyC:32,KeyE:64,ShiftLeft:128,ShiftRight:128};
+const bits={KeyA:1,ArrowLeft:1,KeyD:2,ArrowRight:2,KeyW:4,ArrowUp:4,KeyS:8,ArrowDown:8,Space:16,KeyC:32,ShiftLeft:128,ShiftRight:128};
 function batch() {
  const vao=gl.createVertexArray(), buffer=gl.createBuffer();
  gl.bindVertexArray(vao); gl.bindBuffer(gl.ARRAY_BUFFER,buffer);
@@ -512,7 +512,16 @@ for(const button of document.querySelectorAll("[data-mask]")){
 }
 window.addEventListener("blur",clear);
 document.addEventListener("visibilitychange",()=>{if(document.hidden)clear();});
-window.addEventListener("keydown",e=>{if(active&&bits[e.code] && !e.altKey && !e.ctrlKey && !e.metaKey){e.preventDefault();held.add(e.code);}});
+window.addEventListener("keydown",e=>{
+ if(!active||e.altKey||e.ctrlKey||e.metaKey)return;
+ if(e.code==="KeyE"){
+   e.preventDefault();
+   // Like the action button, preserve a press until the next fixed tick.
+   if(!e.repeat)pulse=true;
+   return;
+ }
+ if(bits[e.code]){e.preventDefault();held.add(e.code);}
+});
 window.addEventListener("keyup",e=>held.delete(e.code));
 const quality=$("render-quality");
 quality.value=nativeQuality?"full":"auto";
