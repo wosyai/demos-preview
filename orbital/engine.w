@@ -211,19 +211,69 @@ unit(i32) traversal_rail = fn(leg) {
     box(-1.41,-0.88,z-0.03,0.22,0.25,0.061);
     box(0.70,-1.10,z-0.03,0.17,0.48,0.061);
 };
+unit(f32,f32,f32,f32,f32,f32) brace_xz = fn(ax,ay,az,bx,by,bz) {
+    sweep(ax,ay,az,bx,by,bz,0.055,0.055,1,0,10);
+    sweep(ax,ay,az,ax+0.015,ay,az+0.092,0.094,0.094,1,0,10);
+    sweep(bx,by,bz,bx+0.012,by,bz+0.088,0.087,0.087,1,0,10);
+};
+unit(i32) ferrules = fn(k) {
+    if(k<5){
+        f32 z=-6.88+core.sint_to_float<f32>(k)*0.268;
+        paint(0.40,0.42,0.43,0.12);
+        sweep(1.86,-0.42,z,1.99,-0.42,z,0.075,0.075,0,0,10);
+        paint(0.25,0.27,0.26,0.12);
+        box(1.87,-0.48,z-0.07,0.096,0.12,0.14);
+        ferrules(k+1);
+    };
+};
+unit() cargo_yoke = fn {
+    paint(0.43,0.46,0.46,0.71);
+    brace_xz(-1.44,2.28,-7.74,-0.63,1.34,-6.03);
+    brace_xz(-0.31,2.56,-8.38,1.74,1.05,-6.23);
+    paint(0.51,0.51,0.46,0.13);
+    box(-0.78,1.19,-6.30,2.51,0.144,0.30);
+    paint(0.22,0.24,0.24,0.12);
+    box(-0.43,0.96,-6.22,0.16,0.24,0.17);
+    box(1.26,0.96,-6.22,0.16,0.24,0.17);
+    paint(0.65,0.51,0.27,0.18);
+    sweep(-0.54,1.21,-6.07,1.50,1.21,-6.07,0.055,0.055,0,0,14);
+    paint(0.22,0.25,0.24,0.14);
+    box(-0.52,0.96,-5.64,0.29,0.13,0.22);
+    box(1.30,0.96,-5.64,0.29,0.13,0.22);
+    paint(0.57,0.58,0.53,0.71);
+    quad(-0.57,-1.00,-5.78,-0.40,-0.82,-5.44,-0.40,0.75,-5.44,-0.57,0.91,-5.78,0.94);
+    quad(1.74,-1.00,-5.77,1.58,-0.82,-5.45,1.58,0.75,-5.45,1.74,0.94,-5.77,0.85);
+    quad(-0.56,0.97,-5.81,1.74,0.97,-5.81,1.58,0.78,-5.47,-0.41,0.78,-5.47,0.91);
+    quad(-0.56,-1.04,-5.81,1.74,-1.04,-5.81,1.58,-0.84,-5.47,-0.41,-0.84,-5.47,0.71);
+    paint(0.16,0.18,0.19,0.09);
+    box(1.81,-0.70,-7.0,0.19,0.43,1.55);
+    paint(0.80,0.49,0.145,0.20);
+    sweep(1.92,-0.42,-7.14,1.92,-0.42,-5.48,0.031,0.031,1,0,12);
+    sweep(1.92,-0.42,-5.48,1.80,-0.70,-5.33,0.031,0.031,1,0,12);
+    sweep(1.80,-0.70,-5.33,1.47,-0.78,-5.34,0.031,0.031,0,0,12);
+    ferrules(0);
+};
 unit() cargo_fixture = fn {
-    f32 key=if(cargo_locked){0.12}else{0.0};
-    paint(0.23,0.25,0.27,0.09);
-    box(0.32,-0.12,-5.39,0.55,0.48,0.24);
-    paint(0.95,0.62,0.19,0.23);
-    box(0.365,-0.108,-5.136,0.11,0.44,0.025);
-    box(0.735,-0.108,-5.136,0.11,0.44,0.025);
-    paint(0.48,0.50,0.49,0.62);
-    sweep(0.47,-0.012+key,-5.10,0.745,-0.012+key,-5.10,0.045,0.045,0,0,18);
-    paint(0.96,0.56,0.14,0.21);
-    box(0.525,-0.066+key,-5.11,0.16,0.103,0.097);
-    if(cargo_locked){paint(0.34,0.93,0.63,0.96);}else{paint(0.98,0.59,0.20,0.96);};
-    box(0.533,0.255,-5.123,0.128,0.042,0.020);
+    f32 key=if(cargo_locked){0.16}else{0.0};
+    paint(0.22,0.24,0.24,0.094);
+    box(-0.18,-0.28,-5.43,0.57,0.46,0.27);
+    paint(0.56,0.59,0.55,0.71);
+    box(-0.156,-0.263,-5.159,0.52,0.421,0.026);
+    paint(0.11,0.13,0.13,0.13);
+    box(-0.073,-0.21,-5.126,0.31,0.30,0.018);
+    paint(0.90,0.56,0.17,0.22);
+    box(-0.112,-0.218,-5.123,0.052,0.34,0.021);
+    box(0.223,-0.218,-5.123,0.052,0.34,0.021);
+    paint(0.53,0.54,0.49,0.62);
+    sweep(-0.062,-0.151+key,-5.093,0.236,-0.151+key,-5.093,0.029,0.029,0,0,18);
+    paint(0.99,0.59,0.14,0.21);
+    box(0.016,-0.193+key,-5.110,0.145,0.082,0.087);
+    paint(0.16,0.19,0.18,0.12);
+    box(-0.048,0.061,-5.116,0.26,0.063,0.031);
+    if(cargo_locked){paint(0.29,0.96,0.55,0.99);}else{paint(1.0,0.59,0.16,0.99);};
+    box(-0.026,0.080,-5.078,0.213,0.026,0.023);
+    if(cargo_locked){paint(0.38,0.91,0.60,0.94);}else{paint(0.77,0.33,0.10,0.93);};
+    box(0.270,-0.132,-5.099,0.043,0.043,0.012);
 };
 unit() airlock = fn {
     paint(0.27,0.29,0.31,0.14);
@@ -337,7 +387,7 @@ unit() eva_room = fn {
     sweep(0.08,3.06,-7.02,-1.56,2.14,-5.20,0.24,0.24,1,0,14);
     paint(0.32,0.34,0.35,0.07);
     sweep(-0.18,3.06,-7.02,0.36,3.06,-7.02,0.37,0.37,0,0,14);
-    traversal_rail(0);traversal_rail(1);traversal_rail(2);cargo_fixture();
+    cargo_yoke();traversal_rail(0);traversal_rail(1);traversal_rail(2);cargo_fixture();
     unsafe { host.scenery(core.pointer_cast<*?u8>(&?mesh[0][0][0][0][0]),count*8); };
 };
 f32 pilot_x=0.0;f32 pilot_y=0.0;f32 pilot_z=0.37;
@@ -479,7 +529,8 @@ unit(f32,i32,f32,f32) tick = fn(dt,keys,look_x,look_y) {
     f32 dock_x=if(deck==0){0.12}else{0.05};
     f32 dock_y=if(deck==0){-0.04}else{-0.025};
     f32 dock_z=if(deck==0){-1.26}else{rail_depth(station_leg)+0.71};
-    bool nearby=(pilot_x-dock_x)*(pilot_x-dock_x)+(pilot_y-dock_y)*(pilot_y-dock_y)+(pilot_z-dock_z)*(pilot_z-dock_z)<0.37;
+    f32 reach_limit=if(deck==1 && reach==1.0){0.55}else{0.37};
+    bool nearby=(pilot_x-dock_x)*(pilot_x-dock_x)+(pilot_y-dock_y)*(pilot_y-dock_y)+(pilot_z-dock_z)*(pilot_z-dock_z)<reach_limit;
     bool aligned=yaw> -0.46 && yaw<0.71 && pitch> -0.73 && pitch<0.33;
     reach=if(nearby&&aligned){1.0}else{0.0};
     if((keys&64)!=0 && latch==0){
@@ -497,8 +548,8 @@ unit(f32,i32,f32,f32) tick = fn(dt,keys,look_x,look_y) {
     if(mode==1){
         timer=limit(timer+d*2.85,0.0,1.0);
         grip=timer*timer*(3.0-2.0*timer);
-        f32 end_heading=if(deck==0){0.60}else{if(station_leg==2){0.085}else{-0.105}};
-        f32 end_pitch=if(deck==0){-0.20}else{if(station_leg==2){-0.15}else{-0.30}};
+        f32 end_heading=if(deck==0){0.60}else{if(station_leg==2){-0.015}else{-0.105}};
+        f32 end_pitch=if(deck==0){-0.20}else{if(station_leg==2){-0.285}else{-0.30}};
         yaw=dock_yaw+(end_heading-dock_yaw)*grip;pitch=dock_pitch+(end_pitch-dock_pitch)*grip;
         pilot_x=carry+(dock_x-carry)*grip;pilot_y=pilot_y+(dock_y-pilot_y)*d*12.0;pilot_z=pilot_z+(dock_z-pilot_z)*d*12.0;
         vx=0.0;vy=0.0;vz=0.0;

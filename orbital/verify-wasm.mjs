@@ -82,6 +82,16 @@ step();step(64);
 assert.equal(state[17],1);assert.equal(state[9],2,'latch is secured with the glove still braced');
 assert.equal(roomLoads,countBeforeLatch+1);
 assert.notDeepEqual(room,beforeLatch,'the contact lever and status light visibly change');
+function luminanceCode(mesh){
+ const found=[];
+ for(let i=0;i<mesh.length;i+=8){
+  if(mesh[i]>-.03&&mesh[i]<.20&&mesh[i+1]>.062&&mesh[i+1]<.112&&mesh[i+2]>-5.09&&mesh[i+2]<-5.05&&mesh[i+7]>.98)
+   found.push([mesh[i+3],mesh[i+4],mesh[i+5]]);
+ }
+ return found;
+}
+assert.ok(luminanceCode(beforeLatch).some(rgb=>rgb[0]>.9&&rgb[1]<.65),'physical latch light starts amber');
+assert.ok(luminanceCode(room).some(rgb=>rgb[0]<.4&&rgb[1]>.90),'physical latch light ends green');
 step();step(64);assert.equal(roomLoads,countBeforeLatch+1,'the seated latch cannot fire again');
 reset();assert.deepEqual(capture(),evaStart,'reset restores the current exercise');
 assert.deepEqual(room,evaRoom);

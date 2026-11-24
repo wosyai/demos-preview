@@ -62,3 +62,10 @@ GPUs while keeping still scenes sharp.
 The planet is reprojected into a reusable backdrop only when the view direction
 or render size changes. Single-sample WebGL keeps slow-device movement from
 paying a multisample resolve every frame.
+
+**Resolution** in the exercise menu defaults to Auto, which keeps a standard
+1080p framebuffer on typical hardware unless sustained rendering pressure
+requires a lower resolution. A detected software rasterizer starts with a
+reduced moving resolution. Choose **Full detail** (or add `?quality=full` to
+the URL) to disable dynamic reductions and favor detail; a slower graphics
+device may then drop frames.

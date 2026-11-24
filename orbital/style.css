@@ -18,3 +18,5 @@ footer{position:absolute;bottom:1.35rem;left:50%;transform:translateX(-50%);widt
 @media(max-width:400px){.touch button{width:44px;height:44px}.pad{grid-template:repeat(2,44px)/repeat(3,44px);gap:.15rem}.action{font-size:.85rem;padding-inline:.55rem}.touch{left:.45rem;right:.45rem}}
 @media(orientation:landscape) and (max-height:420px){.action{bottom:.65rem}.touch{bottom:.5rem}.task{top:3.45rem;max-width:none}.task p{display:none}#intro h1{font-size:clamp(3.2rem,10vw,5rem)}#intro p{margin-block:.6rem}#intro{padding-block:.65rem}}
 @media(orientation:portrait) and (max-width:420px){.action{bottom:max(6.65rem,calc(env(safe-area-inset-bottom) + 6.1rem))}}
+.quality-label{display:flex;align-items:center;gap:.65rem;margin-top:.65rem;color:#bed3d5;font-size:.82rem;font-weight:650}
+.quality-label select{min-height:44px;background:#10232be8;border:1px solid #80a6aa80;border-radius:.4rem;color:#f0f7f3;font:inherit;padding-inline:.6rem}
