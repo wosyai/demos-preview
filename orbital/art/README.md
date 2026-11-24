@@ -2,9 +2,14 @@
 
 - **Earth:** NASA Goddard Space Flight Center, *Blue Marble 2015*, Amy Moran
   and Jesse Allen (Suomi NPP VIIRS, October 14, 2015).
-  [Source and credits](https://svs.gsfc.nasa.gov/30763/). A downsampled texture
-  from the public 10800 × 5400 mosaic is projected onto the atmosphere-lit
-  globe. The in-game view is fictional.
+  [Source and credits](https://svs.gsfc.nasa.gov/30763/). The public
+  [10800 × 5400 TIFF](https://svs.gsfc.nasa.gov/vis/a030000/a030700/a030763/global_vir_2015287_mosaic_sm.tif)
+  (SHA-256 `e51ba5bad47be7e3f91e26e4e61fd3db6b0be87ab96619e34f6d65776dd7ca92`)
+  was resized to 5120 × 2560 with Lanczos, then exported as baseline JPEG
+  at quality 81 and chroma subsampling 4:2:0. The globe shader regrades
+  the photographed weather and ocean and adds analytical limb scattering.
+  The orbit and sky are fictional. The faint optical star field is procedural
+  and does not claim to depict real constellations.
 - **Apollo forearm:** [Apollo astronaut asset v1.1.0 by Alex
   Maietta](https://github.com/alexmaietta/apollo-astronaut-asset/releases/tag/v1.1.0),
   built on NVIDIA's Omniverse Astronaut sample. The original mesh and
@@ -32,6 +37,13 @@ tools, or runtime asset loaders ship. Wosy supplies the frame-space arm origin
 and authoritative pose weight. The authored Wosy mesh remains a fallback if
 the optional packaged forearm cannot load.
 
-**Station surfaces:** `python3 art/build-surfaces.py` rebuilds the seeded,
-seamless 512px alloy/insulation/brush tile. The browser mipmaps that one lightweight
-texture; it does not recalculate procedural grain for each frame.
+**Station surfaces:** six generated albedo references (off-white anodized
+alloy, brushed titanium, woven insulation, warm film, graphite composite
+and blue enamel). The editing master was generated with OpenAI image tools;
+it is a fictional material reference, not NASA photography. Run
+`python3 art/build-surfaces.py /path/to/material-master.png` to prepare the
+compact RGB sheet. The browser decodes it into a single mipmapped texture
+array, with no cross-layer bleed. Real panel relief and seams are modeled
+in Wosy. Selected rail, capsule and joint sidewalls carry octahedrally
+encoded geometry normals in the same vertex stride; their caps and hard
+service edges do not. The albedo pixels are not used as normal maps.

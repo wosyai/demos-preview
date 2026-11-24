@@ -35,12 +35,19 @@ out vec2 material;
 out vec3 fittedNormal;
 ${view}
 ${skinVertex}
+vec3 loadNormal(float code){
+ uint enc=uint(-code)-1u;
+ vec2 v=vec2(float(enc/255u),float(enc%255u))/127.-1.;
+ vec3 n=vec3(v,1.-abs(v.x)-abs(v.y));
+ if(n.z<0.)n.xy=(1.-abs(v.yx))*sign(v.xy+1e-6);
+ return normalize(n);
+}
 void main(){
  vec3 actual=assetPoint(pos);
  vec3 p=toEye(actual);
  gl_Position=vec4(p.x*optics.x,p.y*optics.y,-1.002*p.z-.10,-p.z);
  surface=color;world=actual;material=armPose.w<0.?mat:vec2(.92,.181);
- fittedNormal=armPose.w<0.?vec3(0.):mix(openNormal,closedNormal,armPose.w);
+ fittedNormal=armPose.w<0.?(mat.x<0.?loadNormal(mat.x):vec3(0.)):mix(openNormal,closedNormal,armPose.w);
 }`;
 const sun = `
 const vec3 sunDir=vec3(.5674,.6110,.5521);
@@ -67,7 +74,7 @@ uniform int eva;
 uniform highp sampler2DShadow sunMap;
 uniform int detailedShadow;
 uniform float renderFraction;
-uniform sampler2D surfaceTile;
+uniform highp sampler2DArray surfaceTile;
 ${sun}
 float shadowAt(vec3 p,vec3 n,float direct){
  if(detailedShadow==0){
@@ -90,28 +97,43 @@ vec3 sunColor(vec3 n){
  bool steel=material.y>.56 && material.y<.69;
  bool emitter=material.y>.8;
  bool foil=material.y>.165 && material.y<.188 && surface.r>.52 && abs(n.x)>.86 && world.x<-1.3;
- bool suit=dot(fittedNormal,fittedNormal)>.25;
+ bool suit=material.x>=0. && dot(fittedNormal,fittedNormal)>.25;
  bool armor=material.y>.705 && material.y<.735;
  bool solar=surface.b>2.*surface.r && material.y>.4 && material.y<.52;
  vec3 lamp=vec3(1.00,.91,.78);
  float direct=max(dot(n,sunDir),0.);
  float shadow=direct>0. ? shadowAt(world,n,direct):0.;
- float spec=shadow>0. ? pow(max(dot(n,normalize(sunDir+normalize(eye-world))),0.),steel?66.:28.):0.;
- float metal=steel?.45:solar?.18:.075;
+ bool warm=surface.r>surface.b*1.53 && surface.g<surface.r*.86 && !emitter;
+ bool blue=surface.b>surface.r*1.20 && surface.g>surface.r*1.08 && !solar;
+ bool dark=max(surface.r,max(surface.g,surface.b))<.34;
+ float layer=suit||foil?2.:warm?3.:dark?4.:blue?5.:steel?1.:0.;
+ float polish=layer==1.?70.:layer==3.?36.:layer==5.?40.:29.;
+ float spec=shadow>0.?pow(max(dot(n,normalize(sunDir+normalize(eye-world))),0.),polish):0.;
+ float metal=layer==1.?.49:layer==3.?.21:solar?.18:.075;
  vec3 wall=abs(n);
  vec2 tex=wall.x>max(wall.y,wall.z)?world.zy:wall.y>wall.z?world.xz:world.xy;
- vec2 grain=steel?vec2(world.x*.76,(world.y*.85+world.z*.43)*1.95):suit?tex*vec2(3.2,4.1):tex*vec2(.89,1.12);
- vec3 sheet=texture(surfaceTile,grain).rgb;
- vec3 col=surface*(.84+.26*sheet.r);
- if(steel) col=surface*(.85+.24*sheet.b);
- if(suit) col=surface*(.88+.19*sheet.r+.07*sheet.g);
- if(armor){col*=.89+.22*sheet.g;spec+=.15*direct*sheet.r;}
+ vec2 grain=layer==1.?vec2(world.x*.87,(world.y*.78+world.z*.43)*1.42):
+   suit?tex*vec2(13.5,16.):foil?vec2(world.z*1.92,world.y*3.62):
+   layer==4.?tex*1.8:tex*vec2(.91,1.14);
+ vec3 sheet=texture(surfaceTile,vec3(grain,layer)).rgb;
+ vec3 tint=layer==0.?vec3(1.21,1.23,1.25):layer==1.?vec3(1.78,1.80,1.84):
+    layer==2.?vec3(1.18,1.23,1.30):layer==3.?vec3(1.22,1.56,2.40):
+    layer==4.?vec3(2.70,2.70,2.70):vec3(2.05,1.72,1.59);
+ vec3 col=surface*mix(vec3(.87),sheet*tint,suit?.36:foil?.57:.82);
+ if(layer==1.)spec*=.78+.43*sheet.r;
+ if(armor){col*=1.045;spec+=.07*direct*sheet.r;}
  if(foil){
-    vec2 uv=vec2(world.z*.88,world.y*1.16);
-    vec2 lines=abs(fract(uv)-.5)*2.;
-    float seam=smoothstep(.89-max(fwidth(uv.x),fwidth(uv.y)),.98,max(lines.x,lines.y));
-    col*=.91+.22*sheet.g-.17*seam;
-    spec+=.13*sheet.g*direct;
+    vec2 uv=vec2((world.z+11.6)/2.48,(world.y+1.62)/.86);
+    vec2 local=fract(uv);
+    vec2 edges=min(local,1.-local);
+    vec2 footprint=fwidth(uv);
+    float edge=min(edges.x,edges.y);
+    float relief=smoothstep(max(.004,max(footprint.x,footprint.y)*.68),.10,edge);
+    float seam=smoothstep(.012,max(.024,max(footprint.x,footprint.y)+.014),edge);
+    float crease=abs(local.y-.46-.14*sin(local.x*5.6));
+    float fold=exp(-29.*crease)*smoothstep(.08,.39,edges.x);
+    col*=(.78+.24*relief)*(.87+.13*seam)*(1.-.075*fold);
+    spec+=.065*sheet.r*direct*(.38+.62*relief);
  }
  if(solar){
     vec2 uv=world.xy*vec2(9.,7.5);
@@ -121,7 +143,7 @@ vec3 sunColor(vec3 n){
     col=mix(col*(.78+sheet.r*.40),vec3(.42,.33,.21),thin*.89);
  }
  vec3 ambient=mix(vec3(.09,.12,.18),vec3(.23,.39,.51),max(0.,-n.y)*.75+max(0.,n.x)*.19);
- if(steel){
+ if(layer==1.){
    float skyReflect=smoothstep(-.5,.6,n.y);
    ambient+=mix(vec3(.06,.125,.20),vec3(.026,.028,.022),skyReflect)*(.40+.60*sheet.b);
  }
@@ -144,10 +166,6 @@ void main(){
  if(eva==1){
    if(dot(fittedNormal,fittedNormal)>.2)normal=normalize(fittedNormal);
    if(dot(normal,eye-world)<0.)normal=-normal;
-   if(material.y>.56 && material.y<.69 && abs(world.y+.57)<.095 && min(min(abs(world.z+1.59),abs(world.z+3.43)),abs(world.z+4.88))<.095){
-      float rail=world.z>-2.51?-1.59:world.z>-4.155?-3.43:-4.88;
-      normal=normalize(vec3(0.,world.y+.57,world.z-rail));
-   }
    pix=vec4(sunColor(normal),1.);return;
  }
  float overhead=smoothstep(-1.2,1.52,world.y);
@@ -180,32 +198,52 @@ void main(){
  p.xy=vec2(roll.x*p.x-roll.y*p.y,roll.y*p.x+roll.x*p.y);
  vec3 q=vec3(p.x,basis.z*p.y-basis.w*p.z,basis.w*p.y+basis.z*p.z);
  vec3 ray=vec3(basis.x*q.x-basis.y*q.z,q.y,basis.y*q.x+basis.x*q.z);
- vec2 st=vec2(atan(ray.x,-ray.z),asin(ray.y))*160.;
- float star=step(.992,hash(floor(st)))*(1.-smoothstep(.03,.3,length(fract(st)-.5)));
- vec3 color=vec3(.011,.021,.033)+vec3(.64,.81,1.)*star;
+ // Magnitudes concentrated below the helmet's daylight exposure.
+ vec2 st=vec2(atan(ray.x,-ray.z),asin(ray.y))*118.;
+ vec2 stCell=floor(st);
+ float occupancy=hash(stCell+13.1);
+ vec3 color=vec3(.0018,.0025,.0040)+vec3(.0011,.0017,.0027)*max(0.,-ray.y);
+ if(occupancy>.987){
+   vec2 center=.23+.54*vec2(hash(stCell+vec2(4.2,71.8)),hash(stCell+vec2(57.1,5.4)));
+   vec2 displacement=fract(st)-center;
+   float magnitude=hash(stCell+97.1);
+   float radius=.052+.104*magnitude*magnitude;
+   float psf=exp(-dot(displacement,displacement)/(radius*radius));
+   vec3 spectrum=mix(vec3(1.,.81,.64),vec3(.66,.82,1.),hash(stCell+49.7));
+   color+=spectrum*psf*(.050+.62*pow(magnitude,3.));
+ }
  if(eva==1){
    vec3 planet=normalize(vec3(.64,-1.11,-.48));
    float arc=dot(planet,ray);
    float edge=.605;
-   if(arc>edge){
+   float arcPixel=max(fwidth(arc),.00009);
+   float surfaceVisible=smoothstep(edge-arcPixel*.65,edge+arcPixel*.65,arc);
+   // Exponential slant-column falloff outside the photographic limb.
+   float atmosphere=exp(-max(0.,edge-arc)*780.);
+   vec3 air=vec3(.075,.33,.82);
+   color=mix(color,air*.63,atmosphere*.66);
+   if(arc>=edge-arcPixel){
      float dist=arc-sqrt(max(0.,arc*arc-edge*edge));
      vec3 n=normalize(dist*ray-planet);
      vec3 orb=vec3(.56*n.x-.8285*n.y,.8285*n.x+.56*n.y,n.z);
-     vec2 geo=vec2(atan(orb.x,-orb.z)*.15915494+.79,acos(clamp(orb.y,-1.,1.))*.31830989);
-     vec3 day;
-     if(photo==1){day=texture(earthMap,geo).rgb;day=clamp(day*vec3(.93,1.10,1.30),0.,1.);}
-     else{
-       vec2 q0=geo*vec2(170.,93.);float massif=noise(q0*.093)+.22*noise(q0*.27);
-       float cloud=noise(q0+3.*vec2(noise(q0*.26),noise(q0*.21+7.)));
-       cloud=cloud*.59+.27*noise(q0*2.5)+.14*noise(q0*5.1);
-       float bank=smoothstep(.55,.71,cloud)*smoothstep(.16,.68,noise(q0*.11));
-       float land=smoothstep(.62,.71,massif);
-       day=mix(mix(vec3(.084,.30,.57),vec3(.17,.34,.48),land),vec3(.92,.96,1.),bank);
-     }
-     float solar=max(0.,dot(n,normalize(vec3(.38,.55,.83))));
-     float rim=pow(1.-max(0.,dot(n,-ray)),3.15);
-     color=mix(day*(.79+.21*solar),vec3(.16,.49,.90),rim*.79);
-   }else color+=vec3(.10,.37,.86)*exp(-max(0.,edge-arc)*438.)*.57;
+     vec2 geo=vec2(atan(orb.x,-orb.z)*.15915494+.46,acos(clamp(orb.y,-1.,1.))*.31830989);
+     vec3 albedo=photo==1?texture(earthMap,geo).rgb:vec3(.055,.205,.37);
+     float density=dot(albedo,vec3(.2126,.7152,.0722));
+     float neutrality=1.-(max(albedo.r,max(albedo.g,albedo.b))-min(albedo.r,min(albedo.g,albedo.b)));
+     float cloud=smoothstep(.30,.78,density)*smoothstep(.62,.96,neutrality);
+     // The VIIRS composite already includes real clouds. Grade the water and
+     // weather separately rather than superimposing uncorrelated cloud noise.
+     vec3 water=albedo*vec3(.56,.85,1.13);
+     vec3 weather=clamp((albedo-vec3(.035))*vec3(1.04,1.04,1.06)+.045,0.,1.);
+     vec3 day=mix(water,weather,cloud);
+     vec3 lightDir=normalize(vec3(.43,.61,.66));
+     float solar=smoothstep(-.10,.70,dot(n,lightDir));
+     float facing=max(0.,dot(n,-ray));
+     float inner=exp(-facing*7.)*.60;
+     float glint=pow(max(0.,dot(reflect(-lightDir,n),-ray)),38.)*(1.-cloud)*.040;
+     day=day*(.64+.36*solar)+glint*vec3(.56,.72,1.);
+     color=mix(color,mix(day,air,inner),surfaceVisible);
+   }
    pix=vec4(color,1.);return;
  }
  vec3 up=normalize(vec3(.70,-.32,-.57));
@@ -374,7 +412,7 @@ function render(alpha) {
  gl.clear(gl.DEPTH_BUFFER_BIT);
  gl.enable(gl.DEPTH_TEST);bind(scene);
  gl.activeTexture(gl.TEXTURE2);gl.bindTexture(gl.TEXTURE_2D,shadowTexture);gl.uniform1i(scene.sunMap,2);gl.uniform1i(scene.detailedShadow,Number(detailed));
- gl.activeTexture(gl.TEXTURE4);gl.bindTexture(gl.TEXTURE_2D,surfaceTexture);gl.uniform1i(scene.surfaceTile,4);
+ gl.activeTexture(gl.TEXTURE4);gl.bindTexture(gl.TEXTURE_2D_ARRAY,surfaceTexture);gl.uniform1i(scene.surfaceTile,4);
  meshes(scene,eva,pose);
  // The background lies behind the mesh; early depth rejects the sky and globe
  // across the station rather than shading those pixels and drawing over them.
@@ -400,8 +438,8 @@ function hud(){
   tip=["Drift along the hull to the silver rail.","Follow the blue collars along the scaffold.","Reach the gold brace ahead of the cargo." ][leg];
   if(locked){
    const cue=frame[18];
-   if(align===3){objective="Cargo aligned";tip="Green sync light. Cargo is ready for transfer.";action="Cargo ready";}
-   else if(align===2){objective="Alignment handle secured";tip="Seat the handle to set the transfer guides.";action="Set alignment";}
+   if(align===3){objective="Cargo aligned";tip="Cargo seated in its shoes. Green sync confirms transfer readiness.";action="Cargo ready";}
+   else if(align===2){objective="Alignment handle secured";tip="Set the handle to lower the load into its shoes.";action="Set alignment";}
    else if(mode===3){objective="Clearing the lock";tip="Drift right to the blue alignment console.";action="Clearing lock";}
    else if(align===1&&mode===1){objective="Taking the alignment handle";tip="Holding station.";action="Gripping handle";}
    else if(align===1&&near){objective="Alignment handle in reach";tip="Your drift is stopped. Grip the blue handle.";action="Grip handle";}
@@ -604,28 +642,48 @@ try{
  if(gl.checkFramebufferStatus(gl.FRAMEBUFFER)!==gl.FRAMEBUFFER_COMPLETE)throw Error("Orbit backdrop buffer is unavailable.");
  gl.bindFramebuffer(gl.FRAMEBUFFER,null);
  configureShadow();
- surfaceTexture=gl.createTexture();gl.bindTexture(gl.TEXTURE_2D,surfaceTexture);
- gl.texImage2D(gl.TEXTURE_2D,0,gl.RGB,1,1,0,gl.RGB,gl.UNSIGNED_BYTE,new Uint8Array([132,132,132]));
- gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MIN_FILTER,gl.LINEAR);
+ surfaceTexture=gl.createTexture();
+ gl.activeTexture(gl.TEXTURE4);gl.bindTexture(gl.TEXTURE_2D_ARRAY,surfaceTexture);
+ gl.texImage3D(gl.TEXTURE_2D_ARRAY,0,gl.RGBA8,1,1,6,0,gl.RGBA,gl.UNSIGNED_BYTE,
+   new Uint8Array([211,204,193,255,143,142,139,255,216,207,189,255,207,150,82,255,84,83,83,255,117,136,150,255]));
+ gl.texParameteri(gl.TEXTURE_2D_ARRAY,gl.TEXTURE_MIN_FILTER,gl.LINEAR);
  const surfaces=new Image();
  surfaces.onload=()=>{
-  gl.activeTexture(gl.TEXTURE4);gl.bindTexture(gl.TEXTURE_2D,surfaceTexture);
-  gl.texImage2D(gl.TEXTURE_2D,0,gl.RGB,gl.RGB,gl.UNSIGNED_BYTE,surfaces);
-  gl.generateMipmap(gl.TEXTURE_2D);gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MIN_FILTER,gl.LINEAR_MIPMAP_LINEAR);worldVersion++;
+  const side=surfaces.width/3;
+  if(!Number.isInteger(side)||surfaces.height!==2*side)return;
+  const tile=document.createElement("canvas");tile.width=side;tile.height=side;
+  const ctx=tile.getContext("2d");
+  gl.activeTexture(gl.TEXTURE4);gl.bindTexture(gl.TEXTURE_2D_ARRAY,surfaceTexture);
+  gl.texImage3D(gl.TEXTURE_2D_ARRAY,0,gl.RGBA8,side,side,6,0,gl.RGBA,gl.UNSIGNED_BYTE,null);
+  for(let i=0;i<6;i++){
+   ctx.drawImage(surfaces,(i%3)*side,Math.floor(i/3)*side,side,side,0,0,side,side);
+   gl.texSubImage3D(gl.TEXTURE_2D_ARRAY,0,0,0,i,side,side,1,gl.RGBA,gl.UNSIGNED_BYTE,tile);
+  }
+  gl.generateMipmap(gl.TEXTURE_2D_ARRAY);
+  gl.texParameteri(gl.TEXTURE_2D_ARRAY,gl.TEXTURE_MIN_FILTER,gl.LINEAR_MIPMAP_LINEAR);
+  worldVersion++;
  };
- surfaces.src=new URL("./surfaces.png?v=2",import.meta.url).href;
+ surfaces.src=new URL("./surfaces.jpg",import.meta.url).href;
  earthTexture=gl.createTexture();gl.bindTexture(gl.TEXTURE_2D,earthTexture);
  gl.texImage2D(gl.TEXTURE_2D,0,gl.RGB,1,1,0,gl.RGB,gl.UNSIGNED_BYTE,new Uint8Array([0,0,0]));
  gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MIN_FILTER,gl.LINEAR);
  const earth=new Image();
  earth.onload=()=>{
   gl.activeTexture(gl.TEXTURE1);gl.bindTexture(gl.TEXTURE_2D,earthTexture);
-  gl.texImage2D(gl.TEXTURE_2D,0,gl.RGB,gl.RGB,gl.UNSIGNED_BYTE,earth);
+  const maxTexture=gl.getParameter(gl.MAX_TEXTURE_SIZE);
+  let earthSource=earth;
+  if(earth.width>maxTexture||earth.height>maxTexture){
+   const smaller=document.createElement("canvas"), scale=maxTexture/Math.max(earth.width,earth.height);
+   smaller.width=Math.round(earth.width*scale);smaller.height=Math.round(earth.height*scale);
+   const context=smaller.getContext("2d");
+   context.imageSmoothingQuality="high";context.drawImage(earth,0,0,smaller.width,smaller.height);earthSource=smaller;
+  }
+  gl.texImage2D(gl.TEXTURE_2D,0,gl.RGB,gl.RGB,gl.UNSIGNED_BYTE,earthSource);
   gl.generateMipmap(gl.TEXTURE_2D);gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MIN_FILTER,gl.LINEAR_MIPMAP_LINEAR);
   gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_T,gl.CLAMP_TO_EDGE);earthReady=1;worldVersion++;
  };
- earth.src=new URL("./earth.jpg",import.meta.url).href;
- const response=await fetch(new URL("./orbital.wasm?v=9",import.meta.url));
+ earth.src=new URL("./earth.jpg?v=2",import.meta.url).href;
+ const response=await fetch(new URL("./orbital.wasm?v=11",import.meta.url));
  if(!response.ok)throw Error("The station engine could not be downloaded.");
  const {instance}=await WebAssembly.instantiate(await response.arrayBuffer(),{
   orbital:{

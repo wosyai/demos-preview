@@ -46,6 +46,16 @@ engine.select_deck(1);step(0,0,0,0);
 const evaStart=capture(),evaRoom=room;
 assert.equal(state[15],1);assert.ok(evaRoom.length>=5400*8 && evaRoom.length<=16100*8 && evaRoom.length%24===0);
 assert.ok(evaRoom.every(Number.isFinite) && hand.every(Number.isFinite));
+const unpackStationNormal=(code)=>{
+ const n=-code-1,u=Math.floor(n/255)/127-1,v=(n%255)/127-1,z=1-Math.abs(u)-Math.abs(v);
+ return z<0?[(1-Math.abs(v))*Math.sign(u+1e-6),(1-Math.abs(u))*Math.sign(v+1e-6),z]:[u,v,z];
+};
+const encodedStationNormals=evaRoom.filter((_,i)=>i%8===6).filter(x=>x<0);
+assert.ok(encodedStationNormals.length>1100&&encodedStationNormals.length<evaRoom.length/16,'only curved station skins carry authored normals');
+assert.ok(encodedStationNormals.every(n=>Number.isInteger(n)&&n>=-65025));
+const railNormal=evaRoom.findIndex((x,i)=>i%8===0&&Math.abs(x+1.55)<.001&&Math.abs(evaRoom[i+1]+.57)<.001&&Math.abs(evaRoom[i+2]+3.343)<.001);
+assert.ok(railNormal>=0 && unpackStationNormal(evaRoom[railNormal+6])[2]>.98,'rail skin normal follows the outside cylinder; caps remain separate');
+
 assert.notDeepEqual(initial.slice(20),evaStart.slice(20),'EVA uses a separately authored pressurized glove');
 assert.ok(evaRoom.some((x,i)=>i%8===4 && x<.14),'station includes the dark solar cell trim');
 step(64);assert.equal(state[9],0);step();
@@ -127,9 +137,20 @@ step(128,-.65);assert.equal(state[10],1);assert.equal(state[18],0);
 step(64);until(()=>state[19]===2,64);
 assert.deepEqual([...state.slice(12,15)].map(n=>n.toFixed(2)),['1.09','-0.54','-4.81']);
 for(let i=0;i<60;i++)step(64);assert.equal(state[19],2,'holding the grip never seats the alignment handle');
+const suspended=room;
 step();step(64);
 assert.equal(state[19],3);
-const wristIndicator=(m)=>m.some((f,i)=>i%8===4&&f>.95&&m[i-4]>2.12&&m[i-4]<2.28&&m[i-3]>.39&&m[i-3]<.46&&m[i-2]>-6.59&&m[i-2]<-6.56&&m[i+3]>.9);
+const nearEq=(x,y)=>Math.abs(x-y)<.0001;
+const hasVertex=(m,x,y,z)=>m.some((v,i)=>i%8===0&&nearEq(x,v)&&nearEq(y,m[i+1])&&nearEq(z,m[i+2]));
+assert.ok(hasVertex(suspended,2.17,.53,-7.13)&&hasVertex(room,2.17,.13,-7.13),'capsule travels from suspension to the capture shoes');
+assert.ok(hasVertex(suspended,2.20,.62,-6.523)&&hasVertex(room,2.20,.22,-6.523),'the captive wrist tracks the same travel');
+assert.ok(hasVertex(suspended,.49,-.404,-7.45)&&hasVertex(room,.49,-.404,-7.45),'capture shoes remain fixed to the truss');
+const span=(a,b)=>Math.hypot(...a.map((x,i)=>x-b[i]));
+const sh=[3.23,1.20,-7.81], elbow=[2.88,.46,-6.89], finalElbow=[2.8510624,.464856,-6.897602],
+startW=[2.20,.62,-6.62], endW=[2.20,.22,-6.62];
+assert.ok(hasVertex(suspended,...elbow.map((v,i)=>i===2?v+.097:v))&&hasVertex(room,...finalElbow.map((v,i)=>i===2?v+.097:v)),'elbow geometry uses the validated endpoint coordinates');
+assert.ok(nearEq(span(sh,elbow),span(sh,finalElbow)) && nearEq(span(elbow,startW),span(finalElbow,endW)),'both physical arm links retain their lengths');
+const wristIndicator=(m)=>m.some((f,i)=>i%8===4&&f>.95&&m[i-4]>2.12&&m[i-4]<2.28&&m[i-3]>0&&m[i-3]<.05&&m[i-2]>-6.59&&m[i-2]<-6.56&&m[i+3]>.9);
 assert.equal(wristIndicator(beforeLatch),false);
 assert.equal(wristIndicator(room),true,'the local seating endpoint changes the remote gripper status');
 assert.deepEqual([...state.slice(12,15)].map(n=>n.toFixed(2)),['1.09','-0.43','-4.81']);
