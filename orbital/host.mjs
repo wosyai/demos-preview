@@ -454,7 +454,7 @@ function render(alpha) {
 function hud(){
  const [, , , , , , , , ,mode,near,mark]=frame;
  const eva=frame[15]===1, leg=frame[16], locked=frame[17]===1, align=frame[19];
- let aim=0;
+ let aim=0,compactTip="";
  let objective="Approach the amber rail",tip="Drift forward and get within reach.",action="Grip rail";
  const rails=["Airlock rail","Scaffold rail","Cargo brace"];
  if(eva){
@@ -465,12 +465,12 @@ function hud(){
    const cue=frame[18];
    if(align===3){objective="Cargo aligned";tip="Cargo seated in its shoes. Green sync confirms transfer readiness.";action="Cargo ready";}
    else if(align===2){objective="Alignment handle secured";tip="Set the handle to lower the load into its shoes.";action="Set alignment";}
-   else if(mode===3){objective="Clearing the lock";tip="Drift right to the blue alignment console.";action="Clearing lock";}
+   else if(mode===3){objective="Clearing the lock";tip="Drift right to the blue alignment console.";action="Clearing lock";compactTip="Drift right";}
    else if(align===1&&mode===1){objective="Taking the alignment handle";tip="Holding station.";action="Gripping handle";}
    else if(align===1&&near){objective="Alignment handle in reach";tip="Your drift is stopped. Grip the blue handle.";action="Grip handle";}
-   else if(align===1&&cue===3){objective="Brake at the console";tip="Hold brake until your drift settles.";action="Brake first";}
-   else if(align===1&&cue>=4){objective="Face the alignment console";tip="Drag toward its blue light to line up.";action="Aim at light";aim=cue;}
-   else if(align===1){objective="Approach the alignment console";tip="Move right toward the blue light, then brake.";action="Out of reach";}
+   else if(align===1&&cue===3){objective="Brake at the console";tip="Hold brake until your drift settles.";action="Brake first";compactTip="Hold BRAKE";}
+   else if(align===1&&cue>=4){objective="Face the alignment console";tip="Drag toward its blue light to line up.";action="Aim at light";aim=cue;compactTip="Drag toward blue";}
+   else if(align===1){objective="Approach the alignment console";tip="Move right toward the blue light, then brake.";action="Out of reach";compactTip="Drift right toward blue";}
    else {objective="Cargo lock secured";tip="Pin seated. Release toward the blue alignment console.";action="Drift to align";}
   }
   else if(mode===3){objective="Pushing off";tip="Drift toward the next rail.";action="Pushing off";}
@@ -488,6 +488,8 @@ function hud(){
  if(reticle.textContent!==marker){reticle.textContent=marker;reticle.classList.toggle("aim-cue",Boolean(aim));}
  if($("objective").textContent!==objective)$("objective").textContent=objective;
  if($("help").textContent!==tip)$("help").textContent=tip;
+ const compact=$("compact-help");
+ if(compact.textContent!==compactTip){compact.textContent=compactTip;compact.hidden=!compactTip;}
  $("action").disabled=!active||align===3||!(mode===2||(mode===0&&near===1));
  if($("action").textContent!==action)$("action").textContent=action;
  const task=eva?(locked?"EVA / CARGO ALIGNMENT":"EVA / "+(leg+1)+" OF 3"):"TRAINING 01 / HANDRAIL";
