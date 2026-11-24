@@ -14,7 +14,7 @@
   not a copy of the original rig/project or full texture maps.
 
 The open and contact snapshots are posed separately on the finger bones and
-baked with the evaluated weights, cloth color and surface normals. Run the
+baked with the evaluated weights, cloth color and surface normals. Bind meshes are simplified before either pose is evaluated. The sleeve is routed left of the view while the skin vertices near the grip retain their rail-relative positions. Run the
 export from a verified upstream release archive using Blender 5.1.1 or
 newer with auto-execution disabled:
 

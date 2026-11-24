@@ -30,6 +30,7 @@ run_runner = "web"
 reset = "reset"
 tick = "tick"
 select_deck = "select_deck"
+select_arm = "select_arm"
 
 [targets.app.profiles.dev]
 main_artifact = "main"

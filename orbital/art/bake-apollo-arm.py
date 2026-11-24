@@ -2,6 +2,20 @@ import bpy, math, array, os, struct
 from mathutils import Vector, Quaternion
 arm=bpy.data.objects['astronaut_skeleton']
 names=['gloves','glove_fingertips','wrist_rings','suit_torso_arms']
+# Decimate bind meshes before evaluating either pose. Preserve finger silhouette
+# disproportionately; the many almost-coplanar sleeve/ring polygons cost more
+# than they contribute in a browser.
+for name,ratio in zip(names,(.34,.65,.15,.61)):
+ o=bpy.data.objects[name]
+ bpy.context.view_layer.objects.active=o
+ o.select_set(True)
+ if o.data.shape_keys: o.shape_key_clear()
+ modifier=o.modifiers.new("Browser polygon budget","DECIMATE")
+ modifier.ratio=ratio
+ o.modifiers.move(len(o.modifiers)-1,0)
+ bpy.ops.object.modifier_apply(modifier=modifier.name)
+ o.select_set(False)
+
 images={n:bpy.data.images[k] for n,k in [('Gloves','astronaut_04_GlovesS_BaseColor.png'),('Body','astronaut_04_jackletS_BaseColor.png')]}
 for k,im in images.items():
  im.scale(512,512)

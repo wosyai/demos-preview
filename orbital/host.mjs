@@ -59,6 +59,7 @@ void main(){}
 const exteriorMaterial=`
 uniform int eva;
 uniform highp sampler2DShadow sunMap;
+uniform float renderFraction;
 ${sun}
 float noise3(vec3 p){
  vec3 v=sin(p*vec3(1.14,1.83,1.31));
@@ -67,7 +68,12 @@ float noise3(vec3 p){
 float shadowAt(vec3 p,vec3 n){
  vec3 u=lightClip(p+n*.012)*.5+.5;
  if(any(greaterThan(u,vec3(1.)))||any(lessThan(u,vec3(0.))))return 1.;
- return texture(sunMap,vec3(u.xy,u.z-.00112));
+ float shade=texture(sunMap,vec3(u.xy,u.z-.00112));
+ if(renderFraction>.69){
+  vec2 o=vec2(.00115,.00073);
+  shade=shade*.50+texture(sunMap,vec3(u.xy+o,u.z-.00132))*.25+texture(sunMap,vec3(u.xy-o,u.z-.00132))*.25;
+ }
+ return shade;
 }
 vec3 sunColor(vec3 n){
  bool steel=material.y>.56 && material.y<.69;
@@ -89,7 +95,7 @@ vec3 sunColor(vec3 n){
     col*=.975+.025*scratches*detail;
  }else{
     float coarse=noise3(world*18.);
-    float fine=noise3(world*307.);
+    float fine=renderFraction>.69 ? noise3(world*307.) : .50;
     col*=.85+.25*coarse+.13*(fine-.5)*detail;
  }
  if(foil){
@@ -125,8 +131,10 @@ void main(){
  if(eva==1){
    if(dot(fittedNormal,fittedNormal)>.2)normal=normalize(fittedNormal);
    if(dot(normal,eye-world)<0.)normal=-normal;
-   if(material.y>.56 && material.y<.69 && abs(world.y+.57)<.095 && abs(world.z+1.59)<.095)
-      normal=normalize(vec3(0.,world.y+.57,world.z+1.59));
+   if(material.y>.56 && material.y<.69 && abs(world.y+.57)<.095 && min(min(abs(world.z+1.59),abs(world.z+3.43)),abs(world.z+4.88))<.095){
+      float rail=world.z>-2.51?-1.59:world.z>-4.155?-3.43:-4.88;
+      normal=normalize(vec3(0.,world.y+.57,world.z-rail));
+   }
    pix=vec4(sunColor(normal),1.);return;
  }
  float overhead=smoothstep(-1.2,1.52,world.y);
@@ -212,11 +220,14 @@ function program(a,b) {
  }
  gl.linkProgram(p);
  if(!gl.getProgramParameter(p,gl.LINK_STATUS))throw Error(gl.getProgramInfoLog(p));
- return {p, eye:gl.getUniformLocation(p,"eye"), basis:gl.getUniformLocation(p,"basis"), optics:gl.getUniformLocation(p,"optics"), roll:gl.getUniformLocation(p,"roll"), eva:gl.getUniformLocation(p,"eva"), photo:gl.getUniformLocation(p,"photo"), earth:gl.getUniformLocation(p,"earthMap"), sunMap:gl.getUniformLocation(p,"sunMap"),armPose:gl.getUniformLocation(p,"armPose")};
+ return {p, eye:gl.getUniformLocation(p,"eye"), basis:gl.getUniformLocation(p,"basis"), optics:gl.getUniformLocation(p,"optics"), roll:gl.getUniformLocation(p,"roll"), eva:gl.getUniformLocation(p,"eva"), photo:gl.getUniformLocation(p,"photo"), earth:gl.getUniformLocation(p,"earthMap"), sunMap:gl.getUniformLocation(p,"sunMap"),armPose:gl.getUniformLocation(p,"armPose"), renderFraction:gl.getUniformLocation(p,"renderFraction")};
 }
 const shadowSize=matchMedia("(pointer:coarse)").matches ? 1024 : 1536;
 let shadowDirty=true;
-let worldVersion=0,renderVersion=-1,renderYaw=NaN,renderPitch=NaN,renderW=0,renderH=0;
+let renderLoad=1, slowFrames=0, fastFrames=0, stillFrames=0;
+let balanced=false;
+let previous=null;
+let worldVersion=0,renderVersion=-1,renderYaw=NaN,renderPitch=NaN,renderW=0,renderH=0,renderX=NaN,renderY=NaN,renderZ=NaN,renderGrip=NaN;
 let scene,space,depth,shadowFbo,shadowTexture,earthTexture,earthReady=0,engine,active=false, frame=null, grabbed=null, dx=0, dy=0, last=0, remainder=0, pulse=false;
 const held=new Set(),touch=new Map();
 const bits={KeyA:1,ArrowLeft:1,KeyD:2,ArrowRight:2,KeyW:4,ArrowUp:4,KeyS:8,ArrowDown:8,Space:16,KeyC:32,KeyE:64,ShiftLeft:128,ShiftRight:128};
@@ -228,7 +239,7 @@ function batch() {
 }
 function update(b,ptr,n,usage){
  if(n<0 || n%24!==0 || n/8>16384)throw Error("Invalid orbital mesh");
- shadowDirty=true;worldVersion++;gl.bindBuffer(gl.ARRAY_BUFFER,b.buffer);gl.bufferData(gl.ARRAY_BUFFER,new Float32Array(engine.memory.buffer,ptr,n),usage);b.num=n/8;
+ if(usage===gl.STATIC_DRAW)shadowDirty=true;worldVersion++;gl.bindBuffer(gl.ARRAY_BUFFER,b.buffer);gl.bufferData(gl.ARRAY_BUFFER,new Float32Array(engine.memory.buffer,ptr,n),usage);b.num=n/8;
 }
 let importedArm=null;
 function uploadArm(bytes){
@@ -242,78 +253,114 @@ function uploadArm(bytes){
  }
  const indices=gl.createBuffer();gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER,indices);
  gl.bufferData(gl.ELEMENT_ARRAY_BUFFER,new Uint8Array(bytes,12+n*24),gl.STATIC_DRAW);
- importedArm={vao,elements};worldVersion++;shadowDirty=true;
+ importedArm={vao,elements};engine.select_arm(1);worldVersion++;
 }
-function meshes(program,eva){
+function meshes(program,eva,pose,onlyStatic=false){
  gl.uniform4f(program.armPose,0,0,0,-1);
  gl.bindVertexArray(room.vao);gl.drawArrays(gl.TRIANGLES,0,room.num);
+ if(onlyStatic)return;
  if(eva&&importedArm){
-   gl.uniform4f(program.armPose,frame[12],frame[13],frame[14],frame[8]);
+   gl.uniform4f(program.armPose,pose[12],pose[13],pose[14],pose[8]);
    gl.bindVertexArray(importedArm.vao);gl.drawElements(gl.TRIANGLES,importedArm.elements,gl.UNSIGNED_SHORT,0);
  }else{
    gl.bindVertexArray(hand.vao);gl.drawArrays(gl.TRIANGLES,0,hand.num);
  }
 }
-function render() {
+function render(alpha) {
  if(!frame)return;
- const scale=Math.min(devicePixelRatio,1.65,Math.sqrt(1600000/(canvas.clientWidth*canvas.clientHeight)));
+ const fraction=stillFrames>14?1:renderLoad;
+ const scale=Math.min(devicePixelRatio,1.55,Math.sqrt(1100000/(canvas.clientWidth*canvas.clientHeight)))*fraction;
  const w=Math.max(1,Math.round(canvas.clientWidth*scale)), h=Math.max(1,Math.round(canvas.clientHeight*scale));
  if(w!==canvas.width || h!==canvas.height){canvas.width=w;canvas.height=h;}
  gl.viewport(0,0,w,h);
- const [x,y,z,heading,pitch]=frame;
- if(renderVersion===worldVersion && renderYaw===heading && renderPitch===pitch && renderW===w && renderH===h)return;
- renderVersion=worldVersion;renderYaw=heading;renderPitch=pitch;renderW=w;renderH=h;
+ const pose=previous&&frame[15]===previous[15] ? frame.map((n,i)=>i<5||i===8||(i>=12&&i<=14)?previous[i]+(n-previous[i])*alpha:n):frame;
+ const [x,y,z,heading,pitch]=pose;
+ if(renderVersion===worldVersion && renderYaw===heading && renderPitch===pitch && renderW===w && renderH===h && renderX===x && renderY===y && renderZ===z && renderGrip===pose[8])return;
+ renderVersion=worldVersion;renderYaw=heading;renderPitch=pitch;renderW=w;renderH=h;renderX=x;renderY=y;renderZ=z;renderGrip=pose[8];
  const eva=frame[15]===1;
  if(eva&&shadowDirty){
    shadowDirty=false;gl.bindFramebuffer(gl.FRAMEBUFFER,shadowFbo);
    gl.viewport(0,0,shadowSize,shadowSize);gl.enable(gl.DEPTH_TEST);
    gl.clear(gl.DEPTH_BUFFER_BIT);gl.useProgram(depth.p);
    gl.enable(gl.POLYGON_OFFSET_FILL);gl.polygonOffset(1.25,1.8);
-   meshes(depth,eva);
+   meshes(depth,eva,pose,true);
    gl.disable(gl.POLYGON_OFFSET_FILL);gl.bindFramebuffer(gl.FRAMEBUFFER,null);gl.viewport(0,0,w,h);
  }
  function bind(o){
   gl.useProgram(o.p);gl.uniform3f(o.eye,x,y,z);
   gl.uniform4f(o.basis,Math.cos(heading),Math.sin(heading),Math.cos(pitch),Math.sin(pitch));
-  const f=Math.min(eva ? 1.36 : 1.45,(eva?2.05:1.8)*w/h);gl.uniform2f(o.optics,f*h/w,f);
-  gl.uniform1i(o.eva,Number(eva));gl.uniform2f(o.roll,eva?.99449:1.,eva?-.10481:0.);
+  const f=Math.min(eva ? 1.42 : 1.45,(eva?1.90:1.8)*w/h);gl.uniform2f(o.optics,f*h/w,f);
+  gl.uniform1i(o.eva,Number(eva));gl.uniform1f(o.renderFraction,fraction);gl.uniform2f(o.roll,eva?.99449:1.,eva?-.10481:0.);
  }
  gl.clear(gl.DEPTH_BUFFER_BIT);
- gl.disable(gl.DEPTH_TEST);
- bind(space);
- gl.activeTexture(gl.TEXTURE1);gl.bindTexture(gl.TEXTURE_2D,earthTexture);gl.uniform1i(space.earth,1);gl.uniform1i(space.photo,earthReady);
- gl.bindVertexArray(null);gl.drawArrays(gl.TRIANGLES,0,3);
  gl.enable(gl.DEPTH_TEST);bind(scene);
  gl.activeTexture(gl.TEXTURE2);gl.bindTexture(gl.TEXTURE_2D,shadowTexture);gl.uniform1i(scene.sunMap,2);
- meshes(scene,eva);
+ meshes(scene,eva,pose);
+ // The background lies behind the mesh; early depth rejects the sky and globe
+ // across the station rather than shading those pixels and drawing over them.
+ gl.depthMask(false);bind(space);
+ gl.activeTexture(gl.TEXTURE1);gl.bindTexture(gl.TEXTURE_2D,earthTexture);gl.uniform1i(space.earth,1);gl.uniform1i(space.photo,earthReady);
+ gl.bindVertexArray(null);gl.drawArrays(gl.TRIANGLES,0,3);gl.depthMask(true);
 }
 function hud(){
  const [, , , , , , , , ,mode,near,mark]=frame;
- const eva=frame[15]===1;
- let objective=eva?"Approach the silver rail":"Approach the amber rail",tip="Drift forward and get within reach.";
- if(mark===2){objective="Exercise complete";tip="You pushed off. Reset to practice again.";}
- else if(mode===2){objective="Rail secured";tip=eva?"Take in the view, then release to push off.":"Release the rail to push off.";}
+ const eva=frame[15]===1, leg=frame[16], locked=frame[17]===1;
+ let objective="Approach the amber rail",tip="Drift forward and get within reach.",action="Grip rail";
+ const rails=["Airlock rail","Scaffold rail","Cargo brace"];
+ if(eva){
+  const rail=rails[leg];
+  objective="Approach the "+rail.toLowerCase();
+  tip=["Drift along the hull to the silver rail.","Follow the blue collars along the scaffold.","Reach the gold brace ahead of the cargo." ][leg];
+  if(locked){objective="Cargo lock secured";tip="Green light confirmed. Traverse complete.";action="Lock secured";}
+  else if(mode===3){objective="Pushing off";tip="Drift toward the next rail.";action="Pushing off";}
+  else if(mode===2&&leg===2){objective="Cargo lock in reach";tip="Seat the latch until the indicator turns green.";action="Seat cargo lock";}
+  else if(mode===2){objective=rail+" secured";tip="Open your hand and push toward the next rail.";action="Release & push";}
+  else if(mode===1){objective="Gripping the rail";tip="Your drift is arrested.";}
+  else if(near){objective=rail+" in reach";tip="Grip to stop drifting.";}
+ }else if(mark===2){objective="Exercise complete";tip="You pushed off. Reset to practice again.";}
+ else if(mode===2){objective="Rail secured";tip="Release the rail to push off.";action="Release & push";}
  else if(mode===1){objective="Gripping the handrail";tip="Your drift is arrested.";}
  else if(near){objective="Handrail in reach";tip="Grip to stop drifting.";}
  if($("objective").textContent!==objective)$("objective").textContent=objective;
  if($("help").textContent!==tip)$("help").textContent=tip;
- $("action").disabled=!active || !(mode===2 || (mode===0 && near===1));
- $("action").textContent=mode===2?"Release & push":"Grip rail";
+ $("action").disabled=!active||locked||!(mode===2||(mode===0&&near===1));
+ if($("action").textContent!==action)$("action").textContent=action;
+ const task=eva?"EVA / "+(leg+1)+" OF 3":"TRAINING 01 / HANDRAIL";
+ if($("exercise").textContent!==task)$("exercise").textContent=task;
 }
 function animate(t){
  requestAnimationFrame(animate);
  if(!last)last=t;
- remainder+=Math.min((t-last)/1000,.09);last=t;
+ const period=t-last;
+ remainder+=Math.min(period/1000,.20);last=t;
+ if(active&&frame&&frame[15]===1&&period>0){
+   if(!balanced){
+     // Common software implementations report ANGLE / SwiftShader or llvmpipe.
+     // Seed their moving resolution lower; normal GPUs start at full budget.
+     const debug=gl.getExtension("WEBGL_debug_renderer_info");
+     const name=debug?String(gl.getParameter(debug.UNMASKED_RENDERER_WEBGL)):"";
+     if(/swiftshader|llvmpipe|software/i.test(name))renderLoad=.65;
+     balanced=true;
+   }
+   // Adapt only during movement/camera updates, not while the renderer is idle.
+   if(Math.abs(frame[5])+Math.abs(frame[6])+Math.abs(frame[7])>.025||frame[9]===1||frame[9]===3||dx||dy){
+     stillFrames=0;
+     if(period>90){slowFrames+=4;fastFrames=0;}else if(period>28){slowFrames++;fastFrames=0;}else if(period<19){fastFrames++;slowFrames=Math.max(0,slowFrames-1);}
+     if(slowFrames>=7){renderLoad=Math.max(.45,renderLoad*.79);slowFrames=0;}
+     if(fastFrames>=120){renderLoad=Math.min(1,renderLoad*1.08);fastFrames=0;}
+   }else{stillFrames++;}
+ }
  if(active && remainder>=1/60) {
   let mask=0;for(const k of held)mask|=bits[k];for(const b of touch.values())mask|=b;
   let lookX=dx,lookY=dy;dx=0;dy=0;
   while(remainder>=1/60){
+   previous=frame;
    engine.tick(1/60,mask|(pulse?64:0),lookX,lookY);
    pulse=false;lookX=0;lookY=0;remainder-=1/60;
   }
   hud();
  }else if(!active)remainder=0;
- render();
+ render(Math.max(0,Math.min(1,remainder*60)));
 }
 function clear(){held.clear();touch.clear();grabbed=null;dx=0;dy=0;pulse=false;}
 canvas.addEventListener("pointerdown",e=>{
@@ -337,7 +384,7 @@ window.addEventListener("keydown",e=>{if(active&&bits[e.code] && !e.altKey && !e
 window.addEventListener("keyup",e=>held.delete(e.code));
 $("action").onclick=()=>{pulse=true;};
 function enter(which){
- clear();engine.select_deck(which);engine.tick(0,0,0,0);
+ clear();previous=null;engine.select_deck(which);engine.tick(0,0,0,0);
  active=true;$("intro").hidden=true;$("exercise").textContent=which===1?"EVA 01 / STARBOARD TRUSS":"TRAINING 01 / HANDRAIL";hud();
 }
 $("reset").onclick=()=>{if(engine)enter(frame[15]);};
@@ -370,17 +417,17 @@ try{
   gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_T,gl.CLAMP_TO_EDGE);earthReady=1;worldVersion++;
  };
  earth.src=new URL("./earth.jpg",import.meta.url).href;
- const response=await fetch(new URL("./orbital.wasm?v=3",import.meta.url));
+ const response=await fetch(new URL("./orbital.wasm?v=4",import.meta.url));
  if(!response.ok)throw Error("The station engine could not be downloaded.");
  const {instance}=await WebAssembly.instantiate(await response.arrayBuffer(),{
   orbital:{
    scenery(p,n){update(room,p,n,gl.STATIC_DRAW);},hands(p,n){update(hand,p,n,gl.DYNAMIC_DRAW);},
-   frame(p,n){if(n!==16)throw Error("Unexpected station frame");frame=new Float32Array(engine.memory.buffer,p,n).slice();}
+   frame(p,n){if(n!==18)throw Error("Unexpected station frame");frame=new Float32Array(engine.memory.buffer,p,n).slice();}
   },
   wasi_snapshot_preview1:{proc_exit(n){throw Error("Station exited: "+n);}}
  });
  engine=instance.exports;engine._start();engine.select_deck(1);engine.tick(0,0,0,0);
- fetch(new URL("./apollo-arm.bin?v=2",import.meta.url)).then(async r=>{
+ fetch(new URL("./apollo-arm.bin?v=3",import.meta.url)).then(async r=>{
   if(!r.ok)throw Error("Apollo arm unavailable.");
   uploadArm(await r.arrayBuffer());
  }).catch(e=>console.warn(e.message));

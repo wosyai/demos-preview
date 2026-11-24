@@ -36,10 +36,12 @@ and reset restores the exact initial pose.
 
 ## Exterior EVA
 
-Select **Begin spacewalk** to practice on Kestrel's starboard truss. Approach
-the silver rail, grip to arrest drift, then push off. Choose **Indoor
-training** to repeat the starting exercise. The menu and reset buttons are
-always available. These are bounded training spaces, not a model of orbital
+Select **Begin spacewalk** to reach the cargo bay on Kestrel's starboard
+truss. Grip the **airlock rail**, push off to the blue **scaffold rail**, then
+hold the gold **cargo brace**. With the brace held, activate **Seat cargo lock**.
+The lever seats and its light turns green. There is no timer. Choose **Indoor
+training** to repeat the original single-rail exercise. Menu and reset remain
+available in both exercises. These are bounded training spaces, not a model of orbital
 flight or spacecraft controls.
 
 The visual design uses authored Wosy geometry, separate open and closed glove
@@ -51,3 +53,9 @@ fictional orbit and does not imply NASA endorsement.
 The exterior first-person arm uses a compact, indexed export of the Apollo
 astronaut asset. The authored Wosy arm is the loading/fallback mesh.
 [Art sources, credit, and two-pose export](art/README.md).
+
+The contact and release states retain world-space rail anchors on all screen
+sizes. The WebGL host interpolates presented camera and arm coordinates around
+the fixed 60 Hz Wosy simulation. Station shadows are cached until actual
+station geometry changes, and the canvas can lower moving resolution on slow
+GPUs while keeping still scenes sharp.
