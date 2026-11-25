@@ -63,12 +63,19 @@ void main(){
  uint uvHigh=uint(round(color.a*255.));
  armUV=armPose.w<0.?vec2(0.):(vec2(uvHigh%16u,uvHigh/16u)*256.+armUVLow)/4095.;
 }`;
+// One physical Sun for the station, fitted suit, shadow basis and sky.
+const normalize3=v=>v.map(n=>n/Math.hypot(...v));
+const cross3=(a,b)=>[a[1]*b[2]-a[2]*b[1],a[2]*b[0]-a[0]*b[2],a[0]*b[1]-a[1]*b[0]];
+const orbitalSun=normalize3([.48,.35,.80]);
+const shadowX=normalize3(cross3([0,1,0],orbitalSun));
+const shadowY=cross3(orbitalSun,shadowX);
+const glslVec=v=>"vec3("+v.map(x=>x.toFixed(7)).join(",")+")";
 const sun = `
-const vec3 sunDir=vec3(.5674,.6110,.5521);
+const vec3 sunDir=${glslVec(orbitalSun)};
 vec3 lightClip(vec3 p){
  vec3 q=p-vec3(0.,.3,-5.);
- return vec3(dot(q,vec3(.6976,0.,-.7165))/6.4,
-             dot(q,vec3(-.4378,.7920,-.4262))/6.4,
+ return vec3(dot(q,${glslVec(shadowX)})/6.4,
+             dot(q,${glslVec(shadowY)})/6.4,
             -dot(q,sunDir)/14.);
 }
 
@@ -132,9 +139,13 @@ vec2 practicalSource(vec3 P, vec3 N, vec3 V, vec3 source, vec3 axis, float power
   float beam=smoothstep(-.23,.58,cosine);
   float range=1.-smoothstep(.29,.77,rr);
   float a=power*beam*range/(rr+.026);
-  vec3 H=normalize(L+V);
-  float soft=pow(max(dot(N,H),0.),mix(54.,12.,roughness));
-  return vec2(receive+.11,receive*soft)*a;
+  float spec=0.;
+  if(receive>0.){
+    float h=dot(N,normalize(L+V));
+    // Below this lobe bound the summed lamp error is below one code value.
+    if(h>.57)spec=receive*pow(h,mix(54.,12.,roughness));
+  }
+  return vec2(receive+.11,spec)*a;
 }
 vec2 servicePractical(vec3 p,vec3 n,vec3 viewDir,float roughness,out bool inPort) {
   inPort=false;
@@ -145,9 +156,10 @@ vec2 servicePractical(vec3 p,vec3 n,vec3 viewDir,float roughness,out bool inPort
   float radius2=dot(P.xy,P.xy);
   if(P.z<-.67||P.z>.32||radius2>1.248)return vec2(0.);
   inPort=true;
+  float mask=(1.-smoothstep(.80,1.19,radius2))*smoothstep(-.672,-.629,P.z)*(1.-smoothstep(.17,.32,P.z));
+  if(mask<=0.)return vec2(0.);
   vec3 N=vec3(dot(n,xAxis),n.y,dot(n,zAxis));
   vec3 V=normalize(vec3(dot(viewDir,xAxis),viewDir.y,dot(viewDir,zAxis)));
-  float mask=(1.-smoothstep(.80,1.19,radius2))*smoothstep(-.672,-.629,P.z)*(1.-smoothstep(.17,.32,P.z));
   vec2 C=practicalSource(P,N,V,vec3(-.001,.646,.177),vec3(0.,-.77,-.64),.108,roughness);
   C+=practicalSource(P,N,V,vec3(-.001,-.643,.177),vec3(0.,.77,-.64),.116,roughness);
   C+=practicalSource(P,N,V,vec3(-.3695,-.239,-.473),vec3(.34,.29,.89),.082,roughness);
@@ -669,7 +681,7 @@ function render(alpha) {
   const relative=entry?{...camera,eye:camera.eye.map((n,i)=>n-pose[i])}:camera;
   let suitPose=pose;
   if(entry){suitPose=pose.slice();suitPose[0]=0;suitPose[1]=0;suitPose[2]=0;}
-  apolloBody.draw(suitPose,{camera:relative,optics,thirdPerson:drawBody,roll});
+  apolloBody.draw(suitPose,{camera:relative,optics,thirdPerson:drawBody,roll,sunDirection:orbitalSun});
  }
  // The background lies behind the mesh; early depth rejects the sky and globe
  // across the station rather than shading those pixels and drawing over them.
