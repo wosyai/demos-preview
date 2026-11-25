@@ -101,6 +101,11 @@ const hatchPoint=(u,v,d,lit)=>evaRoom.some((value,i)=>i%8===0&&
 assert.ok(hatchPoint(0,0,-.65,false),'the hatch has a recessed bulkhead, not a flat painted aperture');
 assert.ok(!hatchPoint(0,0,.158,false),'the apertural front ring is open');
 assert.ok(hatchPoint(-.063,.611,.177,true)&&hatchPoint(-.432,-.274,-.473,true),'warm lamp fixtures are present at the rim and inside the recess');
+assert.ok(hatchPoint(-.239,-.429,.041,false)&&hatchPoint(.239,-.429,.041,false),
+ 'raised paired sill runners sit below the aperture');
+assert.ok(hatchPoint(.514*Math.cos(Math.PI/12),.514*Math.sin(Math.PI/12),-.403,false)
+ &&hatchPoint(.373*Math.cos(Math.PI/12),.373*Math.sin(Math.PI/12),-.635,false),
+ 'retaining ring and recessed pressure flange retain distinct section depths');
 const localBounce=[];
 for(let i=0;i<evaRoom.length;i+=8)if(evaRoom[i+6]>1)localBounce.push(evaRoom.slice(i,i+8));
 assert.ok(localBounce.length>=200&&localBounce.length<500,'practical warmth is baked only into the hatch interior');
