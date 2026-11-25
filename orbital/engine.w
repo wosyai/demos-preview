@@ -915,10 +915,34 @@ unit() avionics_module = fn {
     quad(-1.243,0.111,-1.677,-1.243,0.111,-1.617,-1.243,0.143,-1.617,-1.243,0.143,-1.677,0.78);
     quad(-1.243,0.111,-1.494,-1.243,0.111,-1.427,-1.243,0.143,-1.427,-1.243,0.143,-1.494,0.78);
 };
+unit(f32) hull_lap_joint = fn(z){
+    paint(0.27,0.32,0.32,0.66);
+    quad(-1.588,-1.22,z-0.046,-1.588,1.17,z-0.046,-1.548,1.23,z-0.018,-1.548,-1.28,z-0.018,0.78);
+    paint(0.48,0.50,0.49,0.64);
+    quad(-1.548,-1.28,z-0.018,-1.548,1.23,z-0.018,-1.548,1.23,z+0.040,-1.548,-1.28,z+0.040,0.88);
+    paint(0.32,0.37,0.38,0.64);
+    quad(-1.548,-1.28,z+0.040,-1.548,1.23,z+0.040,-1.589,1.17,z+0.071,-1.589,-1.22,z+0.071,0.72);
+};
+unit() exterior_primary_shell = fn {
+    f32 back=-3.33; f32 face=-1.59;
+    f32 base=-1.83; f32 top=1.87; f32 aft=-13.0; f32 fore=1.80;
+    paint(0.32,0.36,0.40,0.11);
+    quad(back,base,aft,face,base,aft,face,top,aft,back,top,aft,0.78);
+    quad(back,base,fore,back,top,fore,face,top,fore,face,base,fore,0.87);
+    quad(back,base,aft,back,top,aft,back,top,fore,back,base,fore,0.61);
+    quad(back,top,aft,face,top,aft,face,top,fore,back,top,fore,1.0);
+    quad(back,base,aft,back,base,fore,face,base,fore,face,base,aft,0.57);
+    paint(0.28,0.32,0.36,0.11);
+    quad(face,base,aft,face,base,fore,face,0.084,fore,face,0.084,aft,0.69);
+    paint(0.36,0.38,0.37,0.62);
+    quad(face,0.084,aft,face,0.084,fore,-1.617,0.141,fore,-1.617,0.141,aft,0.80);
+    paint(0.38,0.41,0.42,0.11);
+    quad(-1.617,0.141,aft,-1.617,0.141,fore,face,top,fore,face,top,aft,0.69);
+};
 unit() eva_room = fn {
     count=0;
-    paint(0.32,0.36,0.40,0.11);
-    box(-3.33,-1.83,-13.0,1.74,3.70,14.8);
+    exterior_primary_shell();
+    hull_lap_joint(-1.28);hull_lap_joint(-0.47);hull_lap_joint(-4.74);hull_lap_joint(-5.86);
     blanket(3);pressure_skin();station_fasteners(0);airlock();catwalk(0);
     paint(0.40,0.44,0.43,0.13);
     box(-1.05,1.68,-5.48,0.078,0.096,3.48);

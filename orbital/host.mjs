@@ -357,7 +357,7 @@ function batch() {
  return {vao,buffer,num:0};
 }
 function update(b,ptr,n,usage){
- if(n<0 || n%24!==0 || n/24>=6650)throw Error("Invalid orbital mesh");
+ if(n<0 || n%24!==0 || n/24>=6680)throw Error("Invalid orbital mesh");
  const payload=new Float32Array(engine.memory.buffer,ptr,n);
  worldVersion++;
  gl.bindVertexArray(b.vao);gl.bindBuffer(gl.ARRAY_BUFFER,b.buffer);
@@ -817,7 +817,7 @@ try{
   gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_T,gl.CLAMP_TO_EDGE);earthReady=1;worldVersion++;
  };
  earth.src=new URL("./earth.jpg?v=2",import.meta.url).href;
- const response=await fetch(new URL("./orbital.wasm?v=24",import.meta.url));
+ const response=await fetch(new URL("./orbital.wasm?v=25",import.meta.url));
  if(!response.ok)throw Error("The station engine could not be downloaded.");
  const {instance}=await WebAssembly.instantiate(await response.arrayBuffer(),{
   orbital:{
