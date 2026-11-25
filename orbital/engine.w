@@ -1,6 +1,7 @@
 %%start
 station = namespace orbital "station.w";
 hud = namespace orbital "hud.w";
+packing = namespace orbital "indexed-pack.w";
 projection = namespace orbital "presentation.w";
 globe = namespace orbital "globe-tiles.w";
 entry_view = namespace orbital "entry-presentation.w";
@@ -8,8 +9,6 @@ control = namespace orbital "controls.w";
 render_policy = namespace orbital "render-budget.w";
 sky_art = namespace orbital "sky-art.w";
 host = extern wasm "orbital" {
-    unsafe unit(*?u8,i32) scenery;
-    unsafe unit(*?u8,i32) hull;
     unsafe unit(*?u8,i32) hands;
     unsafe unit(*?u8,i32) frame;
     unsafe unit(*?u8,i32) visual;
@@ -34,11 +33,75 @@ i32 count = 0;
 i32[5] motion_first=[0,0,0,0,0];
 i32[5] motion_size=[0,0,0,0,0];
 i32 room_partial=0;
+i32[5] motion_base=[0,0,0,0,0];
+i32[5] motion_unique=[0,0,0,0,0];
 i32(i32) scenery_motion=fn(field){
-    if(field==10){room_partial}else{
+    if(field==10){room_partial}else{if(field>=11&&field<=15){motion_base[core.int_extend<u64>(field-11)]}else{
         u64 i=core.int_extend<u64>(field/2);
         if(field%2==0){motion_first[i]*8}else{motion_size[i]*8}
+    }}
+};
+unit(i32,i32) index_range=fn(begin,finish){
+    if(begin<finish&&packing.ok()){
+        u64 p=core.int_extend<u64>(begin/4096);u64 a=core.int_extend<u64>((begin/256)%16);
+        u64 j=core.int_extend<u64>((begin/16)%16);u64 k=core.int_extend<u64>(begin%16);
+        index_vertex(begin,p,a,j,k);
+        index_range(begin+1,finish);
+    };
+};
+unit(i32,u64,u64,u64,u64) index_vertex=fn(i,p,a,j,k){
+    packing.put(i,mesh[p][a][j][k][0],mesh[p][a][j][k][1],mesh[p][a][j][k][2],mesh[p][a][j][k][3],
+        mesh[p][a][j][k][4],mesh[p][a][j][k][5],mesh[p][a][j][k][6],mesh[p][a][j][k][7]);
+};
+unit(i32,i32) static_partition=fn(id,from){
+    if(id==5){index_range(from,count);}else{
+        u64 i=core.int_extend<u64>(id);
+        if(motion_size[i]>0){index_range(from,motion_first[i]);static_partition(id+1,motion_first[i]+motion_size[i]);}
+        else{static_partition(id+1,from);};
+    };
+};
+unit(i32) moving_partition=fn(id){
+    u64 i=core.int_extend<u64>(id);
+    i32 src=motion_first[i];i32 target=motion_base[i];i32 reserve=motion_size[i];
+    packing.partition(target,target+reserve);
+    index_range(src,src+reserve);
+    motion_unique[i]=packing.end()-target;
+};
+i32(i32,i32) pack_moving=fn(id,base){
+    if(id==5){base}else{
+        u64 i=core.int_extend<u64>(id);
+        if(motion_size[i]>0){
+            motion_base[i]=base;moving_partition(id);
+            packing.pad(packing.end(),base+motion_size[i]);
+            pack_moving(id+1,base+motion_size[i])
+        }else{motion_base[i]=0;motion_unique[i]=0;pack_moving(id+1,base)}
     }
+};
+bool(i32,i32) ordered_room_spans=fn(id,last){
+    if(id==5){true}else{
+        u64 i=core.int_extend<u64>(id);
+        i32 begin=motion_first[i];i32 size=motion_size[i];
+        if(size==0){begin==0&&ordered_room_spans(id+1,last)}else{
+            size>0&&begin>=last&&begin%3==0&&size%3==0&&begin+size<=count&&ordered_room_spans(id+1,begin+size)
+        }
+    }
+};
+unit(i32) indexed_full=fn(kind){
+    packing.start();
+    if(count<0||count%3!=0||count/3>=6680||(kind==1&&!ordered_room_spans(0,0))){packing.reject();};
+    packing.partition(0,20480);
+    if(kind==0){index_range(0,count);packing.transmit(0,0,packing.end(),0,count);}
+    else{
+        static_partition(0,0);
+        i32 total=pack_moving(0,packing.end());
+        packing.transmit(1,0,total,0,count);
+    };
+};
+unit(i32,i32) pack_prepared=fn(mask,id){
+    if(id<5&&mask>0){
+        if(mask%2!=0){moving_partition(id);};
+        pack_prepared(mask/2,id+1);
+    };
 };
 f32 r = 0.0;
 f32 g = 0.0;
@@ -158,7 +221,7 @@ unit() draw = fn {
     box(0.69,-0.32,-1.81,0.47,0.115,0.11);
     paint(1.0,0.70,0.25,0.34);
     box(0.68,-0.21,-2.99,0.11,0.025,1.28);
-    unsafe { host.scenery(core.pointer_cast<*?u8>(&?mesh[0][0][0][0][0]),count*8); };
+    indexed_full(1);
 };
 
 f32(f32) wave = fn(a) {
@@ -1190,7 +1253,7 @@ bool hull_uploaded=false;
 unit() hull_upload=fn{
     if(!hull_uploaded){
         station.build();count=0;hull_mesh(0);pressure_skin();airlock_pressure_face();
-        unsafe {host.hull(core.pointer_cast<*?u8>(&?mesh[0][0][0][0][0]),count*8);};
+        indexed_full(0);
         hull_uploaded=true;
     };
 };
@@ -1252,7 +1315,7 @@ unit() eva_room = fn {
     measure_actuator(1);measure_actuator(2);
     lock_support();
     traversal_rail(0);traversal_rail(1);traversal_rail(2);measure_actuator(3);measure_actuator(4);
-    unsafe { host.scenery(core.pointer_cast<*?u8>(&?mesh[0][0][0][0][0]),count*8); };
+    indexed_full(1);
 };
 bool(i32,i32) prepare_actuators=fn(mask,id){
     bool exact=true;
@@ -1271,14 +1334,17 @@ unit(i32,i32) upload_actuators=fn(mask,id){
         if(mask%2!=0){
             room_partial=id+1;
             u64 i=core.int_extend<u64>(id);
-            unsafe {host.scenery(core.pointer_cast<*?u8>(&?mesh[0][0][0][0][0]),motion_size[i]*8);};
+            packing.transmit(id+2,motion_base[i],motion_unique[i],motion_first[i],motion_size[i]);
         };
         upload_actuators(mask/2,id+1);
     };
 };
 unit(i32) publish_actuators=fn(mask){
     i32 previous=count;
-    if(prepare_actuators(mask,0)){upload_actuators(mask,0);room_partial=0;}
+    if(prepare_actuators(mask,0)){
+        packing.start();pack_prepared(mask,0);
+        upload_actuators(mask,0);room_partial=0;
+    }
     else{eva_room();};
     count=previous;
 };

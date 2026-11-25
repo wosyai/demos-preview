@@ -488,70 +488,36 @@ function batch() {
  for(const [i,n,offset] of [[0,3,0],[1,3,12],[2,2,24]]) {gl.enableVertexAttribArray(i);gl.vertexAttribPointer(i,n,gl.FLOAT,false,32,offset);}
  return {vao,buffer,num:0};
 }
-// Room faces keep one indexed batch for color and shadow. Reserve stable
-// room-buffer slots for the moving actuator parts so neither pass sees stale geometry.
-function packRange(payload,indices,first,last,seen,vertices,base=0){
- for(let at=first;at<last;at+=8){
-  const v=payload.subarray(at,at+8),key=v.join(",");
-  let found=seen.get(key);
-  if(found===undefined){found=base+vertices.length/8;seen.set(key,found);vertices.push(...v);}
-  indices[(at-first)/8]=found;
+// The same committed indexed batch is read by the Sun shadow and color passes.
+function uploadIndexed(p,n,e,ne,kind,base,start){
+ if(n<0||n%8||ne<=0||ne%3||ne/3>=6680||kind<0||kind>6||base<0||start<0)
+  throw Error("Invalid Wosy indexed mesh");
+ const vertices=new Float32Array(engine.memory.buffer,p,n),elements=new Uint16Array(engine.memory.buffer,e,ne);
+ const batch=kind===0?hull:room;
+ gl.bindVertexArray(batch.vao);gl.bindBuffer(gl.ARRAY_BUFFER,batch.buffer);
+ if(kind<2){
+  if(base||start)throw Error("Invalid full indexed batch");
+  gl.bufferData(gl.ARRAY_BUFFER,vertices,gl.STATIC_DRAW);
+  batch.indices??=gl.createBuffer();
+  gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER,batch.indices);
+  gl.bufferData(gl.ELEMENT_ARRAY_BUFFER,elements,gl.STATIC_DRAW);
+  batch.num=ne;batch.vertexCapacity=n/8;
+ }else{
+  const id=kind-2;
+  if(!batch.indices||base!==engine.scenery_motion(11+id)||n/8>ne||base+n/8>batch.vertexCapacity||
+    start*8!==engine.scenery_motion(2*id)||ne*8!==engine.scenery_motion(2*id+1)||start+ne>batch.num)
+   throw Error("Unmatched Wosy actuator slice");
+  gl.bufferSubData(gl.ARRAY_BUFFER,base*32,vertices);
+  gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER,batch.indices);
+  gl.bufferSubData(gl.ELEMENT_ARRAY_BUFFER,start*2,elements);
  }
-}
-function packMotion(payload,base){
- const vertices=[],indices=new Uint16Array(payload.length/8);
- packRange(payload,indices,0,payload.length,new Map(),vertices,base);
- return [vertices,indices];
-}
-function update(b,ptr,n,usage){
- if(n<0 || n%24!==0 || n/24>=6680)throw Error("Invalid orbital mesh");
- const payload=new Float32Array(engine.memory.buffer,ptr,n);
- worldVersion++;
- gl.bindVertexArray(b.vao);gl.bindBuffer(gl.ARRAY_BUFFER,b.buffer);
- if(usage===gl.STATIC_DRAW){
-  const spans=[];
-  let prior=0;
-  if(b===room)for(let i=0;i<5;i++){
-   const start=engine.scenery_motion(i*2),len=engine.scenery_motion(i*2+1);
-   if(start<prior||len<0||start%24||len%24||start+len>n||(!len&&start))throw Error("Invalid actuator mesh span");
-   if(len){spans.push({id:i,start,len,base:0});prior=start+len;}
-  }
-  const seen=new Map(), packed=[],index=new Uint16Array(n/8);
-  let cursor=0,reserved=0;
-  for(const span of spans){
-   packRange(payload,index.subarray(cursor/8,span.start/8),cursor,span.start,seen,packed);
-   cursor=span.start+span.len;reserved+=span.len;
-  }
-  packRange(payload,index.subarray(cursor/8),cursor,n,seen,packed);
-  const buffer=new Float32Array(packed.length+reserved);buffer.set(packed);
-  b.motion=[];
-  let offset=packed.length;
-  for(const span of spans){
-   span.base=offset/8;
-   const [moving,movingIndices]=packMotion(payload.subarray(span.start,span.start+span.len),span.base);
-   buffer.set(moving,offset);index.set(movingIndices,span.start/8);
-   b.motion[span.id]=span;offset+=span.len;
-  }
-  gl.bufferData(gl.ARRAY_BUFFER,buffer,usage);
-  b.indices??=gl.createBuffer();
-  gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER,b.indices);
-  gl.bufferData(gl.ELEMENT_ARRAY_BUFFER,index,usage);
-  shadowDirty=true;
- }else gl.bufferData(gl.ARRAY_BUFFER,payload,usage);
- b.num=n/8;
-}
-function updateRoom(ptr,n){
- const id=engine.scenery_motion(10)-1;
- if(id===-1){update(room,ptr,n,gl.STATIC_DRAW);return;}
- const span=room.motion?.[id],start=engine.scenery_motion(id*2);
- if(!span||start!==span.start||n!==span.len||n!==engine.scenery_motion(id*2+1))throw Error("Unmatched actuator mesh update");
- const payload=new Float32Array(engine.memory.buffer,ptr+start*4,n);
- const [moving,indices]=packMotion(payload,span.base);
- gl.bindVertexArray(room.vao);gl.bindBuffer(gl.ARRAY_BUFFER,room.buffer);
- gl.bufferSubData(gl.ARRAY_BUFFER,span.base*32,new Float32Array(moving));
- gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER,room.indices);
- gl.bufferSubData(gl.ELEMENT_ARRAY_BUFFER,start/4,indices);
  shadowDirty=true;worldVersion++;
+}
+function uploadHands(p,n){
+ if(n<0||n%24||n/24>=6680)throw Error("Invalid fallback hand mesh");
+ gl.bindVertexArray(hand.vao);gl.bindBuffer(gl.ARRAY_BUFFER,hand.buffer);
+ gl.bufferData(gl.ARRAY_BUFFER,new Float32Array(engine.memory.buffer,p,n),gl.DYNAMIC_DRAW);
+ hand.num=n/8;worldVersion++;
 }
 let importedArm=null,armSurfaceReady=false,panelStampReady=false,pressureStampReady=false,fasciaStampReady=false;
 function uploadArm(bytes){
@@ -873,12 +839,11 @@ function shadowBuffer(size){
  }
 try{
  if(!gl)throw Error("WebGL 2 is required to render the station.");
- const response=await fetch(new URL("./orbital.wasm?v=55",import.meta.url));
+ const response=await fetch(new URL("./orbital.wasm?v=56",import.meta.url));
  if(!response.ok)throw Error("The station engine could not be downloaded.");
  const {instance}=await WebAssembly.instantiate(await response.arrayBuffer(),{
   orbital:{
-   hull(p,n){update(hull,p,n,gl.STATIC_DRAW);},
-   scenery:updateRoom,hands(p,n){update(hand,p,n,gl.DYNAMIC_DRAW);},
+   indexed:uploadIndexed,hands:uploadHands,
    sky_art(p,n){if(n!==29)throw Error("Unexpected celestial profile");skyArt=new Float64Array(engine.memory.buffer,p,n);},
    hud_view(p,n){if(n!==7)throw Error("Unexpected HUD projection");hudRow=new Float64Array(engine.memory.buffer,p,n);},
    render_budget(p,n){if(n!==3)throw Error("Unexpected renderer plan");renderPlan=new Float64Array(engine.memory.buffer,p,n);},

@@ -7,34 +7,46 @@ const path=process.argv[2] ?? new URL('./orbital.wasm',import.meta.url);
 const wasm=new WebAssembly.Module(readFileSync(path));
 const imports=WebAssembly.Module.imports(wasm);
 const actual=imports.map(({module,name,kind})=>`${module}.${name}:${kind}`).sort();
-const orbitalImports=['orbital.earth_tiles:function','orbital.entry_shell:function','orbital.entry_visual:function','orbital.frame:function','orbital.hands:function','orbital.hud_view:function','orbital.hull:function','orbital.render_budget:function','orbital.scenery:function','orbital.sky_art:function','orbital.visual:function'];
+const orbitalImports=['orbital.earth_tiles:function','orbital.entry_shell:function','orbital.entry_visual:function','orbital.frame:function','orbital.hands:function','orbital.hud_view:function','orbital.indexed:function','orbital.render_budget:function','orbital.sky_art:function','orbital.visual:function'];
 const procExit='wasi_snapshot_preview1.proc_exit:function';
 assert.deepEqual(actual,actual.includes(procExit)?[...orbitalImports,procExit]:orbitalImports,
  'expected the exact browser import contract (Orbital callbacks and optional WASI proc_exit)');
-let skyArt,hudView,rendererPlan,entryMesh,entrySample,earthTiles,visual,hull,hullLoads=0,room,hand,state,engine,roomLoads=0,handLoads=0,roomSpan,stagedRoom;
+let roomVertices,roomElements,skyArt,hudView,rendererPlan,entryMesh,entrySample,earthTiles,visual,hull,hullLoads=0,room,hand,state,engine,roomLoads=0,handLoads=0,roomSpan,stagedRoom;
 const roomPatches=[];
 function read(p,n){assert.equal(p%4,0);return new Float32Array(engine.memory.buffer,p,n).slice();}
 engine=new WebAssembly.Instance(wasm,{orbital:{
- hull(p,n){hull=read(p,n);hullLoads++;},
- scenery(p,n){
-  const id=engine.scenery_motion(10)-1;
-  if(id!==-1){
-    const start=engine.scenery_motion(2*id),len=engine.scenery_motion(2*id+1);
-    assert.deepEqual([start,len],roomSpan[id],'partial room segment matches the last full indexed upload');
-    assert.ok(n===len&&len>0&&start+len<=room.length);
-    stagedRoom??=room.slice();
-    const moving=read(p+start*4,n);assert.ok(moving.every(Number.isFinite));
-    stagedRoom.set(moving,start);roomPatches.push({id,start,len});
+ indexed(p,n,e,ne,kind,base,first){
+  assert.ok(n>0&&n%8===0&&ne>0&&ne%3===0&&e%2===0);
+  const vertices=read(p,n),elements=new Uint16Array(engine.memory.buffer,e,ne).slice();
+  assert.ok(vertices.every(Number.isFinite));
+  const expand=(verts,ids)=>{
+   const out=new Float32Array(ids.length*8);
+   for(let i=0;i<ids.length;i++){const pos=ids[i]*8;assert.ok(pos+8<=verts.length);out.set(verts.subarray(pos,pos+8),i*8);}
+   return out;
+  };
+  if(kind===0){
+   assert.deepEqual([base,first],[0,0]);hull=expand(vertices,elements);hullLoads++;
+  }else if(kind===1){
+   assert.deepEqual([base,first],[0,0]);assert.equal(stagedRoom,undefined);
+   roomVertices=vertices;roomElements=elements;
+   roomSpan=Array.from({length:5},(_,i)=>[engine.scenery_motion(i*2),engine.scenery_motion(i*2+1)]);
+   let last=0;
+   for(const [start,len] of roomSpan){
+    assert.ok(start>=last&&len>=0&&start%24===0&&len%24===0&&start+len<=ne*8);
+    if(len)last=start+len;
+   }
+   assert.ok(roomSpan.every(v=>v[1]===0)||roomSpan.every(v=>v[1]>0));
+   room=expand(vertices,elements);roomLoads++;
   }else{
-    assert.equal(stagedRoom,undefined,'partial room panes never interleave with a full publish');
-    roomSpan=Array.from({length:5},(_,i)=>[engine.scenery_motion(i*2),engine.scenery_motion(i*2+1)]);
-    let end=0;
-    for(const [start,len] of roomSpan){
-     assert.ok(start>=end&&len>=0&&start%24===0&&len%24===0&&start+len<=n);
-     if(len)end=start+len;
-    }
-    assert.ok(roomSpan.every(v=>v[1]===0)||roomSpan.every(v=>v[1]>0),'register all five exterior boundaries or none');
-    room=read(p,n);roomLoads++;
+   const id=kind-2,start=first*8,len=ne*8;
+   assert.equal(engine.scenery_motion(10),id+1);
+   assert.deepEqual([start,len],roomSpan[id]);
+   assert.ok(n/8<=ne&&base+n/8<=roomVertices.length/8&&first+ne<=roomElements.length);
+   assert.equal(base,engine.scenery_motion(id+11));
+   assert.ok(elements.every(q=>q>=base&&q<base+n/8));
+   roomVertices.set(vertices,base*8);roomElements.set(elements,first);
+   stagedRoom??=room.slice();stagedRoom.set(expand(roomVertices,elements),start);
+   roomPatches.push({id,start,len});
   }
  },hands(p,n){hand=read(p,n);handLoads++;},
  sky_art(p,n){assert.equal(n,29);assert.equal(p%8,0);skyArt=new Float64Array(engine.memory.buffer,p,n).slice();},
