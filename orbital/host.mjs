@@ -1,5 +1,6 @@
 const $ = id => document.getElementById(id);
 const canvas = $("view");
+const main = canvas.parentElement;
 let nativeQuality=new URLSearchParams(location.search).get("quality")==="full";
 const gl = canvas.getContext("webgl2", {alpha:false, antialias:false, preserveDrawingBuffer:false});
 const rendererInfo=gl?.getExtension("WEBGL_debug_renderer_info");
@@ -478,6 +479,7 @@ let touchLookSeen=false;
 function hud(){
  const [, , , , , , , , ,mode,near,mark]=frame;
  const eva=frame[15]===1, leg=frame[16], locked=frame[17]===1, align=frame[19];
+ main.classList.toggle("console-hud",eva&&mode===2&&align>=2&&align<=4);
  let aim=0,compactTip="";
  let objective="Approach the amber rail",tip="Drift forward and get within reach.",action="Grip rail";
  const rails=["Airlock rail","Scaffold rail","Cargo brace"];

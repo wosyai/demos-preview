@@ -40,3 +40,8 @@ footer{position:absolute;bottom:1.35rem;left:50%;transform:translateX(-50%);widt
 
 .touch .altitude{display:grid;place-content:center;gap:.05rem;line-height:1;padding:0}
 .touch .altitude small{font-size:.57rem;font-weight:750;color:#d5edf1}
+
+@media(orientation:portrait) and (max-width:390px){
+ .console-hud .lockup{visibility:hidden}
+ .console-hud .task{top:max(.6rem,env(safe-area-inset-top));max-width:min(calc(100vw - 8.1rem),12rem)}
+}
