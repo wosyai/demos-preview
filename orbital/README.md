@@ -1,19 +1,27 @@
 # Orbital: Kestrel Station
 
-A first-person zero-gravity training exercise. Enter the deck, drift toward
-the amber handrail, grip it, then push off. Reset to practice again.
+A zero-gravity EVA exercise outside Kestrel Station. Use the station rails
+to move from the airlock to the cargo truss and back.
 
-- Desktop: WASD or arrow keys for horizontal thrust, Space/C to rise/descend,
-  Shift to brake, drag the view to look around, and E to grip/release.
-- Touch: hold the arrows for thrust, use the vertical buttons to rise, descend
-  or brake, drag the view to look around, and tap Grip/Release when available.
+- Desktop: WASD or arrows for head-relative thrust, Space/C for vertical
+  thrust, Shift for fine thrust, drag to turn your head, and E for the
+  offered grip/release action.
+- Touch: drag and hold on the left half to thrust, drag and hold on the
+  right half to turn your head, and tap the offered grip/release action.
+  The thumb zones are invisible. To move up or down, first aim up or down.
+- Release thrust to coast. To slow relative to the station, thrust opposite
+  the indicated drift. The exterior suit has 20 m/s of total impulse per
+  exercise. Collisions suppress only the velocity through the surface.
 
-Wosy owns the station and glove meshes, thrust, bounded movement, the approach
-test and the grip/contact/release transition. The browser owns the WebGL 2
-projection, materials and planet backdrop, presentation and input transport.
-The exercise includes two authored glove configurations, an ease into contact,
-and a separate release/push-off state. It is not an EVA or orbital dynamics
-simulator. There are no external assets or browser runtime dependencies.
+Wosy owns gameplay, thrust, collision, the head and trailing body orientation,
+approach attitude and speed gates, grip/contact animations, and orbit state.
+The browser owns WebGL 2 projection, materials, planet backdrop, and input
+transport. The simulation uses finite expanded collision proxies for the
+primary shell, hatch assembly, major catwalk courses, console and cargo,
+not render-triangle collision for the entire station. The same proxies stop
+the chase-camera boom without changing the astronaut path. An optional,
+locally supplied Apollo full body may be enabled with `?suit=apollo`; its
+full-suit asset is not distributed with the source.
 
 ## Run / build
 
@@ -30,9 +38,10 @@ node verify-wasm.mjs
 ```
 
 The behavior check launches the exact WASM, verifies the room and hand meshes
-and checks that grip requires both range and aim, throttle cannot displace a
-held pose, held action cannot accidentally release, push-off imparts drift,
-and reset restores the exact initial pose.
+and checks range, aim and speed gates, continuous grip capture from incoming
+momentum, exact mechanical contact positions, sustained inertial coast,
+counterthrust, swept hull contact and reset. It also verifies the independent
+reentry scenario and the insufficient EVA tank for reentry from normal orbit.
 
 ## Exterior EVA
 
@@ -41,17 +50,25 @@ truss. Grip the **airlock rail**, push off to the blue **scaffold rail**, then
 grip the captive pin inside the gold **cargo brace**. With the pin held,
 activate **Seat cargo lock**. The hand follows the pin into its upper detent,
 then the recessed status light turns green. Then choose
-**Drift to align** and move right to the blue console. Hold the brake until
-you are stationary, then aim at the blue light. The reticle indicates which
-way to turn if you stop while looking off-axis. Grip the console handle and
-seat it to lower the cartridge into the transfer cradle. The truss guides
-carry the load while the connected wrist stays fitted. Transfer separately:
-the cradle verifies both keepers are closed before the robot grip opens.
-Flying through the capture zone or
-braking while looking elsewhere does not arm the grip. There is no timer.
-Choose **Indoor training** to repeat the original single-rail exercise. Menu and reset remain
-available in both exercises. These are bounded training spaces, not a model of orbital
-flight or spacecraft controls.
+**Drift to align** and move right to the blue console. Counterthrust until
+moving slowly enough to grip, then aim at the blue light. Grip the console
+handle and set it to lower cargo into the cradle. Transfer separately; the
+cradle's keepers close before the robot jaws open. Push off toward the hatch,
+match speed, grip the handle and lock its detent. Menu and reset are always
+available. The **Indoor training** exercise retains the bounded cabin.
+
+## Orbit and reentry
+
+The exterior scene starts in a nominal 390 km circular Earth orbit. X is
+orbit-normal, Y radial outward, and −Z prograde at the station. Wosy integrates
+Newtonian gravity, centrifugal and Coriolis terms in the station's rotating
+frame; an unpowered release does not deorbit you. Once 150 m from the station,
+**Coast ×120** is available; starting a burn returns to ordinary time. The
+separate **Reentry scenario** starts at the 260 km apogee of a hypothetical
+low-perigee orbit (105 km nominal perigee), not as a consequence of releasing
+an EVA handhold. It ends only when the propagated path crosses 120 km altitude.
+This is a spherical Earth and threshold exercise, not a drag, heating, or
+orbital navigation model.
 
 From the scaffold rail you can see the cartridge separated from the hull by a
 visible gap. Its yoke suspends it from the starboard truss while the two-link
@@ -69,13 +86,13 @@ spherical photographic Earth backdrop. Earth imagery:
 Amy Moran and Jesse Allen, from Suomi NPP VIIRS. The image is presented in a
 fictional orbit and does not imply NASA endorsement.
 
-The exterior first-person arm uses a compact, indexed export of the Apollo
-astronaut asset. The authored Wosy arm is the loading/fallback mesh.
+A compact indexed Apollo arm is available only as a load fallback. The default
+uses the original two-arm suit and equipment mesh.
 [Art sources, credit, and two-pose export](art/README.md).
 
 Only the next usable grip is lit. The locator lenses are built into the rails,
 console and hatch; on the return leg a small reticle arrow points to the hatch
-when it is off to the side and the HUD names which way to drag. The pilot eye, aim and hand ease in on the same
+when it is off to the side and the HUD names which way to look. Eye, aim and hand settle through a
 fixed-step capture curve.
 
 The contact and release states retain world-space rail anchors on all screen
@@ -83,7 +100,7 @@ sizes. At the cargo brace the pin and hand share both Wosy-authored endpoints.
 The blue console first seats the cargo, then a separate press closes both
 cradle keepers and opens the robot jaws at a fixed cargo position. Green
 keeper indicators confirm the completed transfer. Release the console and ride the
-return push, brake at the round airlock, and aim toward the amber locking bar.
+return push, counterthrust at the round airlock, and aim toward the amber locking bar.
 Grip the machined bar and slide its carriage into the upper detent to complete
 the EVA. Its local status light confirms the lock. The
 airlock stays closed: this exercise ends with an external lock confirmation,
@@ -124,3 +141,11 @@ The exterior preserves the existing cached shadow budget in Auto and on
 software graphics. Full detail on a detected hardware renderer enables
 higher-precision contact shadows. Mipmapped surfaces and smoother round
 hardware are available at both settings without a screen-wide blur.
+
+The default avatar, MMU and controls are original analytic meshes, with no
+downloaded suit asset. The third-person toggle sees the same Wosy flight and
+grip state as first person. Controller tilt follows actual left/right input;
+the cold-gas jets are shown only while thrust is applied. The upgraded sky adds
+a directional atmosphere limb, observable Earth rotation and a dim star map
+to the existing cache, without a new rendering pass. `?sky=legacy` skips
+the star-map download for an exact visual comparison.

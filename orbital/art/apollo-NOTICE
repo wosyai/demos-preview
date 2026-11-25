@@ -8,3 +8,7 @@ The additions (UsdSkel skeleton and skin weights, OpenXR joint frames, shoulder 
 Source: https://github.com/alexmaietta/apollo-astronaut-asset
 
 Not affiliated with or endorsed by NVIDIA or NASA.
+
+The optional full-suit apollo-body.glb is a reduced rendition of the same
+Apollo v1.1.0 asset. The rig license text is provided as apollo-LICENSE;
+the original NVIDIA meshes/materials/textures are not relicensed.

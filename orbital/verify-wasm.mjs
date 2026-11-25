@@ -12,20 +12,20 @@ let room,hand,state,engine,roomLoads=0,handLoads=0;
 function read(p,n){assert.equal(p%4,0);return new Float32Array(engine.memory.buffer,p,n).slice();}
 engine=new WebAssembly.Instance(wasm,{orbital:{
  scenery(p,n){room=read(p,n);roomLoads++;},hands(p,n){hand=read(p,n);handLoads++;},
- frame(p,n){assert.equal(n,21);state=read(p,n);}
+ frame(p,n){assert.equal(n,38);state=read(p,n);}
 },wasi_snapshot_preview1:{proc_exit(n){throw Error("Station exited: "+n);}}}).exports;
 engine._start();
 const step=(keys=0,yaw=0,pitch=0,dt=1/60)=>engine.tick(dt,keys,yaw,pitch);
 const until=(test,keys,cap=400)=>{for(let i=0;i<cap&&!test();i++)step(keys);assert.ok(test(),'state did not arrive '+[...state]);};
 let initial,contact;
-const capture=()=>[...state,...hand];
+const capture=()=>[...state.slice(0,21),...new Array(17).fill(0),...hand];
 function reset(){engine.reset();step(0,0,0,0);}
 reset();
 initial=capture();
 assert.ok(room.length>=2500*8 && room.length<=4096*8 && room.length%24===0);
 assert.ok(room.every(Number.isFinite));assert.ok(hand.every(Number.isFinite));
 step(64);assert.equal(state[9],0,'cannot grip from spawn');step();
-until(()=>state[10]===1,4);
+until(()=>state[10]===1,260);
 step(0,1.25);assert.equal(state[10],0,'cannot grip when facing away');step(64);assert.equal(state[9],0);
 step(0,-1.25);assert.equal(state[10],1);
 step(64);assert.equal(state[9],1);
@@ -35,17 +35,18 @@ for(let i=0;i<90;i++)step(64|4|2|16);
 assert.deepEqual(capture(),contact,'held action/thrust cannot exit the frozen handrail pose');
 assert.deepEqual(contact.slice(5,10),[0,0,0,1,2]);
 const box = (m) => [0,1,2].map(i=>{const a=m.filter((_,j)=>j%8===i);return [Math.min(...a),Math.max(...a)];});
-assert.notDeepEqual(box(initial.slice(21)),box(contact.slice(21)),'contact has its own authored hand volume');
-const [x,y,z]=box(contact.slice(21));assert.ok(x[0]<.745 && x[1]>.745 && y[1]>-.21 && z[0]<-1.94 && z[1]>-1.94,'contact mesh wraps the handrail');
+assert.notDeepEqual(box(initial.slice(38)),box(contact.slice(38)),'contact has its own authored hand volume');
+const [x,y,z]=box(contact.slice(38));assert.ok(x[0]<.745 && x[1]>.745 && y[1]>-.21 && z[0]<-1.94 && z[1]>-1.94,'contact mesh wraps the handrail');
 step();step(64);assert.equal(state[9],3);assert.equal(state[11],2);assert.ok(state[7]<0);
 const before=state[2];until(()=>state[9]===0,0);assert.ok(state[2]<before);
 reset();assert.deepEqual(capture(),initial,'reset restores exact initial pose');
 until(()=>state[7]<-.65,4);
-const velocity=state[7];step();assert.ok(state[7]<-.6,'release thrust retains momentum');for(let n=0;n<35;n++)step(128);
-assert.ok(Math.abs(state[7])<Math.abs(velocity)*.15,'brake arrests drift');
+const velocity=state[7];step();assert.equal(state[7],velocity,'release retains momentum exactly');
+while(state[7]<-.015)step(8);
+assert.ok(Math.abs(state[7])<.028,'opposite thrust neutralizes drift without a brake');
 until(()=>state[1]>1.019,16);assert.ok(state[1]<=1.02001 && state[6]===0);
 assert.equal(roomLoads,1,'static shell is published only once across interactions and reset');
-console.log('Orbital WASM: station batch, initial/contact poses, reach/aim gating, trigger latch, held pose, push-off, inertia, braking and boundaries passed.');
+console.log('Orbital WASM: station batch, initial/contact poses, reach/aim gating, trigger latch, held pose, push-off, inertia, counterthrust and indoor boundaries passed.');
 
 engine.select_deck(1);step(0,0,0,0);
 const evaStart=capture(),evaRoom=room;
@@ -92,28 +93,29 @@ assert.ok(localBounce.every(v=>v[0]<-.51&&v[0]>-1.95&&v[2]<-6.06&&v[2]>-7.23&&v[
 
 
 
-assert.notDeepEqual(initial.slice(21),evaStart.slice(21),'EVA uses a separately authored pressurized glove');
+assert.notDeepEqual(initial.slice(38),evaStart.slice(38),'EVA uses a separately authored pressurized glove');
 assert.ok(evaRoom.some((x,i)=>i%8===4 && x<.14),'station includes the dark solar cell trim');
 step(64);assert.equal(state[9],0);step();
-until(()=>state[10]===1,4);
+until(()=>state[10]===1,260);
 step(0,1.15);assert.equal(state[10],0);assert.equal(state[18],1,"an off-axis approach gets the optional re-aim cue");step(64);assert.equal(state[9],0);
 step(0,-1.15);assert.equal(state[10],1);
-assert.equal(state[18],2,"a fast but eligible EVA gets the brake cue");
+assert.equal(state[18],0,"a reachable EVA handrail does not ask for counterthrust");
+const startEase=[...state.slice(0,5)], incoming=[...state.slice(5,8)];
 step(64);
-const startEase=[...state.slice(0,5)], weight=state[8];
 const targetEase=[0.05,-0.025,-0.88,-0.105,-0.30];
-for(let i=0;i<8;i++){
-   step(64);
+for(let i=1;i<=9;i++){
+   const t=i*2.85/60, blend=t*t*(3-2*t), tangent=t*(1-t)**2/2.85;
    for(let axis=0;axis<5;axis++){
-      const currentRatio=(1-state[8])/(1-weight);
-      assert.ok(Math.abs(state[axis]-targetEase[axis]-(startEase[axis]-targetEase[axis])*currentRatio)<1e-5,'position and aim share one camera easing curve');
+      const expected=startEase[axis]+(targetEase[axis]-startEase[axis])*blend+(incoming[axis]??0)*(tangent+(1-blend)/60);
+      assert.ok(Math.abs(state[axis]-expected)<.0005,'reach settles continuously from the actual incoming pose and momentum');
    }
+   step(64);
 }
 until(()=>state[9]===2,64);
 const evaContact=capture();
 assert.deepEqual(evaContact.slice(5,10),[0,0,0,1,2]);
-assert.notDeepEqual(evaStart.slice(21),evaContact.slice(21));
-const extents=box(evaContact.slice(21));
+assert.notDeepEqual(evaStart.slice(38),evaContact.slice(38));
+const extents=box(evaContact.slice(38));
 assert.ok(extents[1][1]>-.472 && extents[2][0]<-1.665 && extents[2][1]>-1.50,'fingers are authored both above and behind the rounded rail');
 const heldUploads=handLoads;
 for(let i=0;i<85;i++)step(64|16|2);assert.deepEqual(capture(),evaContact);
@@ -123,7 +125,7 @@ step(64);assert.equal(state[11],2);assert.ok(state[7]<0);
 until(()=>state[9]===0,0);
 assert.equal(state[16],1);assert.equal(state[17],0);assert.equal(state[20],2);
 step(64);assert.equal(state[9],0,'cannot trigger the next rail as soon as released');step();
-until(()=>state[10]===1,4);
+until(()=>state[10]===1,260);
 step(64);until(()=>state[9]===2,64);
 assert.equal(state[16],1);assert.equal(state[17],0);assert.equal(state[20],0);
 assert.equal(state[14].toFixed(2),'-3.43');
@@ -134,7 +136,7 @@ for(let i=0;i<8;i++)step(64);
 assert.equal(roomLoads,scaffoldBatches,'looking out at the cargo never republishes the stationary world');
 step();step(64);until(()=>state[9]===0,0);
 assert.equal(state[16],2);
-until(()=>state[10]===1,4);
+until(()=>state[10]===1,260);
 step(64);until(()=>state[9]===2,64);
 const beforeLatch=room, countBeforeLatch=roomLoads;
 const openPin=[...state.slice(12,15)], openGlove=hand, openHandLoads=handLoads;
@@ -187,13 +189,12 @@ assert.equal(state[9],3);
 until(()=>state[19]===1,0);assert.equal(state[10],0);
 until(()=>state[0]>.77,0);
 assert.equal(state[18],3);assert.equal(state[10],0,'drifting through reach is not sufficient');
-step(64);assert.equal(state[9],0);step(128);
-until(()=>state[18]===4,128);
-assert.equal(state[10],0,'braking does not bypass aim');
-assert.deepEqual([...state.slice(5,8)],[0,0,0],'alignment brake stops residual drift rather than making the player chase a moving target');
+step(64);assert.equal(state[9],0);
+engine.set_thrust(-1,0);while(state[5]>.08)step(256);engine.set_thrust(0,0);step();
+assert.equal(state[18],4);assert.equal(state[10],0,'counterthrust does not bypass aim');
 step(64);assert.equal(state[9],0);
 step(0,1.00);assert.equal(state[18],5,'overshooting the light reverses the Wosy reticle cue');
-step(128,-.65);assert.equal(state[10],1);assert.equal(state[18],0);
+step(0,-.65);assert.equal(state[10],1);assert.equal(state[18],0);
 step(64);until(()=>state[19]===2,64);
 assert.deepEqual([...state.slice(12,15)].map(n=>n.toFixed(2)),['1.09','-0.54','-4.81']);
 for(let i=0;i<60;i++)step(64);assert.equal(state[19],2,'holding the grip never seats the alignment handle');
@@ -277,17 +278,18 @@ for(let i=0;i<60;i++)step(64);
 assert.equal(roomLoads,countBeforeLatch+16,'the handoff publishes only six bounded world poses');
 assert.equal(state[19],4,'held transfer does not push off');
 step();step(64);until(()=>state[19]===5,0);
-assert.equal(state[18],0,"release never advertises a stale console brake cue as the hatch");
+assert.equal(state[18],0,"release never advertises a stale console speed cue as the hatch");
 assert.equal(state[20],5,'hatch guidance is selected after release');
-step();assert.equal(state[18],9,'the still-offscreen hatch gets a left cue before braking');
+step();assert.equal(state[18],9,'the still-offscreen hatch gets a left cue before counterthrust');
 step(64);assert.equal(state[9],0,'cargo is too far from hatch to grip');
 assert.equal(state[10],0);
 until(()=>state[18]===3,0,480);
 assert.equal(state[10],0,'coasting past the hatch does not count as a grip');
 step(64);assert.equal(state[9],0);
-until(()=>state[18]===5,128);
-assert.equal(state[10],0,'stopping alone does not count as facing the hatch');
-step(128,-1.43,.20);
+step(0,.272,.34);
+while(Math.hypot(state[5],state[7])>.16)step(4);
+step(0,-1.382,-.15);
+step();
 assert.equal(state[10],1,[...state].join(","));
 step(64);until(()=>state[19]===6,64);
 assert.deepEqual([...state.slice(12,15)].map(n=>n.toFixed(2)),['-0.94','-0.14','-2.48']);
@@ -327,8 +329,21 @@ assert.equal(state[19],7);
 assert.equal(roomLoads,countBeforeLatch+20,'only the four hatch poses republish geometry');
 reset();assert.deepEqual(capture(),evaStart,'reset restores the current exercise');
 assert.deepEqual(room,evaRoom);
-until(()=>state[2]<-4.719,4);
-assert.ok(state[2]>-4.721 && state[7]===0,'EVA cannot pass into the radiator');
+// Old outboard barrier is gone. Coast through it without a reset or a hidden brake.
+for(let i=0;i<60;i++)step(2);
+assert.ok(state[0]>0.6);const drift=state[5];
+for(let i=0;i<90;i++)step();
+assert.ok(state[0]>1.51 && Math.abs(state[5]-drift)<.001 && state[19]===0);
+reset();assert.deepEqual(capture(),evaStart);
+step(0,.9,.45);
+assert.ok(Math.abs(state[21]+.03)<.02 && state[3]>.8,'body trails head turn');
+engine.set_thrust(0,.5);step();
+assert.ok(state[23]>.30 && state[24]>.16 && state[25]<-.24,'analog forward thrust has head-relative x/y/z components');
+engine.set_thrust(0,0);step();assert.deepEqual([...state.slice(23,26)],[0,0,0]);
+reset();
+for(let i=0;i<200;i++)step(1);
+assert.ok(state[0]>-1.371&&state[0]<-1.369&&state[5]===0&&state[26]===1,'hull stops a direct inward burn');
+assert.ok(state[7]>0,'station contact preserves tangential translation');
 step(64);assert.equal(state[17],0,'skipping the rails cannot lock cargo');
 engine.select_deck(0);step(0,0,0,0);
 assert.deepEqual(capture(),initial,'indoor mode round-trips without exterior state');
@@ -364,12 +379,12 @@ console.log('Apollo forearm: two indexed authored poses, contact fit, normals, i
 engine.select_deck(1);step(0,0,0,0);
 engine.select_arm(1);
 const uploadsForExternal=handLoads;
-until(()=>state[10]===1,4);
+until(()=>state[10]===1,260);
 step(64);until(()=>state[9]===2,64);
 assert.equal(handLoads,uploadsForExternal,'a loaded arm omits Wosy fallback tessellation and uploads');
 for (let next=1;next<3;next++) {
  step();step(64);until(()=>state[9]===0,0);
- until(()=>state[10]===1,4);
+ until(()=>state[10]===1,260);
  step(64);until(()=>state[9]===2,64);
  assert.equal(state[16],next);
 }
@@ -381,3 +396,36 @@ engine.select_arm(0);step();
 assert.equal(handLoads,uploadsForExternal+1,'the authored mesh can be restored without resetting EVA');
 assert.equal(state[9],2);
 console.log('EVA renderer: no procedural arm work while the fitted asset is present, fallback keeps the same Wosy grip.');
+
+// Ordinary EVA starts in a near-circular 390 km reference orbit. Even a
+// complete retrograde tank burn must not magically trigger atmospheric entry.
+engine.select_deck(1);step(0,.03,.095,0);engine.select_arm(1);
+for(let i=0;i<1500;i++)step(8);
+assert.equal(state[29],0);
+assert.equal(state[31],0,'finite tank limits total impulse');
+assert.equal(state[25],0,'a depleted tank produces no actual acceleration');
+assert.ok(state[7]>19&&state[7]<21,'full retrograde tank contributes about 20 m/s');
+let lowest=state[28];
+for(let i=0;i<6500;i++){step(512);lowest=Math.min(lowest,state[28]);}
+assert.ok(lowest>300000&&state[29]===0,'realistic suit impulse is insufficient for atmospheric entry from EVA orbit');
+engine.select_reentry();step(0,0,0,0);
+assert.equal(state[28],260000);assert.equal(state[32],1);
+let warpTicks=0,lastAbove=state[28];
+for(;warpTicks<2000&&state[29]===0;warpTicks++){
+  lastAbove=state[28];step(512);
+  if(state[29]===0)assert.equal(state[30],120);
+}
+assert.ok(warpTicks>700&&warpTicks<1450);
+assert.ok(Math.abs(state[37]-warpTicks*2)<.01);
+assert.ok(lastAbove>120000&&state[28]<=120000&&state[29]===1&&state[30]===1,'a distinct low-perigee orbit crosses threshold and exits warp on the crossing tick');
+const entryPos=[...state.slice(0,3)];
+step(4|64);assert.deepEqual([...state.slice(0,3)],entryPos,'entry is terminal until player reset');
+reset();assert.equal(state[28],260000);assert.equal(state[29],0);assert.equal(state[30],1);assert.equal(state[31],20);
+engine.select_deck(1);step(0,0,0,0);
+assert.equal(state[28],390000);assert.equal(state[32],0);
+console.log('Orbital dynamics: full retrograde EVA tank remains above '+(lowest/1000).toFixed(0)+' km; separate low-perigee case crosses 120 km after '+warpTicks*2+' orbital seconds; reset passed.');
+const cameraBefore=[...state];
+assert.equal(engine.camera_clip(0,0,0,3,0,3),1,'unobstructed chase boom keeps its full length');
+assert.ok(Math.abs(engine.camera_clip(0,0,0,-3,0,0)-(-1.37/-3-.04))<.0001,'chase boom clips using the same station hull');
+step(0,0,0,0);assert.deepEqual([...state],cameraBefore,'camera clipping has no lasting simulation input or pose effects');
+console.log('Camera: unobstructed and hull-obstructed chase sweeps leave Wosy flight state unchanged.');
