@@ -4,6 +4,8 @@ hud = namespace orbital "hud.w";
 projection = namespace orbital "presentation.w";
 globe = namespace orbital "globe-tiles.w";
 entry_view = namespace orbital "entry-presentation.w";
+control = namespace orbital "controls.w";
+render_policy = namespace orbital "render-budget.w";
 host = extern wasm "orbital" {
     unsafe unit(*?u8,i32) scenery;
     unsafe unit(*?u8,i32) hull;
@@ -1937,4 +1939,47 @@ unit(f64) reentry_visual=fn(clock){
             core.float_extend<f64>(flow_x),core.float_extend<f64>(flow_y),core.float_extend<f64>(flow_z),presentation[58],phase);
     };
 };
+f64 pending_time=0.0;
+bool did_tick=false;
+unit(i32,i32) input_key=fn(slot,held){control.key(slot,held);};
+unit(i32) input_action=fn(command){control.action(command);};
+unit() input_clear=fn{control.clear();};
+unit(i32) input_release=fn(zone){control.release(zone);};
+unit(f64,f64,i32) input_pointer=fn(dx,dy,touch){control.pointer(dx,dy,touch);};
+unit(i32,f64,f64,f64) input_stick=fn(zone,width,x,y){control.stick(zone,width,x,y);};
+i32() input_status=fn{control.status()|(if(did_tick){8}else{0})};
+unit(i32) advance_fixed=fn(mask){
+    if(pending_time>=0.016666666666666666){
+        i32 pulse=control.contact_pulse();
+        set_rotator(core.float_trunc<f32>(control.axis(2)),core.float_trunc<f32>(control.axis(3)));
+        tick(0.016666666666666666,mask|pulse,core.float_trunc<f32>(control.axis(4)),core.float_trunc<f32>(control.axis(5)));
+        control.consume_pointer();
+        pending_time=pending_time-0.016666666666666666;
+        advance_fixed(mask);
+    };
+};
+f64(f64,i32) input_advance=fn(period,active){
+    f64 elapsed=period/1000.0;
+    pending_time=pending_time+(if(elapsed<0.20){elapsed}else{0.20});
+    did_tick=false;
+    if(active==0){pending_time=0.0;}else{
+        if(pending_time>=0.016666666666666666){
+            did_tick=true;
+            i32 mask=control.command_mask();
+            set_thrust(core.float_trunc<f32>(control.axis(0)),core.float_trunc<f32>(control.axis(1)));
+            advance_fixed(mask);
+        };
+    };
+    projection.clamp(pending_time*60.0,0.0,1.0)
+};
+unit(f64,i32,i32,i32) quality_adapt=fn(period,live,full,software){
+    if(live==1&&state[15]==1.0){
+        f64 vx0=core.float_extend<f64>(state[5]);f64 vy0=core.float_extend<f64>(state[6]);f64 vz0=core.float_extend<f64>(state[7]);
+        bool moving=projection.abs(vx0)+projection.abs(vy0)+projection.abs(vz0)>0.025||
+            state[9]==1.0||state[9]==3.0||(control.status()&4)!=0||presentation[53]==1.0;
+        render_policy.adapt(period,full==1,software==1,moving);
+    };
+};
+unit(f64,f64,f64,i32,i32) quality_plan=fn(w,h,dpr,full,software){render_policy.plan(w,h,dpr,full==1,software==1);};
+i32(i32,i32,i32,i32) quality_shadow=fn(full,hardware,coarse,maximum){render_policy.shadow(full==1,hardware==1,coarse==1,maximum)};
 %%end

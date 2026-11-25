@@ -7,11 +7,11 @@ const path=process.argv[2] ?? new URL('./orbital.wasm',import.meta.url);
 const wasm=new WebAssembly.Module(readFileSync(path));
 const imports=WebAssembly.Module.imports(wasm);
 const actual=imports.map(({module,name,kind})=>`${module}.${name}:${kind}`).sort();
-const orbitalImports=['orbital.earth_tiles:function','orbital.entry_shell:function','orbital.entry_visual:function','orbital.frame:function','orbital.hands:function','orbital.hull:function','orbital.scenery:function','orbital.visual:function'];
+const orbitalImports=['orbital.earth_tiles:function','orbital.entry_shell:function','orbital.entry_visual:function','orbital.frame:function','orbital.hands:function','orbital.hull:function','orbital.render_budget:function','orbital.scenery:function','orbital.visual:function'];
 const procExit='wasi_snapshot_preview1.proc_exit:function';
 assert.deepEqual(actual,actual.includes(procExit)?[...orbitalImports,procExit]:orbitalImports,
  'expected the exact browser import contract (Orbital callbacks and optional WASI proc_exit)');
-let entryMesh,entrySample,earthTiles,visual,hull,hullLoads=0,room,hand,state,engine,roomLoads=0,handLoads=0,roomSpan,stagedRoom;
+let rendererPlan,entryMesh,entrySample,earthTiles,visual,hull,hullLoads=0,room,hand,state,engine,roomLoads=0,handLoads=0,roomSpan,stagedRoom;
 const roomPatches=[];
 function read(p,n){assert.equal(p%4,0);return new Float32Array(engine.memory.buffer,p,n).slice();}
 engine=new WebAssembly.Instance(wasm,{orbital:{
@@ -37,6 +37,7 @@ engine=new WebAssembly.Instance(wasm,{orbital:{
     room=read(p,n);roomLoads++;
   }
  },hands(p,n){hand=read(p,n);handLoads++;},
+ render_budget(p,n){assert.equal(n,3);assert.equal(p%8,0);rendererPlan=new Float64Array(engine.memory.buffer,p,n).slice();},
  earth_tiles(p,n){assert.equal(n,19);assert.equal(p%8,0);earthTiles=new Float64Array(engine.memory.buffer,p,n).slice();},
  entry_shell(p,n){assert.equal(n,6144);entryMesh=read(p,n);},
  entry_visual(p,n){assert.equal(n,14);assert.equal(p%8,0);entrySample=new Float64Array(engine.memory.buffer,p,n).slice();},
@@ -777,3 +778,32 @@ assert.equal(earthTiles[0],10430/(845*globeView[45]),'update the sample footprin
 assert.deepEqual(earthTiles.slice(1),geographicPlan);
 assert.equal(engine.globe_tiles(380,845),1,'the next eligible view sample regenerates the plan');
 console.log('Wosy globe detail: camera geography, exact tile slots and scores, and scan cadence passed.');
+
+engine.select_deck(1);engine.tick(0,0,0,0);
+engine.input_clear();assert.equal(engine.input_advance(100,0),0);
+engine.input_key(0,1);engine.input_key(1,1);engine.input_key(0,0);
+engine.input_advance(17,1);
+assert.ok(state[23]<-.1,'one key alias remains active when another is released');
+engine.input_key(1,0);engine.input_advance(17,1);
+assert.equal(Math.hypot(...state.slice(23,26)),0,'releasing the second alias removes drive');
+engine.input_stick(0,390,0,-20);engine.input_stick(1,390,32,-16);
+engine.input_advance(17,1);
+assert.ok(state[34]>0&&state[35]>0&&state[36]>0&&Math.hypot(...state.slice(23,26))>.1);
+assert.equal(engine.input_status()&13,13,'look used, active gesture and a fixed tick may coexist');
+engine.input_clear();engine.input_advance(17,1);
+assert.deepEqual([...state.slice(33,37)],[0,0,0,0]);
+assert.equal(engine.input_status()&1,1,'input clearing does not erase the learned HUD interaction');
+console.log('Wosy input: fixed pacing, keyboard alias lifetime, dual touch, release, and learned HUD state passed.');
+
+assert.equal(engine.quality_shadow(1,1,0,4096),3584*2+1);
+assert.equal(engine.quality_shadow(1,1,1,1536),1536*2+1);
+assert.equal(engine.quality_shadow(1,0,1,4096),1024*2);
+engine.input_key(4,1);engine.input_advance(100,1);
+engine.quality_adapt(16.7,1,0,1);engine.quality_plan(1280,720,1,0,1);
+assert.deepEqual([...rendererPlan],[832,468,.65]);
+engine.quality_adapt(120,1,0,1);engine.quality_adapt(120,1,0,1);
+engine.quality_plan(1280,720,1,0,1);
+assert.deepEqual([...rendererPlan],[657,370,.65*.79]);
+engine.quality_plan(1280,720,1,1,1);
+assert.deepEqual([...rendererPlan],[1280,720,1],'Full masks adaptive scaling without modifying the motion policy');
+console.log('Wosy rendering budget: capability-clamped shadows, software seed, motion degradation and Full mode passed.');
