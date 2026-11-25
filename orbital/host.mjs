@@ -1,7 +1,7 @@
 import {hudText} from "./hud-text.mjs?v=4";
 import {reentryGlow} from "./reentry-glow.mjs?v=1";
 import {earthDetail} from "./earth-detail.mjs";
-import {exteriorSky} from "./exterior-sky.mjs?v=2";
+import {exteriorSky} from "./exterior-sky.mjs?v=3";
 import {chaseView,loadApolloBody,loadProceduralSuit,stationGrip} from "./apollo-body.mjs?v=14";
 const $ = id => document.getElementById(id);
 const canvas = $("view");
