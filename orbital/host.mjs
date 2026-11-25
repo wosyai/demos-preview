@@ -206,7 +206,7 @@ void main(){
    if(material.y>=1.098){
      int address=int(round((material.y-1.10)*100.))+1;
      vec3 idle=vec3(.15,.23,.24);
-     vec3 litLens=address==5?vec3(1.0,.63,.28):address==4?vec3(.40,.81,1.):vec3(.43,.89,.90);
+     vec3 litLens=address<=2?vec3(1.,.57,.14):address==5?vec3(1.0,.63,.28):address==4?vec3(.40,.81,1.):vec3(.43,.89,.90);
      pix=vec4(address==routeLens?mix(litLens,vec3(.84,1.,.90),routeReach?.48:.0):idle,1.);return;
    }
    if(dot(fittedNormal,fittedNormal)>.2)normal=normalize(fittedNormal);
@@ -474,6 +474,7 @@ function render(alpha) {
  }
  gl.bindVertexArray(null);gl.drawArrays(gl.TRIANGLES,0,3);gl.depthMask(true);
 }
+let touchLookSeen=false;
 function hud(){
  const [, , , , , , , , ,mode,near,mark]=frame;
  const eva=frame[15]===1, leg=frame[16], locked=frame[17]===1, align=frame[19];
@@ -514,9 +515,13 @@ function hud(){
   else if(mode===2){objective=rail+" secured";tip="Open your hand and push toward the next rail.";action="Release & push";}
   else if(mode===1){objective="Gripping the rail";tip="Your drift is arrested.";}
   else if(near){objective=rail+" in reach";tip="Grip to stop drifting.";}
-  if(!locked&&mode===0&&!near)compactTip="Drift to lit rail";
-  if(mode===0&&frame[18]===1){tip="Turn back toward the rail.";compactTip="Turn to lit rail";}
-  if(mode===0&&frame[18]===2){tip="Ease off thrust or brake to steady the approach.";compactTip="Ease off or brake";}
+  if(!locked&&mode===0&&!near){
+   action="Too far";
+   tip="Drift forward to the lit rail.";
+   compactTip=leg===0&&!touchLookSeen?"↑ Forward · drag to look":"Drift to lit rail";
+  }
+  if(mode===0&&frame[18]===1){tip="Drag to face the lit rail.";compactTip="Drag to face rail";action="Face rail";}
+  if(mode===0&&!near&&frame[18]===2){tip="Ease off thrust or brake to steady the approach.";compactTip="Ease off or brake";action="Slow down";}
  }else if(mark===2){objective="Exercise complete";tip="You pushed off. Reset to practice again.";}
  else if(mode===2){objective="Rail secured";tip="Release the rail to push off.";action="Release & push";}
  else if(mode===1){objective="Gripping the handrail";tip="Your drift is arrested.";}
@@ -623,6 +628,7 @@ canvas.addEventListener("pointerdown",e=>{
 });
 canvas.addEventListener("pointermove",e=>{
  if(grabbed?.id!==e.pointerId)return;
+ if(e.pointerType==="touch"&&(Math.abs(e.clientX-grabbed.x)+Math.abs(e.clientY-grabbed.y)>3))touchLookSeen=true;
  dx+=(e.clientX-grabbed.x)*.0033;dy-=(e.clientY-grabbed.y)*.0033;
  grabbed={id:e.pointerId,x:e.clientX,y:e.clientY};
 });
@@ -804,7 +810,7 @@ try{
   gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_T,gl.CLAMP_TO_EDGE);earthReady=1;worldVersion++;
  };
  earth.src=new URL("./earth.jpg?v=2",import.meta.url).href;
- const response=await fetch(new URL("./orbital.wasm?v=23",import.meta.url));
+ const response=await fetch(new URL("./orbital.wasm?v=24",import.meta.url));
  if(!response.ok)throw Error("The station engine could not be downloaded.");
  const {instance}=await WebAssembly.instantiate(await response.arrayBuffer(),{
   orbital:{

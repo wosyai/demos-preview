@@ -298,7 +298,14 @@ unit(f32,f32,f32,f32) route_lens = fn(x,y,z,address){
 };
 unit(i32) traversal_rail = fn(leg) {
     f32 z=rail_depth(leg);
-    if(leg<2){route_lens(0.12,-0.505,z+0.103,1.10+core.sint_to_float<f32>(leg)*0.01);};
+    if(leg<2){
+        f32 address=1.10+core.sint_to_float<f32>(leg)*0.01;
+        route_lens(0.12,-0.505,z+0.103,address);
+        paint(0.82,0.50,0.19,address);
+        pt(0.155,-0.467,z+0.106,0.92);
+        pt(0.239,-0.467,z+0.106,0.92);
+        pt(0.197,-0.426,z+0.106,0.92);
+    };
     paint(0.53,0.54,0.54,0.62);
     if(leg==2){
         round_shell(-1.55,-0.57,z,-0.55,-0.57,z,0.087,0.087,0,0,36);

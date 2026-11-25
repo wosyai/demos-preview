@@ -37,3 +37,6 @@ footer{position:absolute;bottom:1.35rem;left:50%;transform:translateX(-50%);widt
  .task #compact-help:not([hidden]){display:block;font-size:.73rem;color:#d5edf1;margin-top:.22rem}
  .touch button.brake{font-size:.67rem;font-weight:850;letter-spacing:.018em;padding:0;color:#defaff}
 }
+
+.touch .altitude{display:grid;place-content:center;gap:.05rem;line-height:1;padding:0}
+.touch .altitude small{font-size:.57rem;font-weight:750;color:#d5edf1}
