@@ -229,7 +229,18 @@ vec3 sunColor(vec3 n){
  float direct=max(dot(n,sunDir),0.);
  bool doorPlate=abs(material.y-.754)<.0007;
  float shadow=direct>0. ? shadowAt(world+(doorPlate?n*.018:vec3(0.)),n,direct):0.;
- float spec=shadow>0.?pow(max(dot(n,normalize(sunDir+normalize(eye-world))),0.),polish):0.;
+ float spec=0.;
+ if(shadow>0.){
+   vec3 halfway=normalize(sunDir+normalize(eye-world));
+   float lobe=max(dot(n,halfway),0.);
+   if(abs(material.y-.6205)<.00013){
+     // Turned rail shells have a narrow lobe across the brushed grain.
+     lobe=min(1.,lobe*inversesqrt(max(.32,1.-.87*halfway.x*halfway.x)));
+     polish=134.;
+     metal=1.08;
+   }
+   spec=pow(lobe,polish);
+ }
  vec3 tint=layer==0.||stamp||pressure||fascia?vec3(1.21,1.23,1.25):layer==1.?vec3(1.78,1.80,1.84):
     layer==2.?vec3(1.18,1.23,1.30):layer==3.?vec3(1.22,1.56,2.40):
     layer==4.?vec3(2.70,2.70,2.70):vec3(2.05,1.72,1.59);
@@ -1053,7 +1064,7 @@ try{
   };
   stars.src=new URL("./starfield.jpg?v=1",import.meta.url).href;
  }
- const response=await fetch(new URL("./orbital.wasm?v=45",import.meta.url));
+ const response=await fetch(new URL("./orbital.wasm?v=46",import.meta.url));
  if(!response.ok)throw Error("The station engine could not be downloaded.");
  const {instance}=await WebAssembly.instantiate(await response.arrayBuffer(),{
   orbital:{
