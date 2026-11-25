@@ -137,20 +137,6 @@ export function elbowIK(shoulder,wrist,upper,fore,pole){
          wrist:add(shoulder,mul(dir,d)), wristError:Math.abs(length(delta)-d)};
 }
 
-export function chaseView(frame,{blend=1, clip}={}){
- const eye=Array.from(frame.slice(0,3)), yaw=frame[3],pitch=frame[4];
- const {forward,right,up}=facing(yaw,pitch);
- const aim=add(eye,mul(up,-.23));
- const goal=add(aim,add(mul(forward,-2.85),add(mul(up,.75),mul(right,.39))));
- const safe=clip?mix(aim,goal,clamp(clip(aim,goal),0,1)):goal;
- const f=unit(add(mul(forward,5.3),sub(aim,safe)));
- return {
-   eye:mix(eye,safe,clamp(blend,0,1)),
-   yaw:yaw+Math.atan2(Math.sin(Math.atan2(f[0],-f[2])-yaw),Math.cos(Math.atan2(f[0],-f[2])-yaw))*blend,
-   pitch:pitch+(Math.asin(f[1])-pitch)*blend,
- };
-}
-
 export class ApolloPose {
  constructor(asset){
   this.asset=asset;

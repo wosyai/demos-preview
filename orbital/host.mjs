@@ -1,8 +1,8 @@
 import {hudText} from "./hud-text.mjs?v=5";
 import {reentryGlow} from "./reentry-glow.mjs?v=1";
-import {earthDetail} from "./earth-detail.mjs";
+import {earthDetail} from "./earth-detail.mjs?v=2";
 import {exteriorSky} from "./exterior-sky.mjs?v=5";
-import {chaseView,loadApolloBody,loadProceduralSuit,stationGrip} from "./apollo-body.mjs?v=14";
+import {loadApolloBody,loadProceduralSuit,stationGrip} from "./apollo-body.mjs?v=15";
 const $ = id => document.getElementById(id);
 const canvas = $("view");
 const main = canvas.parentElement;
@@ -478,11 +478,11 @@ function configureShadow(){
 let shadowDirty=true;
 let renderLoad=1, slowFrames=0, fastFrames=0, stillFrames=0;
 let balanced=false, software=rasterSoftware;
-let previous=null;
+let visual=null,tileRow=null;
 let worldVersion=0,renderVersion=-1,renderYaw=NaN,renderPitch=NaN,renderW=0,renderH=0,renderX=NaN,renderY=NaN,renderZ=NaN,renderGrip=NaN,renderRoute=-1,renderReach=-1;
 let scene,space,skyCopy,depth,shadowFbo,shadowTexture,earthTexture,starTexture,moonTexture,surfaceTexture,earthReady=0,starReady=0,moonReady=0,engine,active=false, frame=null, grabbed=null, dx=0, dy=0, last=0, remainder=0, pulse=false, pulseDown=false;
 const held=new Set();
-let coast=false,apolloBody=null,apolloModelActive=false,thirdPerson=false,chaseBlend=0;
+let coast=false,apolloBody=null,apolloModelActive=false;
 let avatarMotion="",renderSkySpin=NaN;
 // Wosy frame: [0..4] eye/aim, [5..7] velocity, [8..20] mission/contact;
 // [21..22] body aim, [23..25] applied acceleration, [26] contact,
@@ -602,14 +602,6 @@ function bindOrbit(frame){
  gl.activeTexture(gl.TEXTURE9);gl.bindTexture(gl.TEXTURE_2D,moonTexture);gl.uniform1i(space.moonMap,9);gl.uniform1i(space.moonReady,moonReady);
  gl.uniform1i(space.upgradedSky,Number(upgradedSky));gl.uniform1f(space.earthAngle,frame.spin);gl.uniform4fv(space.orbitCenter,frame.center);
 }
-function skyState(pose){
- const spin=((pose[32]===1?1.35:0)+pose[37]*0.00007292115)%(2*Math.PI);
- const [x,y,z]=pose,span=Math.hypot(x,y,z);
- const blend=pose[32]===1||pose[29]===1?1:Math.min(1,Math.max(0,(span-1000)/18000));
- const n=Math.hypot(x,6761000+y,z);
- const n0=Math.hypot(.64,1.11,.48);
- return {spin,center:[.64/n0*(1-blend)-x/n*blend,-1.11/n0*(1-blend)-(6761000+y)/n*blend,-.48/n0*(1-blend)-z/n*blend,Math.sqrt(1-.605*.605)*(1-blend)+6371000/(6371000+Math.max(0,pose[28]))*blend]};
-}
 function bakeBackdrop(bind,w,h,eva,heading,pitch,roll,orbit){
  const wide=skyW!==w || skyH!==h;
  if(!wide && Math.abs(skyHeading-heading)<.001 && Math.abs(skyPitch-pitch)<.001
@@ -634,27 +626,16 @@ function render(alpha) {
  const w=Math.max(1,Math.round(canvas.clientWidth*scale)), h=Math.max(1,Math.round(canvas.clientHeight*scale));
  if(w!==canvas.width || h!==canvas.height){canvas.width=w;canvas.height=h;}
  gl.viewport(0,0,w,h);
- const discreteContact=stage=>stage===0.5||stage===2.5||stage===3.25||stage===3.5||stage===6.5;
- const seatContact=discreteContact(frame[19])||discreteContact(previous?.[19]);
- const interpolate=previous&&frame[15]===previous[15]&&frame[32]===previous[32];
- const mixAngle=(a,b)=>a+Math.atan2(Math.sin(b-a),Math.cos(b-a))*alpha;
- const pose=interpolate ? frame.map((n,i)=>i===3||i===21?mixAngle(previous[i],n):i<5||i===8||i===22||(!seatContact&&i>=12&&i<=14)?previous[i]+(n-previous[i])*alpha:n):frame;
- const eva=pose[15]===1, body=eva&&apolloBody, entry=pose[32]===1;
+ // Synchronous Wosy presentation packet; GL consumes the borrowed row before its next write.
+ engine.project_visual(alpha,w/h,Number(Boolean(apolloBody)));
+ const pose=visual.subarray(0,38),camera={eye:visual.subarray(38,41),yaw:visual[41],pitch:visual[42]};
+ const [x,y,z]=camera.eye,{yaw:heading,pitch}=camera,drawBody=visual[43]===1;
+ const optics=visual.subarray(44,46),roll=visual.subarray(46,48);
+ const orbit={spin:visual[48],center:visual.subarray(49,53)};
+ const eva=pose[15]===1,body=eva&&apolloBody,entry=pose[32]===1;
  const heat=entry&&pose[29]===1?engine.entry_flow(3):0;
  const heated=heat>.01, evolving=heated&&engine.entry_flow(4)<1;
- const immersed={eye:[...pose.slice(0,3)],yaw:pose[3],pitch:pose[4]};
- const chase=Boolean(body&&thirdPerson);
- const to=chase?1:0;
- if(Math.abs(chaseBlend-to)>.005)chaseBlend+=(to-chaseBlend)*.22;else chaseBlend=to;
- const camera=chaseBlend>0&&body ? chaseView(pose,{blend:chaseBlend,clip:(from,to)=>entry?1:engine.camera_clip(...from,...to)}) : immersed;
- const [x,y,z]=camera.eye,{yaw:heading,pitch}=camera;
- const drawBody=Boolean(body&&(chase||chaseBlend>.03)&&Math.hypot(x-pose[0],y-pose[1],z-pose[2])>.8);
- const orbit=skyState(pose);
- const aspect=w/h;
- const eyeRelief=eva&&aspect<.72 ? 1.40+.45*Math.min(1.,Math.max(0.,(aspect-.49)/.23)) : 1.90;
- const f=Math.min(eva ? 1.42 : 1.45,(eva?eyeRelief:1.8)*aspect);
- const optics=[f/aspect,f],roll=eva&&!drawBody?[.99449,-.10481]:[1,0];
- if(eva&&upgradedSky&&earthReady&&$("intro").hidden)fineEarth.update(orbit,heading,pitch,optics,roll,h);
+ if(eva&&upgradedSky&&earthReady&&$("intro").hidden)fineEarth.update(h);
  const skyMoved=eva&&upgradedSky&&!(Math.abs(orbit.spin-renderSkySpin)<.0006);
  const motion=body?[pose[21],pose[22],...pose.slice(23,26),...pose.slice(33,37),drawBody].join(","):"";
  if(renderVersion===worldVersion && renderYaw===heading && renderPitch===pitch && renderW===w && renderH===h && Math.abs(renderX-x)<.00002 && Math.abs(renderY-y)<.00002 && Math.abs(renderZ-z)<.00002 && renderGrip===pose[8] && renderRoute===pose[20] && renderReach===pose[10] && avatarMotion===motion && !skyMoved&&!evolving)return;
@@ -670,7 +651,7 @@ function render(alpha) {
  }
  function bind(o){
   gl.useProgram(o.p);gl.uniform3f(o.eye,x,y,z);
-  gl.uniform4f(o.basis,Math.cos(heading),Math.sin(heading),Math.cos(pitch),Math.sin(pitch));
+  gl.uniform4f(o.basis,visual[54],visual[55],visual[56],visual[57]);
   gl.uniform2fv(o.optics,optics);
   gl.uniform1i(o.eva,Number(eva));gl.uniform1f(o.renderFraction,fraction);gl.uniform2fv(o.roll,roll);
  }
@@ -727,6 +708,7 @@ function hud(){
  const cameraButton=$("camera");
  cameraButton.hidden=!apolloBody||!eva;
  cameraButton.disabled=!active||cameraButton.hidden;
+ const thirdPerson=engine.camera_mode(0)===1;
  cameraButton.setAttribute("aria-label",thirdPerson?"Switch to first-person camera":"Switch to third-person camera");
  cameraButton.setAttribute("aria-pressed",String(thirdPerson));
  const instrument=$("flight-instrument");
@@ -818,7 +800,7 @@ function animate(t){
    }
    // Adapt only during movement/camera updates, not while the renderer is idle.
    if(nativeQuality){stillFrames=0;}
-   else if(Math.abs(frame[5])+Math.abs(frame[6])+Math.abs(frame[7])>.025||frame[9]===1||frame[9]===3||dx||dy||sticks.look.x||sticks.look.y||(chaseBlend>0&&chaseBlend<1)){
+   else if(Math.abs(frame[5])+Math.abs(frame[6])+Math.abs(frame[7])>.025||frame[9]===1||frame[9]===3||dx||dy||sticks.look.x||sticks.look.y||visual?.[53]===1){
      stillFrames=0;
      if(period>90){slowFrames+=4;fastFrames=0;}else if(period>28){slowFrames++;fastFrames=0;}else if(period<19){fastFrames++;slowFrames=Math.max(0,slowFrames-1);}
      if(slowFrames>=7){renderLoad=Math.max(.45,renderLoad*.79);slowFrames=0;}
@@ -832,7 +814,6 @@ function animate(t){
   let lookX=dx,lookY=dy;dx=0;dy=0;
   engine.set_thrust(sticks.move.x,-sticks.move.y);
   while(remainder>=1/60){
-   previous=frame;
    // Preserve a release tick between distinct taps, even at one render per tick.
    const press=pulse&&!pulseDown;
    engine.set_rotator(Math.max(-1,Math.min(1,lookX/.045+sticks.look.x)),Math.max(-1,Math.min(1,lookY/.045-sticks.look.y)));
@@ -922,10 +903,10 @@ actionButton.onclick=e=>{
  if(active&&!actionButton.disabled&&!(suppressTouchClick&&e.detail>0))pulse=true;
 };
 function enter(which){
- clear();previous=null;if(which===0){thirdPerson=false;chaseBlend=0;}if(which===2)engine.select_reentry();else engine.select_deck(which);engine.tick(0,0,0,0);
+ clear();if(which===2)engine.select_reentry();else engine.select_deck(which);engine.tick(0,0,0,0);
  active=true;$("intro").hidden=true;hud();
 }
-$("camera").onclick=()=>{if(active&&apolloBody&&frame[15]===1){thirdPerson=!thirdPerson;worldVersion++;hud();}};
+$("camera").onclick=()=>{if(active&&apolloBody&&frame[15]===1){engine.camera_mode(1);worldVersion++;hud();}};
 $("coast").onclick=()=>{if(active&&!$("coast").hidden)coast=!coast;};
 $("reset").onclick=()=>{if(engine)enter(frame[32]===1?2:frame[15]);};
 $("menu").onclick=()=>{clear();active=false;$("intro").hidden=false;};
@@ -1032,7 +1013,10 @@ try{
  panelStamp.src=new URL("./thermal-panel.jpg?v=2",import.meta.url).href;
  pressureStamp.src=new URL("./pressure-skin.jpg",import.meta.url).href;
  fasciaStamp.src=new URL("./cargo-fascia.jpg?v=1",import.meta.url).href;
- fineEarth=earthDetail(gl,space.p,()=>{worldVersion++;skyPhoto=-1;});
+ fineEarth=earthDetail(gl,space.p,()=>{worldVersion++;skyPhoto=-1;},(now,height)=>{
+  const scanned=engine.globe_tiles(now,height)===1;
+  return {row:tileRow,scanned};
+ });
  earthTexture=gl.createTexture();gl.bindTexture(gl.TEXTURE_2D,earthTexture);
  gl.texImage2D(gl.TEXTURE_2D,0,gl.RGB,1,1,0,gl.RGB,gl.UNSIGNED_BYTE,new Uint8Array([0,0,0]));
  gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MIN_FILTER,gl.LINEAR);
@@ -1078,12 +1062,14 @@ try{
   };
   moon.src=new URL("./moon-relief.webp?v=1",import.meta.url).href;
  }
- const response=await fetch(new URL("./orbital.wasm?v=46",import.meta.url));
+ const response=await fetch(new URL("./orbital.wasm?v=48",import.meta.url));
  if(!response.ok)throw Error("The station engine could not be downloaded.");
  const {instance}=await WebAssembly.instantiate(await response.arrayBuffer(),{
   orbital:{
    hull(p,n){update(hull,p,n,gl.STATIC_DRAW);},
    scenery:updateRoom,hands(p,n){update(hand,p,n,gl.DYNAMIC_DRAW);},
+   earth_tiles(p,n){if(n!==19)throw Error("Unexpected globe tile projection");tileRow=new Float64Array(engine.memory.buffer,p,n);},
+   visual(p,n){if(n!==58)throw Error("Unexpected station projection");visual=new Float64Array(engine.memory.buffer,p,n);},
    frame(p,n){if(n!==38)throw Error("Unexpected station frame");frame=new Float32Array(engine.memory.buffer,p,n).slice();}
   },
   wasi_snapshot_preview1:{proc_exit(n){throw Error("Station exited: "+n);}}

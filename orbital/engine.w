@@ -1,11 +1,14 @@
 %%start
 station = namespace orbital "station.w";
 hud = namespace orbital "hud.w";
+projection = namespace orbital "presentation.w";
+globe = namespace orbital "globe-tiles.w";
 host = extern wasm "orbital" {
     unsafe unit(*?u8,i32) scenery;
     unsafe unit(*?u8,i32) hull;
     unsafe unit(*?u8,i32) hands;
     unsafe unit(*?u8,i32) frame;
+    unsafe unit(*?u8,i32) visual;
 };
 f32[8] vertex = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0];
 f32[8][16] page0 = [vertex, vertex, vertex, vertex, vertex, vertex, vertex, vertex, vertex, vertex, vertex, vertex, vertex, vertex, vertex, vertex];
@@ -13,6 +16,15 @@ f32[8][16][16] page1 = [page0, page0, page0, page0, page0, page0, page0, page0, 
 f32[8][16][16][16] page2 = [page1, page1, page1, page1, page1, page1, page1, page1, page1, page1, page1, page1, page1, page1, page1, page1];
 f32[8][16][16][16][5] mesh = [page2,page2,page2,page2,page2];
 f32[38] state = [0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0];
+f32[38] prior_state=state;
+bool present_history=false;
+f64[58] presentation=[0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0];
+bool third_person=false;
+f64 chase_blend=0.0;
+i32(i32) camera_mode=fn(command){
+    if(command==1 && deck==1){third_person=!third_person;};
+    if(third_person){1}else{0}
+};
 i32 count = 0;
 i32[5] motion_first=[0,0,0,0,0];
 i32[5] motion_size=[0,0,0,0,0];
@@ -1489,6 +1501,8 @@ unit(f32) descend_atmosphere=fn(d){
     };
 };
 unit() reset = fn {
+    present_history=false;
+    if(deck==0){third_person=false;chase_blend=0.0;};
     pilot_x=0.0; pilot_y=0.0; pilot_z=0.37;vx=0.0;vy=0.0;vz=0.0;yaw=if(deck==0){0.13}else{-0.03};pitch=if(deck==0){-0.035}else{-0.095};timer=0.0;
     if(reentry_exercise){
         pilot_y=-130000.0;vz=-161.43300;pitch=-0.40;yaw=-0.25;
@@ -1638,6 +1652,7 @@ i32() hud_code = fn{
     code
 };
 unit(f32,i32,f32,f32) tick = fn(dt,keys,look_x,look_y) {
+    prior_state=state;present_history=dt>0.0;
     if(!ready){if(deck==0){draw();}else{eva_room();};ready=true;};
     f32 d=limit(dt,0.0,0.032);
     f32 bind=if(mode==2){1.0}else{if(mode==3){grip}else{0.0}};
@@ -1845,5 +1860,70 @@ unit(f32,i32,f32,f32) tick = fn(dt,keys,look_x,look_y) {
     state[35]=if(mode==1){0.0}else{rotation_x};state[36]=if(mode==1){0.0}else{rotation_y};
     state[37]=core.float_trunc<f32>(orbital_seconds);
     unsafe {host.frame(core.pointer_cast<*?u8>(&?state[0]),38);};
+};
+unit(u64,bool,bool,f64) project_frame=fn(i,blend,snap,alpha){
+    if(i<38){
+        f64 curr=core.float_extend<f64>(state[i]);f64 old=core.float_extend<f64>(prior_state[i]);
+        f64 value=if(!blend){curr}else{if(i==3||i==21){old+projection.wrap(curr-old)*alpha}
+            else{if(i<5||i==8||i==22||(!snap&&i>=12&&i<=14)){old+(curr-old)*alpha}else{curr}}};
+        presentation[i]=core.float_extend<f64>(core.float_trunc<f32>(value));
+        project_frame(i+1,blend,snap,alpha);
+    };
+};
+unit(f64,f64,i32) project_visual=fn(alpha,aspect,avatar){
+    bool blend=present_history&&state[15]==prior_state[15]&&state[32]==prior_state[32];
+    bool snap=projection.discrete_contact(state[19])||projection.discrete_contact(prior_state[19]);
+    project_frame(0,blend,snap,alpha);
+    f64 x=presentation[0];f64 y=presentation[1];f64 z=presentation[2];
+    f64 heading=presentation[3];f64 tilt=presentation[4];
+    bool eva=state[15]==1.0;bool entry=state[32]==1.0;
+    bool body=eva&&avatar==1;bool chase=body&&third_person;
+    f64 target=if(chase){1.0}else{0.0};
+    if(projection.abs(chase_blend-target)>0.005){chase_blend=chase_blend+(target-chase_blend)*0.22;}else{chase_blend=target;};
+    f64 cx=x;f64 cy=y;f64 cz=z;f64 yaw_out=heading;f64 pitch_out=tilt;
+    if(chase_blend>0.0&&body){
+        f64 sy=projection.sin(heading);f64 cy0=projection.cos(heading);f64 sp=projection.sin(tilt);f64 cp=projection.cos(tilt);
+        f64 fx=sy*cp;f64 fy=sp;f64 fz=-cy0*cp;
+        f64 ux=-sy*sp;f64 uy=cp;f64 uz=cy0*sp;
+        f64 ax=x-ux*0.23;f64 ay=y-uy*0.23;f64 az=z-uz*0.23;
+        f64 bx=ax+(-fx*2.85+(ux*0.75+cy0*0.39));
+        f64 by=ay+(-fy*2.85+uy*0.75);
+        f64 bz=az+(-fz*2.85+(uz*0.75+sy*0.39));
+        f64 clip=if(entry){1.0}else{core.float_extend<f64>(camera_clip(core.float_trunc<f32>(ax),core.float_trunc<f32>(ay),core.float_trunc<f32>(az),core.float_trunc<f32>(bx),core.float_trunc<f32>(by),core.float_trunc<f32>(bz)))};
+        f64 sx=ax+(bx-ax)*clip;f64 sy0=ay+(by-ay)*clip;f64 sz=az+(bz-az)*clip;
+        f64 qx=fx*5.3+(ax-sx);f64 qy=fy*5.3+(ay-sy0);f64 qz=fz*5.3+(az-sz);
+        cx=x+(sx-x)*chase_blend;cy=y+(sy0-y)*chase_blend;cz=z+(sz-z)*chase_blend;
+        yaw_out=heading+projection.wrap(projection.atan2(qx,-qz)-heading)*chase_blend;
+        f64 pitch_goal=projection.atan2(qy,projection.norm(qx,0.0,qz));
+        pitch_out=tilt+(pitch_goal-tilt)*chase_blend;
+    };
+    bool exterior_avatar=body&&(chase||chase_blend>0.03)&&projection.norm(cx-x,cy-y,cz-z)>0.8;
+    f64 relief=if(eva&&aspect<0.72){1.40+0.45*projection.clamp((aspect-0.49)/0.23,0.0,1.0)}else{1.90};
+    f64 focus=projection.clamp((if(eva){relief}else{1.8})*aspect,0.0,if(eva){1.42}else{1.45});
+    f64 orbit_blend=if(entry||state[29]==1.0){1.0}else{projection.clamp((projection.norm(x,y,z)-1000.0)/18000.0,0.0,1.0)};
+    f64 near=1.0-orbit_blend;
+    f64 n=projection.norm(x,6761000.0+y,z);
+    f64 n0=projection.norm(0.64,1.11,0.48);
+    f64 spin=(if(entry){1.35}else{0.0})+presentation[37]*0.00007292115;
+    spin=spin-core.sint_to_float<f64>(core.float_to_sint_trunc<i64>(spin/6.283185307179586))*6.283185307179586;
+    presentation[38]=cx;presentation[39]=cy;presentation[40]=cz;
+    presentation[41]=yaw_out;presentation[42]=pitch_out;presentation[43]=if(exterior_avatar){1.0}else{0.0};
+    presentation[44]=focus/aspect;presentation[45]=focus;
+    presentation[46]=if(eva&&!exterior_avatar){0.99449}else{1.0};presentation[47]=if(eva&&!exterior_avatar){-0.10481}else{0.0};
+    presentation[48]=spin;
+    presentation[49]=0.64/n0*near-x/n*orbit_blend;
+    presentation[50]=-1.11/n0*near-(6761000.0+y)/n*orbit_blend;
+    presentation[51]=-0.48/n0*near-z/n*orbit_blend;
+    presentation[52]=0.7962254705797849*near+6371000.0/(6371000.0+projection.clamp(presentation[28],0.0,1.0e30))*orbit_blend;
+    presentation[53]=if(chase_blend>0.0&&chase_blend<1.0){1.0}else{0.0};
+    presentation[54]=projection.cos(yaw_out);presentation[55]=projection.sin(yaw_out);
+    presentation[56]=projection.cos(pitch_out);presentation[57]=projection.sin(pitch_out);
+    unsafe {host.visual(core.pointer_cast<*?u8>(&?presentation[0]),58);};
+};
+i32(f64,f64) globe_tiles=fn(now,height){
+    bool scanned=globe.scan(now,height,presentation[49],presentation[50],presentation[51],presentation[52],presentation[48],
+        presentation[54],presentation[55],presentation[56],presentation[57],presentation[44],presentation[45],presentation[46],presentation[47]);
+    globe.publish();
+    if(scanned){1}else{0}
 };
 %%end

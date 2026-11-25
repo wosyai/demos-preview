@@ -38,6 +38,9 @@ camera_clip = "camera_clip"
 hud_code = "hud_code"
 scenery_motion = "scenery_motion"
 entry_flow = "entry_flow"
+project_visual = "project_visual"
+camera_mode = "camera_mode"
+globe_tiles = "globe_tiles"
 
 [targets.app.profiles.dev]
 main_artifact = "main"
