@@ -1,3 +1,4 @@
+import {hudText} from './hud-text.mjs';
 import {stationGrip,ProceduralPose} from './apollo-body.mjs';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
@@ -5,18 +6,24 @@ const path=process.argv[2] ?? new URL('./orbital.wasm',import.meta.url);
 const wasm=new WebAssembly.Module(readFileSync(path));
 const imports=WebAssembly.Module.imports(wasm);
 const actual=imports.map(({module,name,kind})=>`${module}.${name}:${kind}`).sort();
-const orbitalImports=['orbital.frame:function','orbital.hands:function','orbital.scenery:function'];
+const orbitalImports=['orbital.frame:function','orbital.hands:function','orbital.hull:function','orbital.scenery:function'];
 const procExit='wasi_snapshot_preview1.proc_exit:function';
 assert.deepEqual(actual,actual.includes(procExit)?[...orbitalImports,procExit]:orbitalImports,
  'expected the exact browser import contract (Orbital callbacks and optional WASI proc_exit)');
-let room,hand,state,engine,roomLoads=0,handLoads=0;
+let hull,hullLoads=0,room,hand,state,engine,roomLoads=0,handLoads=0;
 function read(p,n){assert.equal(p%4,0);return new Float32Array(engine.memory.buffer,p,n).slice();}
 engine=new WebAssembly.Instance(wasm,{orbital:{
+ hull(p,n){hull=read(p,n);hullLoads++;},
  scenery(p,n){room=read(p,n);roomLoads++;},hands(p,n){hand=read(p,n);handLoads++;},
  frame(p,n){assert.equal(n,38);state=read(p,n);}
 },wasi_snapshot_preview1:{proc_exit(n){throw Error("Station exited: "+n);}}}).exports;
 engine._start();
 const captureFrames=[];
+const hint=()=>hudText(engine.hud_code(),state[16],false);
+function hudIs(objective,interact,marker="+"){
+ const view=hint();
+ assert.equal(view.objective,objective);assert.equal(view.interact,interact);assert.equal(view.marker,marker);
+}
 const step=(keys=0,yaw=0,pitch=0,dt=1/60)=>{
  engine.tick(dt,keys,yaw,pitch);
  if(state[15]===1&&state[8]>.004&&[1,2,3].includes(state[9]))captureFrames.push([...state]);
@@ -27,6 +34,7 @@ const capture=()=>[...state.slice(0,21),...new Array(17).fill(0),...hand];
 function reset(){engine.reset();step(0,0,0,0);}
 reset();
 initial=capture();
+ hudIs("Approach the amber rail",false);
 assert.ok(room.length>=2500*8 && room.length<=4096*8 && room.length%24===0);
 assert.ok(room.every(Number.isFinite));assert.ok(hand.every(Number.isFinite));
 step(64);assert.equal(state[9],0,'cannot grip from spawn');step();
@@ -55,6 +63,8 @@ console.log('Orbital WASM: station batch, initial/contact poses, reach/aim gatin
 
 engine.select_deck(1);step(0,0,0,0);
 const evaStart=capture(),evaRoom=room;
+ hudIs("Approach the airlock rail",false);
+ assert.equal(hint().section,"EVA / 1 OF 3");
 assert.equal(state[20],1,'the Wosy route starts with only the first grip visible as active');
 const lenses=Array.from({length:5},(_,i)=>1.10+i*.01);
 for(const material of lenses)assert.ok(evaRoom.some((n,i)=>i%8===7&&Math.abs(n-material)<.0001),'every cue has actual tagged 3D geometry');
@@ -118,6 +128,7 @@ for(let i=1;i<=9;i++){
 }
 until(()=>state[9]===2,64);
 const evaContact=capture();
+ hudIs("Airlock rail secured",true);
 assert.deepEqual(evaContact.slice(5,10),[0,0,0,1,2]);
 assert.notDeepEqual(evaStart.slice(38),evaContact.slice(38));
 const extents=box(evaContact.slice(38));
@@ -151,6 +162,7 @@ for(let i=0;i<120;i++)step(64);
 assert.equal(state[17],0,'holding grip does not seat the latch automatically');
 step();step(64);
 assert.equal(state[19],.5);
+ hudIs("Seating cargo pin",false);
 const cargoLockCamera=[...state.slice(0,8)], cargoLockPoses=[];
 for(let i=0;i<24&&state[17]===0;i++){
  const seen=roomLoads;step(i===0||i===2?0:64);
@@ -194,13 +206,17 @@ assert.equal(state[9],3);
 until(()=>state[19]===1,0);assert.equal(state[10],0);
 until(()=>state[0]>.77,0);
 assert.equal(state[18],3);assert.equal(state[10],0,'drifting through reach is not sufficient');
+ hudIs("Match speed at the console",false);assert.equal(hint().short,"Thrust left");
 step(64);assert.equal(state[9],0);
 engine.set_thrust(-1,0);while(state[5]>.08)step(256);engine.set_thrust(0,0);step();
 assert.equal(state[18],4);assert.equal(state[10],0,'counterthrust does not bypass aim');
+ hudIs("Face the alignment console",false,"→");
 step(64);assert.equal(state[9],0);
 step(0,1.00);assert.equal(state[18],5,'overshooting the light reverses the Wosy reticle cue');
+ hudIs("Face the alignment console",false,"←");
 step(0,-.65);assert.equal(state[10],1);assert.equal(state[18],0);
 step(64);until(()=>state[19]===2,64);
+ hudIs("Alignment handle secured",true);assert.ok(hint().console);
 assert.deepEqual([...state.slice(12,15)].map(n=>n.toFixed(2)),['1.09','-0.54','-4.81']);
 for(let i=0;i<60;i++)step(64);assert.equal(state[19],2,'holding the grip never seats the alignment handle');
 const suspended=room;
@@ -248,6 +264,7 @@ for(let i=0;i<60;i++)step(64);
 assert.equal(state[19],3,'held seat input never commands the transfer');
 assert.equal(roomLoads,countBeforeLatch+10);
 step();step(64);assert.equal(state[19],3.25);
+ hudIs("Closing cradle keepers",false);
 const transferBatches=roomLoads, transferMeshes=[];
 for(let n=0;n<39&&state[19]<4;n++){
  const previousBatch=roomLoads;step(n===0||n===2?0:64);
@@ -298,6 +315,7 @@ for(let i=0;i<115&&state[10]!==1;i++)step(0,-.81-state[3],-.15-state[4]);
 step();
 assert.equal(state[10],1,[...state].join(","));
 step(64);until(()=>state[19]===6,64);
+ hudIs("Airlock handle secured",true);assert.equal(hint().section,"EVA / AIRLOCK RETURN");
 assert.deepEqual([...state.slice(12,15)].map(n=>n.toFixed(2)),['-0.94','-0.14','-2.48']);
 for(let i=0;i<60;i++)step(64);assert.equal(state[19],6,'holding a capture does not lock it');
 const openHatch=room, lockEye=[...state.slice(0,8)];
@@ -310,6 +328,7 @@ function locatorColor(m){
 assert.deepEqual(locatorColor(evaRoom),['0.37','0.78','0.69']);
 assert.deepEqual(locatorColor(openHatch),['1.00','0.61','0.22']);
 step();step(64);assert.equal(state[19],6.5);
+ hudIs("Moving hatch bar",false);
 const lockHatchPoses=[];
 for(let i=0;i<24&&state[19]===6.5;i++){
  const seen=roomLoads;step(i===0||i===2?0:64);
@@ -317,6 +336,7 @@ for(let i=0;i<24&&state[19]===6.5;i++){
  assert.deepEqual([...state.slice(0,8)],lockEye);
 }
 assert.equal(state[19],7);
+ hudIs("EVA complete",false);
 assert.equal(lockHatchPoses.length,4);
 for(const [i,{m,y,stage}] of lockHatchPoses.entries()){
  const t=(i+1)/4;
@@ -516,3 +536,53 @@ for(let i=0;i<25;i++){
 }
 assert.equal(state[9],0,'head continues turning after release');
 console.log('Head and torso: free signed seam crossings, catch-up, smaller held envelope, immutable held contact anchors and gradual release passed.');
+
+// The remote support skeleton is immutable across all cargo/rail poses.
+assert.equal(hullLoads,1);
+assert.equal(hull.length%24,0);assert.ok(hull.length/24<6200&&hull.every(Number.isFinite));
+engine.select_deck(1);step(0,0,0,0);
+const clip=(a,b)=>engine.camera_clip(...a,...b);
+assert.ok(clip([-14,6,-12],[-14,1,-12])<.75,'concrete outer power blanket stops a sweep');
+assert.equal(clip([-11.5,6,-12],[-11.5,1,-12]),1,'free space between blankets has no proxy blocker');
+assert.ok(clip([-4.69,1,-25],[-4.69,1,-21])<.6,'aft freighter has a physical shield');
+assert.ok(clip([-15,-.30,-5.8],[-10,-.30,-5.8])<.6,'port observation bay has a physical end cap');
+assert.ok(clip([-4.69,6,2.5],[-4.69,4,2.5])<.3,'communications feed is solid');
+assert.equal(clip([5.84,2.30,-11],[5.84,2.30,-9.0]),1,'a real window between diagonal truss members is passable');
+console.log('Complete station: immutable batch, port lab, aft freighter, antenna, power blankets, navigable gaps passed.');
+// Pilot the real EVA integrator to the wing. These are ordinary suit
+// thruster commands, not writes into WASM memory or alternate collision code.
+function reachPoint(dest){
+ let carry=0;
+ const dt=1/60;
+ engine.tick(0,0,0,-state[4]);
+ for(let i=0;i<3100;i++){
+  const delta=dest.map((v,k)=>v-state[k]),distance=Math.hypot(...delta);
+  if(distance<.14&&Math.hypot(...state.slice(5,8))<.075)return;
+  const cruise=Math.min(2.4,.50*distance);
+  const accel=delta.map((v,k)=>1.8*(v*cruise/Math.max(.01,distance)-state[5+k]));
+  const yaw=state[3],sy=Math.sin(yaw),cy=Math.cos(yaw);
+  const a=Math.max(-1,Math.min(1,accel[1]/1.52));
+  carry+=a;
+  const ay=carry>.5?1:carry<-.5?-1:0;
+  carry-=ay;
+  engine.set_thrust((accel[0]*cy+accel[2]*sy)/1.52,(accel[0]*sy-accel[2]*cy)/1.52);
+  engine.tick(dt,ay>0?16:ay<0?32:0,0,0);
+ }
+ assert.fail('unreachable EVA waypoint '+dest+'; eye '+state.slice(0,3));
+}
+for(const [x,solid] of [[-14,true],[-11.50,false]]){
+ engine.select_deck(1);engine.tick(0,0,0,0);reachPoint([1,7.4,1]);reachPoint([x,6,-12]);
+ engine.set_thrust(0,0);let touched=false;
+ for(let i=0;i<120;i++){engine.tick(.032,32,0,0);touched||=Boolean(state[26]);}
+ assert.equal(touched,solid);
+ if(solid){assert.ok(state[1]>2.90&&state[1]<2.95&&Math.abs(state[6])<.001,'suit rests at real panel height + clearance');}
+ else{assert.ok(state[1]<1,'suit crossed the actual gap');}
+}
+console.log('EVA flight: descended on the power blanket and through the open adjacent channel.');
+
+engine.select_deck(1);step(0,0,0,0);
+until(()=>state[18]===2,4,120);
+hudIs("Approach the airlock rail",false);
+assert.equal(hint().action,"Slow down");assert.equal(hint().short,"Thrust back");
+assert.ok(hint().burn);
+console.log("Wosy HUD: exercise labels, actionable stages, off-axis reticle, and counterthrust cues passed.");

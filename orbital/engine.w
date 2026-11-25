@@ -1,6 +1,9 @@
 %%start
+station = namespace orbital "station.w";
+hud = namespace orbital "hud.w";
 host = extern wasm "orbital" {
     unsafe unit(*?u8,i32) scenery;
+    unsafe unit(*?u8,i32) hull;
     unsafe unit(*?u8,i32) hands;
     unsafe unit(*?u8,i32) frame;
 };
@@ -943,8 +946,50 @@ unit() exterior_primary_shell = fn {
     paint(0.38,0.41,0.42,0.11);
     quad(-1.617,0.141,aft,-1.617,0.141,fore,face,top,fore,face,top,aft,0.69);
 };
+
+unit(i32) hull_mat=fn(m){
+    if(m==0){paint(0.80,0.80,0.74,0.718);}else{if(m==1){paint(0.48,0.55,0.57,0.630);}else{
+    if(m==2){paint(0.72,0.64,0.49,0.695);}else{if(m==3){paint(0.80,0.46,0.16,0.12);}else{
+    if(m==4){paint(0.26,0.30,0.32,0.63);}else{if(m==5){paint(0.052,0.146,0.38,0.477);}else{
+    if(m==6){paint(0.76,0.79,0.78,0.692);}else{if(m==8){paint(0.046,0.145,0.185,0.697);}else{if(m==10){paint(0.20,0.94,0.75,0.89);}else{paint(0.14,0.15,0.17,0.64);};};};};};};};};};
+};
+station.Part hull_piece=station.empty;
+unit(f32,f32,f32,f32) hull_pt=fn(u,v,w,shade){
+    i32 a=hull_piece.axis;
+    pt(hull_piece.x+station.xx(a,u,w),hull_piece.y+station.yy(a,u,v,w),hull_piece.z+station.zz(a,u,v,w),shade);
+};
+unit(i32,i32) hull_sides=fn(i,n){
+    if(i<n){
+        f32 a=(core.sint_to_float<f32>(i)+0.5)*6.28318531/core.sint_to_float<f32>(n);
+        f32 b1=(core.sint_to_float<f32>(i)+1.5)*6.28318531/core.sint_to_float<f32>(n);
+        if(a>3.14){a=a-6.28318531;};if(b1>3.14){b1=b1-6.28318531;};
+        f32 norm=if(n==4){1.41421356}else{if(n==8){1.08239220}else{1.01959116}};
+        f32 a0=cw(a)*norm*hull_piece.u;f32 a1=wave(a)*norm*hull_piece.v;
+        f32 b0=cw(b1)*norm*hull_piece.u;f32 bb=wave(b1)*norm*hull_piece.v;
+        f32 t=hull_piece.taper;f32 l=hull_piece.l;
+        f32 shade=0.85;
+        hull_pt(a0,a1,0.0,shade);hull_pt(b0,bb,0.0,shade);hull_pt(b0*t,bb*t,l,shade);
+        hull_pt(a0,a1,0.0,shade);hull_pt(b0*t,bb*t,l,shade);hull_pt(a0*t,a1*t,l,shade);
+        hull_pt(0.0,0.0,0.0,shade);hull_pt(b0,bb,0.0,shade);hull_pt(a0,a1,0.0,shade);
+        hull_pt(0.0,0.0,l,shade);hull_pt(a0*t,a1*t,l,shade);hull_pt(b0*t,bb*t,l,shade);
+        hull_sides(i+1,n);
+    };
+};
+unit(i32) hull_mesh=fn(i){if(i<station.total){
+    hull_piece=station.at(i);hull_mat(hull_piece.finish);
+    hull_sides(0,if(hull_piece.section==0){4}else{if(hull_piece.section==1){8}else{16}});hull_mesh(i+1);
+};};
+bool hull_uploaded=false;
+unit() hull_upload=fn{
+    if(!hull_uploaded){
+        station.build();count=0;hull_mesh(0);
+        unsafe {host.hull(core.pointer_cast<*?u8>(&?mesh[0][0][0][0][0]),count*8);};
+        hull_uploaded=true;
+    };
+};
+
 unit() eva_room = fn {
-    count=0;
+    hull_upload();count=0;
     exterior_primary_shell();
     hull_lap_joint(-1.28);hull_lap_joint(-0.47);hull_lap_joint(-4.74);hull_lap_joint(-5.86);
     blanket(3);pressure_skin();station_fasteners(0);airlock();catwalk(0);
@@ -979,16 +1024,6 @@ unit() eva_room = fn {
     paint(0.72,0.54,0.27,0.17);
     sweep(-1.59,-0.88,-5.38,-0.28,-0.88,-5.38,0.03,0.03,0,0,10);
     sweep(-1.59,-0.82,-5.38,-0.27,-0.82,-5.38,0.025,0.025,0,0,10);
-    paint(0.70,0.70,0.65,0.08);
-    box(-6.2,1.63,-9.97,9.6,0.125,0.31);
-    box(-6.2,2.69,-9.97,9.6,0.125,0.31);
-
-    paint(0.28,0.31,0.33,0.10);
-
-    paint(0.56,0.58,0.61,0.11);
-    box(1.78,1.37,-9.35,0.32,3.51,0.49);
-    solar(-0.13,3.14,-10.3,5.70,2.37,0);
-    solar(-3.11,-3.29,-9.3,3.46,1.72,0);
     suspended_cargo();manipulator();lock_support();
     traversal_rail(0);traversal_rail(1);traversal_rail(2);cargo_fixture();alignment_console();
     unsafe { host.scenery(core.pointer_cast<*?u8>(&?mesh[0][0][0][0][0]),count*8); };
@@ -1043,6 +1078,58 @@ unit(f32,f32,f32,f32,f32,f32,f32) collide_box = fn(x0,x1,y0,y1,z0,z1,d){
     if(trace_vz>0.0 && trace_z<=z0){test_face(trace_z,trace_vz,z0,trace_x,trace_vx,x0,x1,trace_y,trace_vy,y0,y1,d,3);};
     if(trace_vz<0.0 && trace_z>=z1){test_face(trace_z,trace_vz,z1,trace_x,trace_vx,x0,x1,trace_y,trace_vy,y0,y1,d,3);};
 };
+
+f32 hull_nx=0.0;f32 hull_ny=0.0;f32 hull_nz=0.0;
+f32 hit_enter=0.0;f32 hit_exit=0.0;
+f32 hit_nx=0.0;f32 hit_ny=0.0;f32 hit_nz=0.0;
+f32 piece_hx=0.0;f32 piece_hy=0.0;f32 piece_hz=0.0;
+unit(f32,f32,f32,f32) hull_plane=fn(u,v,w,bound){
+    f32 norm=core.float_trunc<f32>(scaled_root(core.float_extend<f64>(u*u+v*v+w*w),1.0));
+    i32 a=hull_piece.axis;
+    f32 x=station.xx(a,u,w);f32 y=station.yy(a,u,v,w);f32 z=station.zz(a,u,v,w);
+    f32 gap=bound+0.18*norm-(x*piece_hx+y*piece_hy+z*piece_hz);
+    f32 speed=x*trace_vx+y*trace_vy+z*trace_vz;
+    if(speed< -0.0000001){
+        f32 t=gap/speed;
+        if(t>hit_enter){hit_enter=t;hit_nx=x/norm;hit_ny=y/norm;hit_nz=z/norm;};
+    }else{if(speed>0.0000001){
+        f32 t=gap/speed;if(t<hit_exit){hit_exit=t;};
+    }else{if(gap<0.0){hit_exit= -1.0;};};};
+};
+unit(f32,f32,f32,f32,f32,f32,f32) hull_part_hit=fn(d,ax,ay,az,bx,by,bz){
+    i32 a=hull_piece.axis;f32 half=hull_piece.l*0.5;
+    f32 x=hull_piece.x;f32 y=hull_piece.y;f32 z=hull_piece.z;
+    f32 cx=x+station.xx(a,0.0,half);f32 cy=y+station.yy(a,0.0,0.0,half);f32 cz=z+station.zz(a,0.0,0.0,half);
+    f32 t=if(hull_piece.taper>1.0){hull_piece.taper}else{1.0};
+    f32 u=hull_piece.u*t;f32 v=hull_piece.v*t;
+    f32 ex=abs_cell(station.xx(a,u,0.0))+abs_cell(station.xx(a,0.0,0.0))+abs_cell(station.xx(a,0.0,half))+0.24;
+    f32 ey=abs_cell(station.yy(a,u,0.0,0.0))+abs_cell(station.yy(a,0.0,v,0.0))+abs_cell(station.yy(a,0.0,0.0,half))+0.24;
+    f32 ez=abs_cell(station.zz(a,u,0.0,0.0))+abs_cell(station.zz(a,0.0,v,0.0))+abs_cell(station.zz(a,0.0,0.0,half))+0.24;
+    if(abs_cell(ax-cx)<=ex+bx && abs_cell(ay-cy)<=ey+by && abs_cell(az-cz)<=ez+bz){
+        piece_hx=trace_x-x;piece_hy=trace_y-y;piece_hz=trace_z-z;hit_enter= -0.000001;hit_exit=d;
+        f32 pu=1.0/hull_piece.u;f32 pv=1.0/hull_piece.v;f32 slope=(1.0-hull_piece.taper)/hull_piece.l;
+        hull_plane(0.0,0.0,-1.0,0.0);hull_plane(0.0,0.0,1.0,hull_piece.l);
+        hull_plane(pu,0.0,slope,1.0);hull_plane(-pu,0.0,slope,1.0);
+        hull_plane(0.0,pv,slope,1.0);hull_plane(0.0,-pv,slope,1.0);
+        if(hull_piece.section!=0){
+            f32 a1=0.70710678*pu;f32 b1=0.70710678*pv;
+            if(hull_piece.section==2){
+            f32 ca=0.92387953*pu;f32 sa=0.38268343*pv;
+            f32 cb=0.38268343*pu;f32 sb=0.92387953*pv;
+            hull_plane(ca,sa,slope,1.0);hull_plane(-ca,sa,slope,1.0);hull_plane(ca,-sa,slope,1.0);hull_plane(-ca,-sa,slope,1.0);
+            hull_plane(cb,sb,slope,1.0);hull_plane(-cb,sb,slope,1.0);hull_plane(cb,-sb,slope,1.0);hull_plane(-cb,-sb,slope,1.0);
+            };
+            hull_plane(a1,b1,slope,1.0);hull_plane(-a1,b1,slope,1.0);hull_plane(a1,-b1,slope,1.0);hull_plane(-a1,-b1,slope,1.0);
+        };
+        if(hit_enter>=0.0 && hit_enter<=hit_exit && hit_enter<contact_t){
+            contact_t=hit_enter;contact_axis=4;hull_nx=hit_nx;hull_ny=hit_ny;hull_nz=hit_nz;
+        };
+    };
+};
+unit(i32,f32,f32,f32,f32,f32,f32,f32) hull_trace=fn(i,d,x,y,z,dx,dy,dz){if(i<station.total){
+    hull_piece=station.at(i);hull_part_hit(d,x,y,z,dx,dy,dz);hull_trace(i+1,d,x,y,z,dx,dy,dz);
+};};
+
 unit(f32) exterior_surfaces = fn(d){
     contact_t=d+1.0;contact_axis=0;
     collide_box(-3.53,-1.37,-2.03,2.07,-13.2,2.00,d);
@@ -1052,6 +1139,8 @@ unit(f32) exterior_surfaces = fn(d){
     collide_box(0.55,1.76,-0.92,0.41,-5.38,-4.68,d);
     collide_box(0.00,2.40,-1.01,1.19,-7.36,-6.34,d);
     collide_box(-0.83,0.52,-1.04,-0.29,-5.83,-5.18,d);
+    f32 x=trace_vx*d*0.5;f32 y=trace_vy*d*0.5;f32 z=trace_vz*d*0.5;
+    hull_trace(0,d,trace_x+x,trace_y+y,trace_z+z,abs_cell(x),abs_cell(y),abs_cell(z));
 };
 f32(f32,f32,f32,f32,f32,f32) camera_clip = fn(ax,ay,az,bx,by,bz){
     trace_x=ax;trace_y=ay;trace_z=az;
@@ -1070,6 +1159,11 @@ unit(f32,i32) exterior_sweep = fn(d, budget){
         if(contact_axis==1){pilot_x=contact_face;vx=0.0;};
         if(contact_axis==2){pilot_y=contact_face;vy=0.0;};
         if(contact_axis==3){pilot_z=contact_face;vz=0.0;};
+        if(contact_axis==4){
+            f32 normal=vx*hull_nx+vy*hull_ny+vz*hull_nz;
+            vx=vx-normal*hull_nx;vy=vy-normal*hull_ny;vz=vz-normal*hull_nz;
+            pilot_x=pilot_x+0.0001*hull_nx;pilot_y=pilot_y+0.0001*hull_ny;pilot_z=pilot_z+0.0001*hull_nz;
+        };
         if(budget>0 && moved<d){exterior_sweep(d-moved,budget-1);};
     };
 };
@@ -1232,6 +1326,21 @@ unit() eva_glove = fn {
     glove_fingers(px,py,pz,0);
     unsafe {host.hands(core.pointer_cast<*?u8>(&?mesh[0][0][0][0][0]),count*8);};
 };
+hud.Cargo cargo_phase=hud.Cargo::rails;
+hud.Steering steer_cue=hud.Steering::none;
+i32() hud_code = fn{
+    hud.Motion motion=hud.flight(mode);
+    bool far=pilot_x*pilot_x+pilot_y*pilot_y+pilot_z*pilot_z>22500.0;
+    bool burn=thrust_x*thrust_x+thrust_y*thrust_y+thrust_z*thrust_z>0.0001;
+    i32 opposite=0;
+    if(steer_cue==hud.Steering::slow_rail||steer_cue==hud.Steering::counterthrust){
+        f32 sy=sine(yaw);f32 cy=cosine(yaw);f32 sp=sine(pitch);f32 cp=cosine(pitch);
+        f32 forward=sy*vx-cy*vz;
+        opposite=hud.counter(vx*cy+vz*sy,forward*cp+vy*sp,vy*cp-forward*sp);
+    };
+    hud.packet(motion,cargo_phase,deck==1,cargo_locked,reach==1.0,reentry_exercise,atmosphere,far,delta_v==0.0,
+               burn,orbit_warp>1.0,station_leg,mark,steer_cue,opposite)
+};
 unit(f32,i32,f32,f32) tick = fn(dt,keys,look_x,look_y) {
     if(!ready){if(deck==0){draw();}else{eva_room();};ready=true;};
     f32 d=limit(dt,0.0,0.032);
@@ -1292,11 +1401,11 @@ unit(f32,i32,f32,f32) tick = fn(dt,keys,look_x,look_y) {
     f32 vertical=sight_y*cosine(pitch)-ahead*sine(pitch);
     f32 side_error=lateral*lateral;
     f32 height_error=vertical*vertical;
-    f32 aim_hint=if(ahead<=0.0 || side_error>=height_error){if(lateral>=0.0){4.0}else{5.0}}
-        else{if(vertical>=0.0){6.0}else{7.0}};
-    f32 travel_hint=0.0;
+    hud.Steering aim_hint=if(ahead<=0.0 || side_error>=height_error){if(lateral>=0.0){hud.Steering::right}else{hud.Steering::left}}
+        else{if(vertical>=0.0){hud.Steering::up}else{hud.Steering::down}};
+    hud.Steering travel_hint=hud.Steering::none;
     if(for_alignment || for_hatch){nearby=distance_sq<0.18;};
-    if(for_hatch && !nearby && (ahead<=0.0 || side_error>ahead*ahead*0.41)){travel_hint=if(lateral>=0.0){8.0}else{9.0};};
+    if(for_hatch && !nearby && (ahead<=0.0 || side_error>ahead*ahead*0.41)){travel_hint=if(lateral>=0.0){hud.Steering::hatch_right}else{hud.Steering::hatch_left};};
     bool aligned=ahead>0.0 && side_error<ahead*ahead*(if(for_alignment || for_hatch){0.105}else{0.49}) && height_error<ahead*ahead*(if(for_alignment || for_hatch){0.13}else{0.50});
     bool slow=speed_sq<(if(for_alignment || for_hatch){0.063}else{2.25});
     reach=if(nearby&&aligned&&slow){1.0}else{0.0};
@@ -1371,17 +1480,19 @@ unit(f32,i32,f32,f32) tick = fn(dt,keys,look_x,look_y) {
     state[13]=if(deck==0){-0.21}else{pilot_y-0.40+(arm_y()-pilot_y+0.40)*grip};
     state[14]=if(deck==0){-1.94}else{pilot_z-0.80+(arm_z()-pilot_z+0.80)*grip}; state[15]=core.sint_to_float<f32>(deck);
     state[16]=core.sint_to_float<f32>(station_leg); state[17]=if(cargo_locked){1.0}else{0.0};
-    state[18]=0.0;
+    steer_cue=hud.Steering::none;
     if(deck==1 && mode==0 && (alignment_stage<5 || for_hatch)){
-        if(distance_sq<0.73 && !aligned){state[18]=1.0;};
-        if(distance_sq<0.94 && aligned && speed_sq>2.25){state[18]=2.0;};
+        if(distance_sq<0.73 && !aligned){steer_cue=hud.Steering::face_rail;};
+        if(distance_sq<0.94 && aligned && speed_sq>2.25){steer_cue=hud.Steering::slow_rail;};
         if(for_alignment || for_hatch){
-            state[18]=travel_hint;
-            if(nearby && !slow){state[18]=3.0;};
-            if(nearby && slow && !aligned){state[18]=aim_hint;};
+            steer_cue=travel_hint;
+            if(nearby && !slow){steer_cue=hud.Steering::counterthrust;};
+            if(nearby && slow && !aligned){steer_cue=aim_hint;};
         };
     };
-    state[19]=if(lock_kind==1){0.5}else{if(lock_kind==2){6.5}else{if(seat_clock>0.0){2.5}else{if(transfer_clock>0.0){if(transfer_pose<3){3.25}else{3.5}}else{core.sint_to_float<f32>(alignment_stage)}}}};
+    state[18]=hud.guidance_code(steer_cue);
+    cargo_phase=hud.cargo(alignment_stage,lock_kind,seat_clock,transfer_clock,transfer_pose);
+    state[19]=hud.telemetry_stage(cargo_phase,alignment_stage);
     if((deck==0||!external_arm) && (mesh_x!=pilot_x || mesh_y!=pilot_y || mesh_z!=pilot_z || mesh_grip!=grip || mesh_deck!=deck)){
         if(deck==0){glove();}else{eva_glove();};
         mesh_x=pilot_x;mesh_y=pilot_y;mesh_z=pilot_z;mesh_grip=grip;mesh_deck=deck;

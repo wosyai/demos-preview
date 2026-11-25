@@ -1,3 +1,4 @@
+import {hudText} from "./hud-text.mjs?v=1";
 import {exteriorSky} from "./exterior-sky.mjs?v=1";
 import {chaseView,loadApolloBody,loadProceduralSuit,stationGrip} from "./apollo-body.mjs?v=13";
 const $ = id => document.getElementById(id);
@@ -183,11 +184,30 @@ vec3 sunColor(vec3 n){
     spec+=.058*direct*(1.-binding*.74);
  }
  if(solar){
-    vec2 uv=world.xy*vec2(9.,7.5);
+    vec2 uv=tex*vec2(4.5,6.0);
     vec2 cells=abs(fract(uv)-.5)*2.;
     float width=max(fwidth(uv.x),fwidth(uv.y));
     float thin=smoothstep(.86-width,.98,max(cells.x,cells.y))*(1.-smoothstep(.18,.6,width));
-    col=mix(col*(.78+sheet.r*.40),vec3(.42,.33,.21),thin*.89);
+    float bus=1.-smoothstep(.018,.018+max(fwidth(tex.x),.002),abs(fract(tex.x*1.50+.5)-.5));
+    vec3 photovoltaic=mix(col*(.84+sheet.r*.3),vec3(.19,.32,.63),.22);
+    col=mix(photovoltaic,vec3(.55,.51,.38),max(thin*.79,bus*.64));
+    if(n.y<-.45)col=mix(col,vec3(.30,.28,.215)*(.76+.32*sheet.r),.85);
+ }
+ if(abs(material.y-.697)<.0005){
+    float fresnel=pow(1.-abs(dot(n,normalize(eye-world))),3.);
+    col=mix(vec3(.016,.054,.080),vec3(.20,.36,.47),.16+.72*fresnel);
+    spec+=pow(max(0.,dot(reflect(-sunDir,n),normalize(eye-world))),120.)*.8;
+ }
+ if(abs(material.y-.695)<.0005){
+    vec2 quilt=tex*vec2(1.32,1.74);
+    vec2 seam=abs(fract(quilt)-.5);float stitch=smoothstep(.447,.497,max(seam.x,seam.y));
+    float crease=texture(surfaceTile,vec3(tex*1.65,2.)).r;
+    col*=.70+.38*crease-.20*stitch;spec+=.12*crease*direct;
+ }
+ if(abs(material.y-.692)<.0005){
+    float groove=abs(fract(tex.x*4.)-.5);
+    float ink=1.-smoothstep(.04,.04+max(fwidth(tex.x*4.),.02),groove);
+    col*=1.-.34*ink;
  }
  vec3 ambient=mix(vec3(.09,.12,.18),vec3(.23,.39,.51),max(0.,-n.y)*.75+max(0.,n.x)*.19);
  if(lightingUpgrade==1){
@@ -440,6 +460,7 @@ function meshes(program,eva,pose,onlyStatic=false){
  gl.bindVertexArray(room.vao);
  if(room.indices)gl.drawElements(gl.TRIANGLES,room.num,gl.UNSIGNED_SHORT,0);
  else gl.drawArrays(gl.TRIANGLES,0,room.num);
+ if(eva && hull.num){gl.bindVertexArray(hull.vao);gl.drawElements(gl.TRIANGLES,hull.num,gl.UNSIGNED_SHORT,0);}
  if(onlyStatic)return;
  if(eva&&importedArm){
    gl.uniform4f(program.armPose,pose[12],pose[13],pose[14],pose[8]);
@@ -551,117 +572,43 @@ let touchLookSeen=false;
 function hud(){
  const [vx,vy,vz]=frame.slice(5,8);
  const [,,,heading,pitch]=frame;
- const fwd=[Math.sin(heading)*Math.cos(pitch),Math.sin(pitch),-Math.cos(heading)*Math.cos(pitch)];
  const driftRight=vx*Math.cos(heading)+vz*Math.sin(heading);
- const driftAhead=vx*fwd[0]+vy*fwd[1]+vz*fwd[2];
- const driftUp=-vx*Math.sin(heading)*Math.sin(pitch)+vy*Math.cos(pitch)+vz*Math.cos(heading)*Math.sin(pitch);
- const [px,py,pz]=frame;
- const far=Math.hypot(px,py,pz)>150, entry=frame[29]===1;
+ const driftAhead=(vx*Math.sin(heading)-vz*Math.cos(heading))*Math.cos(pitch)+vy*Math.sin(pitch);
+ const speed=Math.hypot(vx,vy,vz);
+ const eva=frame[15]===1, contact=frame[26]===1;
+ const view=hudText(engine.hud_code(),frame[16],touchLookSeen);
  const coastButton=$("coast");
- coastButton.hidden=!active||frame[15]!==1||!far||entry;
+ coastButton.hidden=!active||!view.coast;
  if(coastButton.hidden)coast=false;
  coastButton.setAttribute("aria-pressed",String(coast));
- const jet=Math.hypot(frame[23],frame[24],frame[25]);
- const speed=Math.hypot(vx,vy,vz);
  const cameraButton=$("camera");
- cameraButton.hidden=!apolloBody||frame[15]!==1;
+ cameraButton.hidden=!apolloBody||!eva;
  cameraButton.disabled=!active||cameraButton.hidden;
  cameraButton.setAttribute("aria-label",thirdPerson?"Switch to first-person camera":"Switch to third-person camera");
  cameraButton.setAttribute("aria-pressed",String(thirdPerson));
  const instrument=$("flight-instrument");
  instrument.hidden=!active;
- instrument.classList.toggle("burn",jet>.01);
- instrument.classList.toggle("contact",frame[26]===1);
- const readout=(frame[30]>1?"×120 · ":"")+(frame[26]===1?"HULL CONTACT · ":jet>.01?"THRUST · ":"DRIFT · ")+speed.toFixed(1)+" m/s"+(frame[15]===1?" · Δv "+frame[31].toFixed(1)+" m/s":"")+(far?" · "+(frame[28]/1000).toFixed(0)+" km":"");
- if($("flight-speed").textContent!==readout)$("flight-speed").textContent=readout;
- const [, , , , , , , , ,mode,near,mark]=frame;
- const counter=(()=>{const count=Math.max(Math.abs(driftAhead),Math.abs(driftRight));if(Math.abs(driftUp)>count*.95)return driftUp>0?"Aim below drift":"Aim above drift";const fr=count*.45;return "Thrust "+(Math.abs(driftAhead)>fr?(driftAhead>0?"back":"forward")+(Math.abs(driftRight)>fr?" + ":""):"")+(Math.abs(driftRight)>fr?(driftRight>0?"left":"right"):"");})();
+ instrument.classList.toggle("burn",view.burn);
+ instrument.classList.toggle("contact",contact);
+ const readout=(frame[30]>1?"×120 · ":"")+(contact?"HULL CONTACT · ":view.burn?"THRUST · ":"DRIFT · ")+speed.toFixed(1)+" m/s"+(eva?" · Δv "+frame[31].toFixed(1)+" m/s":"")+(view.far?" · "+(frame[28]/1000).toFixed(0)+" km":"");
+ text("flight-speed",readout);
  const vector=$("drift-vector");
  vector.style.opacity=String(speed>.08?1:0);
  vector.style.transform="rotate("+Math.atan2(driftRight,driftAhead)+"rad)";
- const eva=frame[15]===1, leg=frame[16], locked=frame[17]===1, align=frame[19];
- main.classList.toggle("console-hud",eva&&mode===2&&align>=2&&align<=4);
- let aim=0,compactTip="";
- let objective="Approach the amber rail",tip="Tap forward thrust. Tap opposite thrust to slow down.",action="Grip rail";
- const rails=["Airlock rail","Scaffold rail","Cargo brace"];
- if(eva){
-  const rail=rails[leg];
-  objective="Approach the "+rail.toLowerCase();
-  tip=["Drift along the hull to the silver rail.","Follow the blue collars along the scaffold.","Reach the gold brace ahead of the cargo." ][leg];
-  if(locked){
-   const cue=frame[18];
-   if(align===7){objective="EVA complete";tip="Outer hatch locked. Cargo is secured and the station has your confirmation.";action="Hatch locked";}
-   else if(align===6.5){objective="Moving hatch bar";tip="Holding the bar until it seats.";action="Locking hatch";}
-   else if(align===6){objective="Airlock handle secured";tip="Lift the locking bar into its upper detent.";action="Lock airlock";}
-   else if(align===5&&mode===1){objective="Taking the airlock handle";tip="Holding station.";action="Gripping handle";}
-   else if(align===5&&near){objective="Airlock handle in reach";tip="Grip the amber locking bar.";action="Grip hatch";}
-   else if(align===5&&cue===3){objective="Match speed at the hatch";tip="Tap thrust opposite your drift. Releasing thrust does not stop you.";action="Counterthrust";compactTip=counter;}
-   else if(align===5&&cue>=4&&cue<8){objective="Face the hatch handle";tip="Look toward the amber handle.";action="Aim at handle";aim=cue;compactTip="Look toward handle";}
-   else if(align===5||align===4&&mode===3){
-    objective="Return to the airlock";
-    const side=cue===8?"right":cue===9?"left":"";
-    tip=side?`Look ${side} to find the round hatch. Let the push carry you.`:"Ride the push back toward the round hatch, then counterthrust.";
-    action=side?`Look ${side}`:"Out of reach";
-    compactTip=side?`Look ${side} to find hatch`:"Drift to round hatch";
-    aim=cue===8?4:cue===9?5:0;
-   }
-   else if(align===4){objective="Cargo transfer complete";tip="Release the console and return to the round airlock hatch.";action="Release & return";}
-   else if(align===2.5){objective="Lowering cargo";tip="The robot is guiding the load into the cradle.";action="Lowering cargo";}
-   else if(align===3.25){objective="Closing cradle keepers";tip="The cradle is securing the seated load.";action="Closing keepers";compactTip="Closing keepers";}
-   else if(align===3.5){objective="Opening robot grip";tip="The cradle is locked. The robot can release the load.";action="Opening grip";compactTip="Opening grip";}
-   else if(align===3){objective="Cargo seated";tip="Close the cradle keepers and release the robot grip.";action="Transfer cargo";compactTip="Close keepers";}
-   else if(align===2){objective="Alignment handle secured";tip="Set the handle to lower the load into its shoes.";action="Set alignment";}
-   else if(mode===3){objective="Clearing the lock";tip="Drift right to the blue alignment console.";action="Clearing lock";compactTip="Drift right";}
-   else if(align===1&&mode===1){objective="Taking the alignment handle";tip="Holding station.";action="Gripping handle";}
-   else if(align===1&&near){objective="Alignment handle in reach";tip="Slow enough to grip the blue handle.";action="Grip handle";}
-   else if(align===1&&cue===3){objective="Match speed at the console";tip="Tap thrust opposite your drift. Releasing thrust does not stop you.";action="Counterthrust";compactTip=counter;}
-   else if(align===1&&cue>=4){objective="Face the alignment console";tip="Look toward its blue light to line up.";action="Aim at light";aim=cue;compactTip="Look toward blue";}
-   else if(align===1){objective="Approach the alignment console";tip="Move right toward the blue light, then counterthrust.";action="Out of reach";compactTip="Drift right toward blue";}
-   else {objective="Cargo lock secured";tip="Pin seated. Release toward the blue alignment console.";action="Drift to align";}
-  }
-  else if(mode===3){objective="Pushing off";tip="Drift toward the next rail.";action="Pushing off";}
-  else if(align===0.5){objective="Seating cargo pin";tip="Holding the pin until it seats.";action="Seating pin";}
-  else if(mode===2&&leg===2){objective="Cargo lock in reach";tip="Seat the pin. The amber indicator turns green.";action="Seat cargo lock";}
-  else if(mode===2){objective=rail+" secured";tip="Open your hand and push toward the next rail.";action="Release & push";}
-  else if(mode===1){objective="Gripping the rail";tip="Your drift is arrested.";}
-  else if(near){objective=rail+" in reach";tip="Grip to stop drifting.";}
-  if(!locked&&mode===0&&!near){
-   action="Too far";
-   tip="Use gentle forward thrust toward the lit rail. Counterthrust to slow.";
-   compactTip=leg===0&&!touchLookSeen?"Left half: thrust · Right half: look":"Drift to lit rail";
-  }
-  if(mode===0&&frame[18]===1){tip="Look toward the lit rail.";compactTip="Look toward rail";action="Face rail";}
-  if(mode===0&&!near&&frame[18]===2){tip="Tap thrust opposite your drift to slow down.";compactTip=counter;action="Slow down";}
- }else if(mark===2){objective="Exercise complete";tip="You pushed off. Reset to practice again.";}
- else if(mode===2){objective="Rail secured";tip="Release the rail to push off.";action="Release & push";}
- else if(mode===1){objective="Gripping the handrail";tip="Your drift is arrested.";}
- else if(near){objective="Handrail in reach";tip="Grip to stop drifting.";}
- if(frame[32]===1){
-  objective="Low-perigee orbit";tip="Reentry scenario. This orbit already dips into the upper atmosphere. Use Coast ×120 to observe the crossing.";action="Station not in this exercise";compactTip="Observe the orbit with Coast ×120";
- }else if(frame[15]===1&&frame[31]===0&&mode===0){
-  tip="Propellant depleted. Existing drift continues.";compactTip="Propellant depleted";
- }
- if(entry){
-  aim=0;
-  objective="Atmosphere reached";tip="Your orbit crossed 120 km altitude. Reset to return to the station.";action="EVA ended";compactTip="120 km entry · reset";
- }else if(far&&eva&&frame[32]!==1){
-  objective="Separated from station";tip=frame[30]>1?"Coasting at 120×. Thrust resumes normal time.":"Velocity persists. Aim back toward the station and counterthrust, or coast at 120×.";
-  action="Station out of reach";compactTip=frame[30]>1?"Thrust returns to 1×":"Counterthrust to return";
- }
- const routeArrow=Boolean(aim)&&align===5&&frame[18]>=8;
- const reticle=$("reticle"), marker=routeArrow?(aim===4?"❯":"❮"):aim?["+","+","+","+","→","←","↑","↓"][aim]:"+";
- if(reticle.textContent!==marker)reticle.textContent=marker;
- reticle.classList.toggle("aim-cue",Boolean(aim));
- reticle.classList.toggle("route-aim",routeArrow);
- if($("objective").textContent!==objective)$("objective").textContent=objective;
- if($("help").textContent!==tip)$("help").textContent=tip;
- const compact=$("compact-help");
- if(compact.textContent!==compactTip){compact.textContent=compactTip;compact.hidden=!compactTip;}
- $("action").disabled=!active||entry||far||[0.5,2.5,3.25,3.5,6.5,7].includes(align)||!(mode===2||(mode===0&&near===1));
- if($("action").textContent!==action)$("action").textContent=action;
- const task=frame[32]===1?"ORBIT / REENTRY":eva?(align>=5?"EVA / AIRLOCK RETURN":locked?"EVA / CARGO ALIGNMENT":"EVA / "+(leg+1)+" OF 3"):"TRAINING 01 / HANDRAIL";
- if($("exercise").textContent!==task)$("exercise").textContent=task;
+ main.classList.toggle("console-hud",view.console);
+ const reticle=$("reticle");
+ text("reticle",view.marker);
+ reticle.classList.toggle("aim-cue",view.aim);
+ reticle.classList.toggle("route-aim",view.route);
+ text("objective",view.objective);
+ text("help",view.tip);
+ text("compact-help",view.short);
+ $("compact-help").hidden=!view.short;
+ $("action").disabled=!active||!view.interact;
+ text("action",view.action);
+ text("exercise",view.section);
 }
+function text(id,value){const node=$(id);if(node.textContent!==value)node.textContent=value;}
 const timing=new URLSearchParams(location.search).get("debug")==="timing"?setupTiming():null;
 function setupTiming(){
  const panel=document.createElement("aside");
@@ -826,7 +773,7 @@ actionButton.onclick=e=>{
 };
 function enter(which){
  clear();previous=null;if(which===0){thirdPerson=false;chaseBlend=0;}if(which===2)engine.select_reentry();else engine.select_deck(which);engine.tick(0,0,0,0);
- active=true;$("intro").hidden=true;$("exercise").textContent=which===1?"EVA 01 / STARBOARD TRUSS":"TRAINING 01 / HANDRAIL";hud();
+ active=true;$("intro").hidden=true;hud();
 }
 $("camera").onclick=()=>{if(active&&apolloBody&&frame[15]===1){thirdPerson=!thirdPerson;worldVersion++;hud();}};
 $("coast").onclick=()=>{if(active&&!$("coast").hidden)coast=!coast;};
@@ -835,7 +782,7 @@ $("menu").onclick=()=>{clear();active=false;$("intro").hidden=false;};
 $("start").onclick=()=>enter(1);
 $("training").onclick=()=>enter(0);
 $("reentry").onclick=()=>enter(2);
-let room,hand;
+let room,hand,hull;
 function shadowBuffer(size){
    const tex=gl.createTexture();gl.bindTexture(gl.TEXTURE_2D,tex);
    gl.texStorage2D(gl.TEXTURE_2D,1,gl.DEPTH_COMPONENT24,size,size);
@@ -852,7 +799,7 @@ function shadowBuffer(size){
  }
 try{
  if(!gl)throw Error("WebGL 2 is required to render the station.");
- scene=program(vs,fs);space=program(svs,sfs);skyCopy=program(svs,skyCopyFS);depth=program(depthVS,depthFS);room=batch();hand=batch();
+ scene=program(vs,fs);space=program(svs,sfs);skyCopy=program(svs,skyCopyFS);depth=program(depthVS,depthFS);room=batch();hand=batch();hull=batch();
  skyTexture=gl.createTexture();gl.bindTexture(gl.TEXTURE_2D,skyTexture);
  for(const mode of [gl.TEXTURE_MIN_FILTER,gl.TEXTURE_MAG_FILTER])gl.texParameteri(gl.TEXTURE_2D,mode,gl.LINEAR);
  for(const axis of [gl.TEXTURE_WRAP_S,gl.TEXTURE_WRAP_T])gl.texParameteri(gl.TEXTURE_2D,axis,gl.CLAMP_TO_EDGE);
@@ -967,10 +914,11 @@ try{
   };
   stars.src=new URL("./starfield.jpg?v=1",import.meta.url).href;
  }
- const response=await fetch(new URL("./orbital.wasm?v=32",import.meta.url));
+ const response=await fetch(new URL("./orbital.wasm?v=33",import.meta.url));
  if(!response.ok)throw Error("The station engine could not be downloaded.");
  const {instance}=await WebAssembly.instantiate(await response.arrayBuffer(),{
   orbital:{
+   hull(p,n){update(hull,p,n,gl.STATIC_DRAW);},
    scenery(p,n){update(room,p,n,gl.STATIC_DRAW);},hands(p,n){update(hand,p,n,gl.DYNAMIC_DRAW);},
    frame(p,n){if(n!==38)throw Error("Unexpected station frame");frame=new Float32Array(engine.memory.buffer,p,n).slice();}
   },

@@ -35,6 +35,7 @@ set_thrust = "set_thrust"
 set_rotator = "set_rotator"
 select_reentry = "select_reentry"
 camera_clip = "camera_clip"
+hud_code = "hud_code"
 
 [targets.app.profiles.dev]
 main_artifact = "main"
