@@ -98,7 +98,12 @@ assert.ok(narrowFlange.length>0&&.130*Math.cos(Math.PI/10)>.120,'the blue/gold i
 const hatchPoint=(u,v,d,lit)=>evaRoom.some((value,i)=>i%8===0&&
  Math.abs(value-(-1.10+.926*u+.378*d))<.0001&&Math.abs(evaRoom[i+1]-(.20+v))<.0001&&
  Math.abs(evaRoom[i+2]-(-6.39-.378*u+.926*d))<.0001&&(!lit||evaRoom[i+7]>.98));
-assert.ok(hatchPoint(0,0,-.65,false),'the hatch has a recessed bulkhead, not a flat painted aperture');
+assert.ok(hatchPoint(0,0,-.635,false),'the hatch has a recessed bulkhead, not a flat painted aperture');
+const capEdge=(r,d)=>hatchPoint(r*Math.cos(Math.PI/12),r*Math.sin(Math.PI/12),d,false);
+assert.ok(capEdge(.57,-.65)&&capEdge(.473,-.637)&&capEdge(.373,-.635),
+ 'rear cap joins the casing, recess and central pressure plate on original radial edges');
+assert.ok(!capEdge(.44,-.641)&&!hatchPoint(0,0,-.65,false),
+ 'replaced annulus and background disk do not persist behind the closed cap');
 assert.ok(!hatchPoint(0,0,.158,false),'the apertural front ring is open');
 assert.ok(hatchPoint(-.063,.611,.177,true)&&hatchPoint(-.432,-.274,-.473,true),'warm lamp fixtures are present at the rim and inside the recess');
 assert.ok(hatchPoint(-.239,-.429,.041,false)&&hatchPoint(.239,-.429,.041,false),
@@ -106,6 +111,12 @@ assert.ok(hatchPoint(-.239,-.429,.041,false)&&hatchPoint(.239,-.429,.041,false),
 assert.ok(hatchPoint(.514*Math.cos(Math.PI/12),.514*Math.sin(Math.PI/12),-.403,false)
  &&hatchPoint(.373*Math.cos(Math.PI/12),.373*Math.sin(Math.PI/12),-.635,false),
  'retaining ring and recessed pressure flange retain distinct section depths');
+assert.ok(hatchPoint(.64*Math.cos(Math.PI/12),.64*Math.sin(Math.PI/12),.168,false),
+ 'new chamfer matches the liner and leaves the fixture in front');
+const back=evaRoom.findIndex((x,i)=>i%8===0&&Math.abs(x-(-1.10-.635*.378))<.0001
+ &&Math.abs(evaRoom[i+1]-.20)<.0001&&Math.abs(evaRoom[i+2]-(-6.39-.635*.926))<.0001);
+assert.ok(back>=0&&evaRoom[back+3]>evaRoom[back+4]&&evaRoom[back+4]>evaRoom[back+5],
+ 'rear pressure plate gets an authored warm reflection instead of an unlit disk');
 const localBounce=[];
 for(let i=0;i<evaRoom.length;i+=8)if(evaRoom[i+6]>1)localBounce.push(evaRoom.slice(i,i+8));
 assert.ok(localBounce.length>=200&&localBounce.length<500,'practical warmth is baked only into the hatch interior');

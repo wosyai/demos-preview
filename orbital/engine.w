@@ -773,6 +773,8 @@ f32(f32,f32,f32) lamp_field = fn(du,dv,dd){
     0.052/(0.109+du*du+dv*dv+dd*dd)
 };
 bool port_dynamic_only=false;
+i32 port_finish=0;
+f32 port_panel=1.0;
 unit(f32,f32,f32) port_vertex = fn(u,v,depth){
     f32 exposure=0.88;
     if(!port_dynamic_only && depth<0.10 && lit<0.8 && u*u+v*v<0.383){
@@ -782,7 +784,21 @@ unit(f32,f32,f32) port_vertex = fn(u,v,depth){
                   +lamp_field(u,v+0.64,depth-0.16)*0.51;
         exposure=1.0+bounce;
     };
+    f32 red=r;f32 green=g;f32 blue=b;
+    if(port_finish==1){
+        f32 edge=(u*u+v*v-0.38)*1.45;
+        r=r*port_panel*(0.77+edge);
+        g=g*port_panel*(0.84+edge);
+        b=b*port_panel*(0.92+edge);
+    };
+    if(port_finish==2){
+        f32 upper=lamp_field(u-0.365,v-0.286,depth+0.470);
+        f32 lower=lamp_field(u+0.370,v+0.240,depth+0.473);
+        f32 bounce=upper*1.25+lower*0.96;
+        r=r*(0.69+bounce*3.65);g=g*(0.70+bounce*2.38);b=b*(0.74+bounce*1.05);
+    };
     pt(-1.10+u*0.926+depth*0.378,0.20+v,-6.39-u*0.378+depth*0.926,exposure);
+    r=red;g=green;b=blue;
 };
 unit(f32,f32,f32,f32,f32,f32,f32,f32,f32,f32,f32,f32) port_quad = fn(u0,v0,d0,u1,v1,d1,u2,v2,d2,u3,v3,d3){
     port_vertex(u0,v0,d0);port_vertex(u1,v1,d1);port_vertex(u2,v2,d2);
@@ -794,6 +810,10 @@ unit(f32,f32,f32,f32,i32) port_skin = fn(r0,d0,r1,d1,i){
         f32 a1=a0+0.5235988;
         if(a0>4.6){a0=a0-6.28318531;};if(a1>4.6){a1=a1-6.28318531;};
         f32 ux=cw(a0);f32 uy=wave(a0);f32 wx=cw(a1);f32 wy=wave(a1);
+        if(port_finish==1){
+            port_panel=0.94;
+            if(i==1 || i==4 || i==7 || i==10){port_panel=1.12;};
+        };
         if(r1==0.0){
             port_vertex(ux*r0,uy*r0,d0);port_vertex(wx*r0,wy*r0,d0);port_vertex(0.0,0.0,d1);
         }else{
@@ -832,12 +852,15 @@ unit() port_liner = fn {
     paint(0.30,0.31,0.28,0.62);port_skin(0.568,-0.338,0.535,-0.361,0);
     paint(0.55,0.49,0.36,0.63);port_skin(0.535,-0.361,0.514,-0.403,0);
     paint(0.19,0.20,0.19,0.62);port_skin(0.514,-0.403,0.566,-0.432,0);
-    paint(0.32,0.32,0.30,0.62);port_skin(0.473,-0.637,0.438,-0.590,0);
-    paint(0.20,0.21,0.22,0.63);port_skin(0.438,-0.590,0.399,-0.590,0);
+    port_finish=2;
+    paint(0.49,0.45,0.37,0.62);port_skin(0.473,-0.637,0.438,-0.590,0);
+    paint(0.36,0.34,0.28,0.63);port_skin(0.438,-0.590,0.399,-0.590,0);
     paint(0.105,0.115,0.126,0.66);port_skin(0.399,-0.590,0.373,-0.635,0);
+    paint(0.18,0.17,0.15,0.66);port_skin(0.373,-0.635,0.0,-0.635,0);
     paint(0.26,0.30,0.31,0.62);
     port_bridge(-0.278,-0.239,-0.244,0.238,-0.641,-0.558);
     port_bridge(0.239,0.278,-0.244,0.238,-0.641,-0.558);
+    port_finish=0;
     paint(0.27,0.30,0.32,0.62);
     port_bridge(-0.239,-0.185,-0.461,-0.429,-0.570,0.041);
     port_bridge(0.185,0.239,-0.461,-0.429,-0.570,0.041);
@@ -847,12 +870,13 @@ unit() port_liner = fn {
 };
 unit() transfer_hatch = fn {
     paint(0.37,0.39,0.41,0.67);port_skin(0.91,-0.57,0.91,-0.045,0);
+    port_finish=1;
     paint(0.57,0.60,0.61,0.62);port_skin(0.91,-0.045,0.79,0.158,0);
-    paint(0.78,0.76,0.67,0.71);port_skin(0.79,0.158,0.64,0.158,0);
-    paint(0.12,0.16,0.19,0.62);port_skin(0.64,0.157,0.60,0.096,0);
+    paint(0.75,0.73,0.66,0.62);port_skin(0.79,0.158,0.64,0.168,0);
+    port_finish=0;
+    paint(0.12,0.16,0.19,0.62);port_skin(0.64,0.168,0.60,0.096,0);
     paint(0.28,0.24,0.19,0.63);port_skin(0.60,0.096,0.57,-0.65,0);
-    paint(0.142,0.139,0.124,0.66);port_skin(0.57,-0.65,0.0,-0.65,0);
-    paint(0.29,0.31,0.32,0.62);port_skin(0.568,-0.642,0.44,-0.641,0);
+    paint(0.29,0.31,0.32,0.62);port_skin(0.57,-0.65,0.473,-0.637,0);
     paint(0.46,0.35,0.20,0.63);
     port_quad(-0.36,-0.463,0.034,0.36,-0.463,0.034,0.26,-0.454,-0.638,-0.26,-0.454,-0.638);
     paint(0.15,0.18,0.18,0.38);
