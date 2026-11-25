@@ -157,7 +157,8 @@ vec2 servicePractical(vec3 p,vec3 n,vec3 viewDir,float roughness,out bool inPort
 vec3 sunColor(vec3 n){
  bool steel=material.y>.56 && material.y<.69;
  bool emitter=material.y>.8;
- bool maskedPanel=abs(material.y-.18375)<.0007;
+ bool upperBlanket=abs(material.y-.18525)<.0007;
+ bool maskedPanel=abs(material.y-.18375)<.0007||upperBlanket;
  bool foil=maskedPanel || (material.y>.165 && material.y<.188 && surface.r>.52 && surface.b>surface.r*.78 && abs(n.x)>.86 && world.x<-1.3);
  bool suit=material.x>=0. && dot(fittedNormal,fittedNormal)>.25;
  bool armor=material.y>.705 && material.y<.735;
@@ -180,7 +181,8 @@ vec3 sunColor(vec3 n){
   bool alternate=mod(floor(panelUV.x)+floor(panelUV.y),2.)>.5;
   thermalUV=alternate?vec2(1.-panelUV.x,panelUV.y):panelUV;
   if(stamp){
-   vec2 registered=vec2((world.z+6.64)/2.42,1.-(world.y+.76)/.81);
+   vec2 registered=vec2((world.z+6.64)/2.42,1.-(world.y+(upperBlanket?-.10:.76))/.81);
+   if(upperBlanket)registered.x=1.-registered.x;
    thermalUV=clamp(registered,vec2(.002),vec2(.998));
   }
  }
@@ -938,7 +940,7 @@ try{
  skinMap.onload=uploadSkin;
  surfaces.src=new URL("./surfaces.jpg?v=2",import.meta.url).href;
  skinMap.src=new URL("./apollo-material.png?v=2",import.meta.url).href;
- panelStamp.src=new URL("./thermal-panel.jpg",import.meta.url).href;
+ panelStamp.src=new URL("./thermal-panel.jpg?v=2",import.meta.url).href;
  pressureStamp.src=new URL("./pressure-skin.jpg",import.meta.url).href;
  fasciaStamp.src=new URL("./cargo-fascia.jpg?v=1",import.meta.url).href;
  fineEarth=earthDetail(gl,space.p,()=>{worldVersion++;skyPhoto=-1;});
@@ -974,7 +976,7 @@ try{
   };
   stars.src=new URL("./starfield.jpg?v=1",import.meta.url).href;
  }
- const response=await fetch(new URL("./orbital.wasm?v=39",import.meta.url));
+ const response=await fetch(new URL("./orbital.wasm?v=40",import.meta.url));
  if(!response.ok)throw Error("The station engine could not be downloaded.");
  const {instance}=await WebAssembly.instantiate(await response.arrayBuffer(),{
   orbital:{
