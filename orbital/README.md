@@ -39,15 +39,15 @@ and reset restores the exact initial pose.
 Select **Begin spacewalk** to reach the cargo bay on Kestrel's starboard
 truss. Grip the **airlock rail**, push off to the blue **scaffold rail**, then
 grip the captive pin inside the gold **cargo brace**. With the pin held,
-activate **Seat cargo lock**. The hand stays wrapped around the pin as it snaps
-into its upper detent, and the recessed status light turns green. Then choose
+activate **Seat cargo lock**. The hand follows the pin into its upper detent,
+then the recessed status light turns green. Then choose
 **Drift to align** and move right to the blue console. Hold the brake until
 you are stationary, then aim at the blue light. The reticle indicates which
 way to turn if you stop while looking off-axis. Grip the console handle and
 seat it to lower the cartridge into the transfer cradle. The truss guides
-carry the load while the connected wrist stays fitted, and the console and
-wrist lights turn green. The two mechanical poses are currently fixed
-endpoints, not a timed animation. Flying through the capture zone or
+carry the load while the connected wrist stays fitted. Transfer separately:
+the cradle verifies both keepers are closed before the robot grip opens.
+Flying through the capture zone or
 braking while looking elsewhere does not arm the grip. There is no timer.
 Choose **Indoor training** to repeat the original single-rail exercise. Menu and reset remain
 available in both exercises. These are bounded training spaces, not a model of orbital
@@ -75,7 +75,7 @@ astronaut asset. The authored Wosy arm is the loading/fallback mesh.
 
 Only the next usable grip is lit. The locator lenses are built into the rails,
 console and hatch; on the return leg a small reticle arrow points to the hatch
-when it is off to the side. The pilot eye, aim and hand ease in on the same
+when it is off to the side and the HUD names which way to drag. The pilot eye, aim and hand ease in on the same
 fixed-step capture curve.
 
 The contact and release states retain world-space rail anchors on all screen
@@ -87,10 +87,9 @@ return push, brake at the round airlock, and aim toward the amber locking bar.
 Grip the machined bar and slide its carriage into the upper detent to complete
 the EVA. Its local status light confirms the lock. The
 airlock stays closed: this exercise ends with an external lock confirmation,
-not a re-entry or pressurization sequence. Each control invalidates
-the stationary batch once. The blue console,
-recessed lock, suspended cargo shell and manipulator require no per-frame
-geometry updates. The WebGL host interpolates presented camera and arm coordinates around
+not a re-entry or pressurization sequence. The locks, cargo seating, and
+transfer use short, bounded Wosy pose sequences. The scene is cached between
+those samples rather than rebuilding the scenery every frame. The WebGL host interpolates presented camera and arm coordinates around
 the fixed 60 Hz Wosy simulation. Station shadows are cached until actual
 station geometry changes, and the canvas can lower moving resolution on slow
 GPUs while keeping still scenes sharp.

@@ -494,7 +494,14 @@ function hud(){
    else if(align===5&&near){objective="Airlock handle in reach";tip="Grip the amber locking bar.";action="Grip hatch";}
    else if(align===5&&cue===3){objective="Brake at the hatch";tip="Hold brake until your drift settles.";action="Brake first";compactTip="Hold BRAKE";}
    else if(align===5&&cue>=4&&cue<8){objective="Face the hatch handle";tip="Drag toward the amber handle.";action="Aim at handle";aim=cue;compactTip="Drag toward handle";}
-   else if(align===5||align===4&&mode===3){objective="Return to the airlock";tip="Ride the push back toward the round hatch, then brake.";action="Out of reach";compactTip=cue>=8?"Find round hatch":"Drift to round hatch";aim=cue===8?4:cue===9?5:0;}
+   else if(align===5||align===4&&mode===3){
+    objective="Return to the airlock";
+    const side=cue===8?"right":cue===9?"left":"";
+    tip=side?`Drag ${side} to find the round hatch. Let the push carry you.`:"Ride the push back toward the round hatch, then brake.";
+    action=side?`Look ${side}`:"Out of reach";
+    compactTip=side?`Drag ${side} to find hatch`:"Drift to round hatch";
+    aim=cue===8?4:cue===9?5:0;
+   }
    else if(align===4){objective="Cargo transfer complete";tip="Release the console and return to the round airlock hatch.";action="Release & return";}
    else if(align===2.5){objective="Lowering cargo";tip="The robot is guiding the load into the cradle.";action="Lowering cargo";}
    else if(align===3.25){objective="Closing cradle keepers";tip="The cradle is securing the seated load.";action="Closing keepers";compactTip="Closing keepers";}
