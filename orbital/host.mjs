@@ -133,7 +133,7 @@ vec3 sunColor(vec3 n){
    thermalUV=clamp(registered,vec2(.002),vec2(.998));
   }
  }
- vec2 grain=skin?uv:fascia?clamp(vec2(world.x-.72,1.-(world.y-.205+(material.y>.7575?.40:0.))/.64),.003,.997):pressure?clamp(vec2((world.z+4.16)/2.42,1.-(world.y+.76)/1.72),.002,.998):layer==1.?vec2(world.x*.87,(world.y*.78+world.z*.43)*1.42):
+ vec2 grain=skin?uv:fascia?clamp(vec2(world.x-.72,1.-(world.y-.205+clamp((material.y-.75625)*160.,0.,.40))/.64),.003,.997):pressure?clamp(vec2((world.z+4.16)/2.42,1.-(world.y+.76)/1.72),.002,.998):layer==1.?vec2(world.x*.87,(world.y*.78+world.z*.43)*1.42):
    suit?tex*vec2(13.5,16.):foil?thermalUV:
    layer==4.?tex*1.8:tex*vec2(.91,1.14);
  vec4 texel=texture(surfaceTile,vec3(grain,layer));
@@ -427,7 +427,8 @@ function render(alpha) {
  const w=Math.max(1,Math.round(canvas.clientWidth*scale)), h=Math.max(1,Math.round(canvas.clientHeight*scale));
  if(w!==canvas.width || h!==canvas.height){canvas.width=w;canvas.height=h;}
  gl.viewport(0,0,w,h);
- const pose=previous&&frame[15]===previous[15] ? frame.map((n,i)=>i<5||i===8||(i>=12&&i<=14)?previous[i]+(n-previous[i])*alpha:n):frame;
+ const seatContact=frame[19]===2.5||previous?.[19]===2.5;
+ const pose=previous&&frame[15]===previous[15] ? frame.map((n,i)=>i<5||i===8||(!seatContact&&i>=12&&i<=14)?previous[i]+(n-previous[i])*alpha:n):frame;
  const [x,y,z,heading,pitch]=pose;
  if(renderVersion===worldVersion && renderYaw===heading && renderPitch===pitch && renderW===w && renderH===h && renderX===x && renderY===y && renderZ===z && renderGrip===pose[8] && renderRoute===pose[20] && renderReach===pose[10])return;
  renderVersion=worldVersion;renderYaw=heading;renderPitch=pitch;renderW=w;renderH=h;renderX=x;renderY=y;renderZ=z;renderGrip=pose[8];renderRoute=pose[20];renderReach=pose[10];
@@ -492,6 +493,7 @@ function hud(){
    else if(align===5&&cue>=4&&cue<8){objective="Face the hatch handle";tip="Drag toward the amber handle.";action="Aim at handle";aim=cue;compactTip="Drag toward handle";}
    else if(align===5||align===4&&mode===3){objective="Return to the airlock";tip="Ride the push back toward the round hatch, then brake.";action="Out of reach";compactTip=cue>=8?"Find round hatch":"Drift to round hatch";aim=cue===8?4:cue===9?5:0;}
    else if(align===4){objective="Cargo transfer complete";tip="Release the console and return to the round airlock hatch.";action="Release & return";}
+   else if(align===2.5){objective="Lowering cargo";tip="The robot is guiding the load into the cradle.";action="Lowering cargo";}
    else if(align===3){objective="Cargo seated";tip="Close the cradle keepers and release the robot grip.";action="Transfer cargo";compactTip="Close keepers";}
    else if(align===2){objective="Alignment handle secured";tip="Set the handle to lower the load into its shoes.";action="Set alignment";}
    else if(mode===3){objective="Clearing the lock";tip="Drift right to the blue alignment console.";action="Clearing lock";compactTip="Drift right";}
@@ -523,7 +525,7 @@ function hud(){
  if($("help").textContent!==tip)$("help").textContent=tip;
  const compact=$("compact-help");
  if(compact.textContent!==compactTip){compact.textContent=compactTip;compact.hidden=!compactTip;}
- $("action").disabled=!active||align===7||!(mode===2||(mode===0&&near===1));
+ $("action").disabled=!active||align===7||align===2.5||!(mode===2||(mode===0&&near===1));
  if($("action").textContent!==action)$("action").textContent=action;
  const task=eva?(align>=5?"EVA / AIRLOCK RETURN":locked?"EVA / CARGO ALIGNMENT":"EVA / "+(leg+1)+" OF 3"):"TRAINING 01 / HANDRAIL";
  if($("exercise").textContent!==task)$("exercise").textContent=task;
@@ -797,7 +799,7 @@ try{
   gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_T,gl.CLAMP_TO_EDGE);earthReady=1;worldVersion++;
  };
  earth.src=new URL("./earth.jpg?v=2",import.meta.url).href;
- const response=await fetch(new URL("./orbital.wasm?v=20",import.meta.url));
+ const response=await fetch(new URL("./orbital.wasm?v=21",import.meta.url));
  if(!response.ok)throw Error("The station engine could not be downloaded.");
  const {instance}=await WebAssembly.instantiate(await response.arrayBuffer(),{
   orbital:{

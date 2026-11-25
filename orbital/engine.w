@@ -241,9 +241,18 @@ unit(i32) station_fasteners = fn(k) {
 i32 station_leg=0;
 bool cargo_locked=false;
 i32 alignment_stage=0;
+f32 seat_clock=0.0;
+i32 seat_pose=0;
+f32[7] elbow_dx=[0.0,0.005204942,0.014663307,0.017319421,0.005443067,-0.016463812,-0.028937600];
+f32[7] elbow_dy=[0.0,-0.003655004,-0.009332873,-0.009841309,-0.004177934,0.002321792,0.004856000];
+f32[7] elbow_dz=[0.0,-0.000982262,-0.002095023,-0.001543880,-0.001316310,-0.004557410,-0.007602000];
+f32() seat_blend = fn {
+    f32 t=core.sint_to_float<f32>(seat_pose)/6.0;
+    t*t*(3.0-2.0*t)
+};
 bool alignment_braked=false;
 f32(i32) rail_depth = fn(leg) {if(leg==0){-1.59}else{if(leg==1){-3.43}else{-4.88}}};
-f32() align_pin_y = fn {if(alignment_stage>=4){-0.36}else{if(alignment_stage==3){-0.43}else{-0.54}}};
+f32() align_pin_y = fn {if(alignment_stage>=4){-0.36}else{-0.54+0.11*seat_blend()}};
 f32() arm_x = fn {if(alignment_stage>=5){-0.94}else{if(alignment_stage>=1){1.09}else{-0.18}}};
 f32() arm_y = fn {if(alignment_stage>=5){if(alignment_stage==7){-0.03}else{-0.14}}else{if(alignment_stage>=1){align_pin_y()}else{if(cargo_locked){-0.45}else{-0.57}}}};
 f32() arm_z = fn {if(alignment_stage>=5){-2.48}else{if(alignment_stage>=1){-4.81}else{rail_depth(station_leg)}}};
@@ -331,7 +340,7 @@ unit(i32) boom_bays = fn(k){
         boom_bays(k+1);
     };
 };
-f32() load_drop = fn {if(alignment_stage>=3){-0.40}else{0.0}};
+f32() load_drop = fn {-0.40*seat_blend()};
 f32[8] shell_y = [0.70,1.0,1.0,0.70,-0.70,-1.0,-1.0,-0.70];
 f32[8] shell_z = [1.0,0.70,-0.70,-1.0,-1.0,-0.70,0.70,1.0];
 unit(f32,f32,f32,f32,f32,i32) cargo_skin = fn(x0,x1,y0,r0,r1,k){
@@ -368,7 +377,7 @@ unit(f32,f32,f32,f32,f32,i32) fascia_ring = fn(dy,scale0,scale1,z0,z1,k){
 unit(f32) cargo_fascia = fn(dy){
     paint(0.24,0.30,0.31,0.66);
     fascia_ring(dy,1.03,1.0,-6.671,-6.614,0);
-    f32 tagged=if(dy<0.0){0.75875}else{0.75625};
+    f32 tagged=0.75625-dy*0.00625;
     paint(0.62,0.64,0.63,tagged);
     fascia_ring(dy,1.0,0.94,-6.614,-6.579,0);
     fascia_ring(dy,0.94,0.79,-6.579,-6.577,0);
@@ -491,7 +500,8 @@ unit(f32,f32,f32,f32) actuator_case = fn(x,y,z,radius){
 };
 unit() manipulator = fn {
     f32 dy=load_drop();
-    f32 ex=dy*0.072344; f32 ey=dy*(-0.012140); f32 ez=dy*0.019005;
+    u64 pose=core.int_extend<u64>(seat_pose);
+    f32 ex=elbow_dx[pose]; f32 ey=elbow_dy[pose]; f32 ez=elbow_dz[pose];
     paint(0.21,0.28,0.31,0.65);
     drive_link(2.76,2.49,-10.07,3.23,1.20,-7.97,0.194,0.121);
     paint(0.59,0.62,0.60,0.71);
@@ -953,7 +963,7 @@ unit() reset = fn {
     pilot_x=0.0; pilot_y=0.0; pilot_z=0.37;vx=0.0;vy=0.0;vz=0.0;yaw=if(deck==0){0.13}else{-0.03};pitch=if(deck==0){-0.035}else{-0.095};timer=0.0;
     mode=0;mark=0;grip=0.0;reach=0.0;carry=0.0;latch=0;station_leg=0;
     if(cargo_locked){cargo_locked=false;ready=false;};
-    alignment_stage=0;alignment_braked=false;
+    alignment_stage=0;seat_clock=0.0;seat_pose=0;alignment_braked=false;
 };
 unit(i32) select_deck = fn(which){
     i32 choice=if(which==1){1}else{0};
@@ -1108,8 +1118,9 @@ unit(f32,i32,f32,f32) tick = fn(dt,keys,look_x,look_y) {
             if(deck==1 && station_leg==2){
                 if(!cargo_locked){cargo_locked=true;mark=2;mesh_grip=-1.0;eva_room();}
                 else{if(alignment_stage==0){mode=3;mark=2;vx=0.36;vz=0.035;}
-                else{if(alignment_stage==2 || alignment_stage==3 || alignment_stage==6){alignment_stage=alignment_stage+1;mesh_grip=-1.0;eva_room();}
-                else{if(alignment_stage==4){mode=3;mark=2;vx=-0.49;vz=0.76;alignment_braked=false;};};};};
+                else{if(alignment_stage==2 && seat_clock==0.0){seat_clock=0.001;}
+                else{if(alignment_stage==3 || alignment_stage==6){alignment_stage=alignment_stage+1;mesh_grip=-1.0;eva_room();}
+                else{if(alignment_stage==4){mode=3;mark=2;vx=-0.49;vz=0.76;alignment_braked=false;};};};};};
             }else{
                 mode=3;mark=2;
                 vz=if(deck==0){-0.19}else{-0.43};
@@ -1117,6 +1128,14 @@ unit(f32,i32,f32,f32) tick = fn(dt,keys,look_x,look_y) {
         };
     };
     latch=if((keys&64)!=0){1}else{0};
+    if(seat_clock>0.0){
+        seat_clock=seat_clock+d;
+        if(seat_clock>=core.sint_to_float<f32>(seat_pose+1)*0.08){
+            seat_pose=seat_pose+1;
+            if(seat_pose==6){seat_clock=0.0;alignment_stage=3;};
+            mesh_grip=-1.0;eva_room();
+        };
+    };
     if(mode==1){
         timer=limit(timer+d*2.85,0.0,1.0);
         grip=timer*timer*(3.0-2.0*timer);
@@ -1150,7 +1169,7 @@ unit(f32,i32,f32,f32) tick = fn(dt,keys,look_x,look_y) {
             if(nearby && alignment_braked && !aligned){state[18]=aim_hint;};
         };
     };
-    state[19]=core.sint_to_float<f32>(alignment_stage);
+    state[19]=if(seat_clock>0.0){2.5}else{core.sint_to_float<f32>(alignment_stage)};
     if((deck==0||!external_arm) && (mesh_x!=pilot_x || mesh_y!=pilot_y || mesh_z!=pilot_z || mesh_grip!=grip || mesh_deck!=deck)){
         if(deck==0){glove();}else{eva_glove();};
         mesh_x=pilot_x;mesh_y=pilot_y;mesh_z=pilot_z;mesh_grip=grip;mesh_deck=deck;

@@ -179,14 +179,35 @@ step(64);until(()=>state[19]===2,64);
 assert.deepEqual([...state.slice(12,15)].map(n=>n.toFixed(2)),['1.09','-0.54','-4.81']);
 for(let i=0;i<60;i++)step(64);assert.equal(state[19],2,'holding the grip never seats the alignment handle');
 const suspended=room;
+const seatStartCamera=[...state.slice(0,8)], seatBatches=roomLoads;
 step();step(64);
+assert.equal(state[19],2.5);
+const seatMeshes=[];
+for(let n=0;n<36&&state[19]===2.5;n++){
+ const previousBatch=roomLoads;step(n===0||n===2?0:64);
+ if(roomLoads!==previousBatch)seatMeshes.push({room,contact:state[13]});
+ assert.deepEqual([...state.slice(0,8)],seatStartCamera,'seating preserves the docked camera');
+}
 assert.equal(state[19],3);
+assert.equal(roomLoads,seatBatches+6);
+assert.equal(seatMeshes.length,6);
 const nearEq=(x,y)=>Math.abs(x-y)<.0001;
 const hasVertex=(m,x,y,z)=>m.some((v,i)=>i%8===0&&nearEq(x,v)&&nearEq(y,m[i+1])&&nearEq(z,m[i+2]));
 assert.ok(hasVertex(suspended,2.17,.53,-7.13)&&hasVertex(room,2.17,.13,-7.13),'capsule travels from suspension to the capture shoes');
 assert.ok(hasVertex(suspended,.47,.873,-6.64)&&hasVertex(room,.47,.473,-6.64),'freight shell bevel moves with the same registered cargo stroke');
 assert.ok(hasVertex(suspended,2.20,.62,-6.523)&&hasVertex(room,2.20,.22,-6.523),'the captive wrist tracks the same travel');
 assert.ok(hasVertex(suspended,.49,-.404,-7.45)&&hasVertex(room,.49,-.404,-7.45),'capture shoes remain fixed to the truss');
+const elbowOffsets=[
+ [.005204942,-.003655004,-.000982262],[.014663307,-.009332873,-.002095023],
+ [.017319421,-.009841309,-.001543880],[.005443067,-.004177934,-.001316310],
+ [-.016463812,.002321792,-.004557410],[-.028937600,.004856000,-.007602000]
+];
+for(const [i,{room:m,contact}] of seatMeshes.entries()){
+ const t=(i+1)/6,a=t*t*(3-2*t), y=-.4*a, p=elbowOffsets[i].map((n,j)=>n+[2.88,.46,-6.89][j]);
+ assert.ok(nearEq(contact,-.54+.11*a)&&hasVertex(m,2.17,.53+y,-7.13)&&hasVertex(m,2.20,.62+y,-6.523),'cargo, captive wrist and glove follow the shared clock');
+ assert.ok(hasVertex(m,.49,-.404,-7.45)&&hasVertex(m,p[0],p[1],p[2]+.097),'fixed shoes and authored elbow pose are present');
+ assert.ok(nearEq(Math.hypot(p[0]-3.23,p[1]-1.20,p[2]+7.81),1.231462545)&&nearEq(Math.hypot(p[0]-2.2,p[1]-.62-y,p[2]+6.62),.748932574),'intermediate robot links retain physical lengths');
+}
 const span=(a,b)=>Math.hypot(...a.map((x,i)=>x-b[i]));
 const sh=[3.23,1.20,-7.81], elbow=[2.88,.46,-6.89], finalElbow=[2.8510624,.464856,-6.897602],
 startW=[2.20,.62,-6.62], endW=[2.20,.22,-6.62];
@@ -196,11 +217,11 @@ const wristIndicator=(m)=>m.some((f,i)=>i%8===4&&f>.95&&m[i-4]>2.12&&m[i-4]<2.28
 assert.equal(wristIndicator(beforeLatch),false);
 assert.equal(wristIndicator(room),true,'the local seating endpoint changes the remote gripper status');
 assert.deepEqual([...state.slice(12,15)].map(n=>n.toFixed(2)),['1.09','-0.43','-4.81']);
-assert.equal(roomLoads,countBeforeLatch+2,'only the new seated handle updates the cached alignment piece');
+assert.equal(roomLoads,countBeforeLatch+7,'seating updates only the six authored timed poses');
 const cradleSeated=room, handoffCamera=[...state.slice(0,8)];
 for(let i=0;i<60;i++)step(64);
 assert.equal(state[19],3,'held seat input never commands the transfer');
-assert.equal(roomLoads,countBeforeLatch+2);
+assert.equal(roomLoads,countBeforeLatch+7);
 step();step(64);assert.equal(state[19],4);
 assert.deepEqual([...state.slice(0,8)],handoffCamera,'handoff keeps the restrained eye and aim fixed');
 assert.deepEqual([...state.slice(12,15)].map(n=>n.toFixed(2)),['1.09','-0.36','-4.81']);
@@ -212,7 +233,7 @@ assert.ok(hasVertex(cradleSeated,1.96,.331,-6.838)&&hasVertex(room,1.96,.471,-6.
 assert.ok(hasVertex(cradleSeated,1.96,.022,-6.838)&&hasVertex(room,1.96,-.118,-6.838),'lower gripper jaw opens away from cargo');
 assert.ok(hasVertex(room,2.17,.13,-7.13)&&hasVertex(room,2.20,.22,-6.523),'the load and robot wrist hold steady through the handoff');
 for(let i=0;i<60;i++)step(64);
-assert.equal(roomLoads,countBeforeLatch+3,'handoff invalidates cached world once');
+assert.equal(roomLoads,countBeforeLatch+8,'handoff invalidates cached world once');
 assert.equal(state[19],4,'held transfer does not push off');
 step();step(64);until(()=>state[19]===5,0);
 assert.equal(state[18],0,"release never advertises a stale console brake cue as the hatch");
@@ -239,7 +260,7 @@ assert.ok(hasVertex(openHatch,-1.015,-.14,-2.398)&&hasVertex(room,-1.015,-.03,-2
 assert.ok(hasVertex(room,2.17,.13,-7.13)&&hasVertex(room,.49+.041,-.705,-6.554),'cargo stays seated under its closed keepers');
 for(let i=0;i<30;i++){step();step(64);}
 assert.equal(state[19],7);
-assert.equal(roomLoads,countBeforeLatch+4,'only the hatch endpoint republishes geometry');
+assert.equal(roomLoads,countBeforeLatch+9,'only the hatch endpoint republishes geometry');
 reset();assert.deepEqual(capture(),evaStart,'reset restores the current exercise');
 assert.deepEqual(room,evaRoom);
 until(()=>state[2]<-4.719,4);
@@ -247,7 +268,7 @@ assert.ok(state[2]>-4.721 && state[7]===0,'EVA cannot pass into the radiator');
 step(64);assert.equal(state[17],0,'skipping the rails cannot lock cargo');
 engine.select_deck(0);step(0,0,0,0);
 assert.deepEqual(capture(),initial,'indoor mode round-trips without exterior state');
-assert.equal(roomLoads,8,'only deck changes, lock, alignment and reset republish stationary geometry');
+assert.equal(roomLoads,13,'only deck changes, locks, authored alignment poses and reset republish geometry');
 console.log('EVA WASM: geometry, distinct grip, eligibility and release, exterior bulkhead, reset and indoor round-trip passed.');
 
 const raw=readFileSync(new URL('./apollo-arm.bin',import.meta.url));
