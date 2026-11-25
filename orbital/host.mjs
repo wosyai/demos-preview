@@ -1,5 +1,6 @@
 import {hudText} from "./hud-text.mjs?v=1";
-import {exteriorSky} from "./exterior-sky.mjs?v=1";
+import {earthDetail} from "./earth-detail.mjs";
+import {exteriorSky} from "./exterior-sky.mjs?v=2";
 import {chaseView,loadApolloBody,loadProceduralSuit,stationGrip} from "./apollo-body.mjs?v=14";
 const $ = id => document.getElementById(id);
 const canvas = $("view");
@@ -470,7 +471,9 @@ function meshes(program,eva,pose,onlyStatic=false){
  }
 }
 let skyFbo, skyTexture, priorHeading=NaN, priorPitch=NaN, skyW=0, skyH=0, skyHeading=NaN, skyPitch=NaN, skyDeck=-1, skyPhoto=-1, skyRoll=0, skyStars=-1, skySpin=NaN, skyOrbit=null;
+let fineEarth;
 function bindOrbit(frame){
+ fineEarth.bind();
  gl.activeTexture(gl.TEXTURE1);gl.bindTexture(gl.TEXTURE_2D,earthTexture);gl.uniform1i(space.earth,1);gl.uniform1i(space.photo,earthReady);
  gl.activeTexture(gl.TEXTURE7);gl.bindTexture(gl.TEXTURE_2D,starTexture);gl.uniform1i(space.starMap,7);gl.uniform1i(space.starReady,starReady);
  gl.uniform1i(space.upgradedSky,Number(upgradedSky));gl.uniform1f(space.earthAngle,frame.spin);gl.uniform4fv(space.orbitCenter,frame.center);
@@ -520,6 +523,11 @@ function render(alpha) {
  const [x,y,z]=camera.eye,{yaw:heading,pitch}=camera;
  const drawBody=Boolean(body&&(chase||chaseBlend>.03)&&Math.hypot(x-pose[0],y-pose[1],z-pose[2])>.8);
  const orbit=skyState(pose);
+ const aspect=w/h;
+ const eyeRelief=eva&&aspect<.72 ? 1.40+.45*Math.min(1.,Math.max(0.,(aspect-.49)/.23)) : 1.90;
+ const f=Math.min(eva ? 1.42 : 1.45,(eva?eyeRelief:1.8)*aspect);
+ const optics=[f/aspect,f],roll=eva&&!drawBody?[.99449,-.10481]:[1,0];
+ if(eva&&upgradedSky&&earthReady&&$("intro").hidden)fineEarth.update(orbit,heading,pitch,optics,roll,h);
  const skyMoved=eva&&upgradedSky&&!(Math.abs(orbit.spin-renderSkySpin)<.0006);
  const motion=body?[pose[21],pose[22],...pose.slice(23,26),...pose.slice(33,37),drawBody].join(","):"";
  if(renderVersion===worldVersion && renderYaw===heading && renderPitch===pitch && renderW===w && renderH===h && Math.abs(renderX-x)<.00002 && Math.abs(renderY-y)<.00002 && Math.abs(renderZ-z)<.00002 && renderGrip===pose[8] && renderRoute===pose[20] && renderReach===pose[10] && avatarMotion===motion && !skyMoved)return;
@@ -533,10 +541,6 @@ function render(alpha) {
    meshes(depth,eva,pose,true);
    gl.disable(gl.POLYGON_OFFSET_FILL);gl.bindFramebuffer(gl.FRAMEBUFFER,null);gl.viewport(0,0,w,h);
  }
- const aspect=w/h;
- const eyeRelief=eva&&aspect<.72 ? 1.40+.45*Math.min(1.,Math.max(0.,(aspect-.49)/.23)) : 1.90;
- const f=Math.min(eva ? 1.42 : 1.45,(eva?eyeRelief:1.8)*aspect);
- const optics=[f/aspect,f],roll=eva&&!drawBody?[.99449,-.10481]:[1,0];
  function bind(o){
   gl.useProgram(o.p);gl.uniform3f(o.eye,x,y,z);
   gl.uniform4f(o.basis,Math.cos(heading),Math.sin(heading),Math.cos(pitch),Math.sin(pitch));
@@ -882,6 +886,7 @@ try{
  panelStamp.src=new URL("./thermal-panel.jpg",import.meta.url).href;
  pressureStamp.src=new URL("./pressure-skin.jpg",import.meta.url).href;
  fasciaStamp.src=new URL("./cargo-fascia.jpg?v=1",import.meta.url).href;
+ fineEarth=earthDetail(gl,space.p,()=>{worldVersion++;skyPhoto=-1;});
  earthTexture=gl.createTexture();gl.bindTexture(gl.TEXTURE_2D,earthTexture);
  gl.texImage2D(gl.TEXTURE_2D,0,gl.RGB,1,1,0,gl.RGB,gl.UNSIGNED_BYTE,new Uint8Array([0,0,0]));
  gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MIN_FILTER,gl.LINEAR);

@@ -8,6 +8,9 @@
   was resized to 5120 × 2560 with Lanczos, then exported as baseline JPEG
   at quality 81 and chroma subsampling 4:2:0. The globe shader regrades
   the photographed weather and ocean and adds analytical limb scattering.
+  Close views load luminance detail from the [40,031 × 20,015 TIFF](https://svs.gsfc.nasa.gov/vis/a030000/a030700/a030763/global_vir_2015287_mosaic_750m_scale.75.tif)
+  of the same photograph. `python art/build-earth-detail.py` rebuilds the
+  32 × 16 AVIF grid in latitude strips; pass row numbers to rebuild selectively.
   The orbit and sky are fictional. The faint optical star field is procedural
   and does not claim to depict real constellations.
 - **Apollo forearm:** [Apollo astronaut asset v1.1.0 by Alex

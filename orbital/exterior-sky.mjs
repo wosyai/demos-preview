@@ -2,6 +2,9 @@ export const exteriorSky = `
 uniform int starReady;
 uniform sampler2D starMap;
 uniform float earthAngle;
+uniform highp sampler2DArray earthFine;
+uniform int earthPages[9];
+uniform float earthTexelAngle;
 vec3 orbitalStars(vec3 ray) {
   vec2 uv=vec2(atan(ray.x,-ray.z)*.159154943+.5,acos(clamp(ray.y,-1.,1.))*.318309886);
   vec2 gx=dFdx(uv),gy=dFdy(uv);
@@ -35,7 +38,8 @@ vec3 orbitalExterior(vec3 ray, vec3 backdrop, vec3 centerDir, float earthSinRadi
   result+=air*halo*.59*(1.-occult);
 
   if(arc>=edge-aa){
-    vec3 n=normalize((arc-sqrt(max(0.,arc*arc-edge*edge)))*ray-C);
+    float projected=sqrt(max(0.,arc*arc-edge*edge)),distanceToSurface=arc-projected;
+    vec3 n=normalize(distanceToSurface*ray-C);
     vec3 orb=vec3(.56*n.x-.8285*n.y,.8285*n.x+.56*n.y,n.z);
     float c=cos(earthAngle),s=sin(earthAngle);
     orb.xz=vec2(c*orb.x-s*orb.z,s*orb.x+c*orb.z);
@@ -44,10 +48,24 @@ vec3 orbitalExterior(vec3 ray, vec3 backdrop, vec3 centerDir, float earthSinRadi
     // Compare fixed level in portrait vs native; if sharp aliasing, use analytic
     // spherical derivatives or lift continuous derivative eval out of branch.
     vec3 albedo=photo==1?textureLod(earthMap,uv,0.).rgb:vec3(.055,.205,.37);
+    vec2 tile=vec2(fract(uv.x)*32.,clamp(uv.y,0.,.999999)*16.);
+    ivec2 page=ivec2(tile);int layer=page.x%3+3*(page.y%3);
+    if(earthPages[layer]==page.y*32+page.x){
+      vec2 st=fract(tile),m=min(st,1.-st)*1024.;
+      float feather=min(1.,.125*min(m.x,m.y));
+      // Fade frequencies above the screen's Nyquist limit toward the limb.
+      // Derivative magnitude from the ray/sphere intersection, not wrapped UV.
+      float footprint=earthTexelAngle*distanceToSurface/max(.02,projected);
+      float gain=feather*(1.-smoothstep(5.,10.,footprint));
+      if(gain>0.){
+        float fine=(textureLod(earthFine,vec3(st,float(layer)),clamp(log2(max(1.,footprint)),0.,3.)).r-128./255.)*.5;
+        albedo=clamp(albedo+gain*fine,0.,1.);
+      }
+    }
     float solar=dot(n,S);
     float day=smoothstep(-.065,.34,solar);
     vec3 surface=albedo*mix(vec3(.058,.082,.134),vec3(.93,.99,1.03),day);
-    float horizon=max(0.,dot(n,-ray));
+    float horizon=projected/radius;
     float airInside=exp(-horizon*9.1)*.64;
     result=mix(result,mix(surface,air,airInside),occult);
   }
