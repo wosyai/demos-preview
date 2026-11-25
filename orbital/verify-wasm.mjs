@@ -2,15 +2,16 @@ import {hudText} from './hud-text.mjs';
 import {stationGrip,ProceduralPose} from './apollo-body.mjs';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
+import {createHash} from 'node:crypto';
 const path=process.argv[2] ?? new URL('./orbital.wasm',import.meta.url);
 const wasm=new WebAssembly.Module(readFileSync(path));
 const imports=WebAssembly.Module.imports(wasm);
 const actual=imports.map(({module,name,kind})=>`${module}.${name}:${kind}`).sort();
-const orbitalImports=['orbital.earth_tiles:function','orbital.frame:function','orbital.hands:function','orbital.hull:function','orbital.scenery:function','orbital.visual:function'];
+const orbitalImports=['orbital.earth_tiles:function','orbital.entry_shell:function','orbital.entry_visual:function','orbital.frame:function','orbital.hands:function','orbital.hull:function','orbital.scenery:function','orbital.visual:function'];
 const procExit='wasi_snapshot_preview1.proc_exit:function';
 assert.deepEqual(actual,actual.includes(procExit)?[...orbitalImports,procExit]:orbitalImports,
  'expected the exact browser import contract (Orbital callbacks and optional WASI proc_exit)');
-let earthTiles,visual,hull,hullLoads=0,room,hand,state,engine,roomLoads=0,handLoads=0,roomSpan,stagedRoom;
+let entryMesh,entrySample,earthTiles,visual,hull,hullLoads=0,room,hand,state,engine,roomLoads=0,handLoads=0,roomSpan,stagedRoom;
 const roomPatches=[];
 function read(p,n){assert.equal(p%4,0);return new Float32Array(engine.memory.buffer,p,n).slice();}
 engine=new WebAssembly.Instance(wasm,{orbital:{
@@ -37,7 +38,9 @@ engine=new WebAssembly.Instance(wasm,{orbital:{
   }
  },hands(p,n){hand=read(p,n);handLoads++;},
  earth_tiles(p,n){assert.equal(n,19);assert.equal(p%8,0);earthTiles=new Float64Array(engine.memory.buffer,p,n).slice();},
- visual(p,n){assert.equal(n,58);assert.equal(p%8,0);visual=new Float64Array(engine.memory.buffer,p,n).slice();},
+ entry_shell(p,n){assert.equal(n,6144);entryMesh=read(p,n);},
+ entry_visual(p,n){assert.equal(n,14);assert.equal(p%8,0);entrySample=new Float64Array(engine.memory.buffer,p,n).slice();},
+ visual(p,n){assert.equal(n,60);assert.equal(p%8,0);visual=new Float64Array(engine.memory.buffer,p,n).slice();},
  frame(p,n){
   assert.equal(n,38);assert.equal(engine.scenery_motion(10),0);
   if(stagedRoom){room=stagedRoom;stagedRoom=undefined;roomLoads++;}
@@ -45,6 +48,12 @@ engine=new WebAssembly.Instance(wasm,{orbital:{
  }
 },wasi_snapshot_preview1:{proc_exit(n){throw Error("Station exited: "+n);}}}).exports;
 engine._start();
+function visualOf(alpha,aspect,hasAvatar=1){
+ visual=undefined;
+ engine.project_visual(alpha,aspect,hasAvatar);
+ assert.ok(visual?.every(Number.isFinite),'projection publishes finite, aligned values synchronously');
+ return visual;
+}
 const captureFrames=[];
 const hint=()=>hudText(engine.hud_code(),state[16],false);
 function hudIs(objective,interact,marker="+"){
@@ -559,19 +568,35 @@ hudIs('Atmosphere reached',false);
 step(4|64);assert.notDeepEqual([...state.slice(0,3)],interfacePos,'after interface the orbit continues');
 assert.equal(state[30],24);assert.equal(state[31],20);assert.deepEqual([...state.slice(23,26)],[0,0,0]);
 assert.deepEqual([...state.slice(33,35)],[0,0],'manual propulsion remains disabled during irreversible entry');
+engine.reentry_shell();
+assert.equal(createHash('sha256').update(Buffer.from(entryMesh.buffer)).digest('hex'),'f52c86520012c4ec26aca723657e3d117e1c8d0b746d98f21aca6fbed37398a2',
+ 'reentry shell retains the exact prior winding and all F32 vertex lanes');
+function checkEntryPresentation(){
+ const q=visualOf(.4,390/844);
+ const [x,y,z,heat,load]=[0,1,2,3,4].map(engine.entry_flow);
+ const warm=heat>.01;
+ assert.equal(q[58],heat);assert.equal(q[59],Number(warm&&load<1));
+ entrySample=undefined;
+ engine.reentry_visual(46655);
+ if(!warm){assert.equal(entrySample,undefined);return;}
+ const span=Math.hypot(x,z),ux=span>.05?-z/span:1,uz=span>.05?x/span:0;
+ const old=[q[0]-q[38],q[1]-q[39]-.58,q[2]-q[40],x,y,z,ux,0,uz,y*uz,z*ux-x*uz,-y*ux,heat,load<1?46.655:q[37]*.17];
+ assert.ok(entrySample.every((n,i)=>Math.abs(n-old[i])<2e-12));
+}
 let flightTicks=0, lastHeatLoad=0, lastAltitude=state[28], onset=0, peakAirSpeed=0;
 for(;flightTicks<2200&&engine.entry_flow(4)<1;flightTicks++){
  step(512|4|64);
  const [x,y,z,heat,load,speed]=[0,1,2,3,4,5].map(engine.entry_flow);
  assert.ok(Math.abs(Math.hypot(x,y,z)-1)<1e-5);
  assert.ok(load>=lastHeatLoad&&state[28]<lastAltitude&&state[30]<120&&state[31]===20);
+ if(flightTicks%31===0)checkEntryPresentation();
  if(heat>.08&&!onset){onset=state[28];hudIs('Entry heating',false);}
  lastHeatLoad=load;lastAltitude=state[28];peakAirSpeed=Math.max(peakAirSpeed,speed);
 }
 assert.ok(onset>95000&&onset<105000,'visible plasma only appears deeper than the interface');
 assert.ok(flightTicks>800&&flightTicks<1400&&engine.entry_flow(4)===1&&state[28]>72000&&state[28]<87000);
 assert.ok(engine.entry_flow(5)<peakAirSpeed-25,'denser airflow causes observable deceleration before terminal');
-hudIs('Suit lost',false);
+hudIs('Suit lost',false);checkEntryPresentation();
 const end=[...state.slice(0,3),state[28],state[37]];
 for(let i=0;i<30;i++){step(4|64);assert.deepEqual([...state.slice(0,3),state[28],state[37]],end);}
 
@@ -716,12 +741,6 @@ assert.equal(hint().action,"Slow down");assert.equal(hint().short,"Thrust back")
 assert.ok(hint().burn);
 console.log("Wosy HUD: exercise labels, actionable stages, off-axis reticle, and counterthrust cues passed.");
 
-const visualOf=(alpha,aspect,hasAvatar=1)=>{
- visual=undefined;
- engine.project_visual(alpha,aspect,hasAvatar);
- assert.ok(visual?.every(Number.isFinite),'projection publishes finite, aligned values synchronously');
- return visual;
-};
 engine.select_deck(0);engine.tick(0,0,0,0);
 assert.equal(engine.camera_mode(1),0,'camera preference cannot be changed inside the training deck');
 assert.deepEqual(visualOf(.2,16/9).slice(0,38),Float64Array.from(state),'do not blend across a reset');

@@ -41,6 +41,8 @@ entry_flow = "entry_flow"
 project_visual = "project_visual"
 camera_mode = "camera_mode"
 globe_tiles = "globe_tiles"
+reentry_shell = "reentry_shell"
+reentry_visual = "reentry_visual"
 
 [targets.app.profiles.dev]
 main_artifact = "main"

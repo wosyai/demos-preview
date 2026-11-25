@@ -31,7 +31,7 @@ void main(){
  float alpha=heat*flowUV.z*(.23+band+.34*pow(filament,4.))*pulse;
  pix=vec4(light,alpha);
 }`;
-export function reentryGlow(gl){
+export function reentryGlow(gl,mesh){
  const program=gl.createProgram();
  for(const [kind,source] of [[gl.VERTEX_SHADER,vs],[gl.FRAGMENT_SHADER,fs]]){
   const s=gl.createShader(kind);gl.shaderSource(s,source);gl.compileShader(s);
@@ -41,29 +41,19 @@ export function reentryGlow(gl){
  gl.linkProgram(program);if(!gl.getProgramParameter(program,gl.LINK_STATUS))throw new Error(gl.getProgramInfoLog(program));
  const u=Object.fromEntries(['origin','axis','crossX','crossY','basis','optics','roll','heat','clock'].map(key=>[key,gl.getUniformLocation(program,key)]));
  const vao=gl.createVertexArray(),buffer=gl.createBuffer();
- const rings=[[1.68,.04,0],[1.46,.36,.20],[1.12,.61,.49],[.58,.85,.50],[0,1.02,.46],[-.68,1.17,.35],[-1.53,1.4,.28],[-2.86,1.60,.18],[-4.90,1.22,0]];
- const data=[];
- function point(row,j){const [x,r,a]=rings[row];data.push(x,j/32,r,a);}
- for(let i=1;i<rings.length;i++)for(let j=0;j<32;j++){
-  point(i-1,j);point(i-1,j+1);point(i,j+1);
-  point(i-1,j);point(i,j+1);point(i,j);
- }
  gl.bindVertexArray(vao);gl.bindBuffer(gl.ARRAY_BUFFER,buffer);
- gl.bufferData(gl.ARRAY_BUFFER,new Float32Array(data),gl.STATIC_DRAW);
+ gl.bufferData(gl.ARRAY_BUFFER,mesh,gl.STATIC_DRAW);
  gl.enableVertexAttribArray(0);gl.vertexAttribPointer(0,4,gl.FLOAT,false,16,0);
  gl.bindVertexArray(null);
- return (orbiter,camera,optics,roll,axis,heat,clock)=>{
-  const [x,y,z]=axis,span=Math.hypot(x,z);
-  const ux=span>.05?-z/span:1,uz=span>.05?x/span:0;
+ return (sample,basis,optics,roll)=>{
   gl.useProgram(program);
-  gl.uniform3f(u.origin,orbiter[0]-camera.eye[0],orbiter[1]-camera.eye[1]-.58,orbiter[2]-camera.eye[2]);
-  gl.uniform3f(u.axis,x,y,z);gl.uniform3f(u.crossX,ux,0,uz);
-  gl.uniform3f(u.crossY,y*uz,z*ux-x*uz,-y*ux);
-  gl.uniform4f(u.basis,Math.cos(camera.yaw),Math.sin(camera.yaw),Math.cos(camera.pitch),Math.sin(camera.pitch));
+  gl.uniform3fv(u.origin,sample.subarray(0,3));gl.uniform3fv(u.axis,sample.subarray(3,6));
+  gl.uniform3fv(u.crossX,sample.subarray(6,9));gl.uniform3fv(u.crossY,sample.subarray(9,12));
+  gl.uniform4fv(u.basis,basis);
   gl.uniform2fv(u.optics,optics);gl.uniform2fv(u.roll,roll);
-  gl.uniform1f(u.heat,heat);gl.uniform1f(u.clock,clock);
+  gl.uniform1f(u.heat,sample[12]);gl.uniform1f(u.clock,sample[13]);
   gl.bindVertexArray(vao);gl.depthMask(false);gl.enable(gl.BLEND);gl.blendFunc(gl.SRC_ALPHA,gl.ONE);
-  gl.drawArrays(gl.TRIANGLES,0,data.length/4);
+  gl.drawArrays(gl.TRIANGLES,0,mesh.length/4);
   gl.disable(gl.BLEND);gl.depthMask(true);
  };
 }

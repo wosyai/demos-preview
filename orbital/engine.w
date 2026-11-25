@@ -3,6 +3,7 @@ station = namespace orbital "station.w";
 hud = namespace orbital "hud.w";
 projection = namespace orbital "presentation.w";
 globe = namespace orbital "globe-tiles.w";
+entry_view = namespace orbital "entry-presentation.w";
 host = extern wasm "orbital" {
     unsafe unit(*?u8,i32) scenery;
     unsafe unit(*?u8,i32) hull;
@@ -18,7 +19,7 @@ f32[8][16][16][16][5] mesh = [page2,page2,page2,page2,page2];
 f32[38] state = [0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0];
 f32[38] prior_state=state;
 bool present_history=false;
-f64[58] presentation=[0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0];
+f64[60] presentation=[0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0];
 bool third_person=false;
 f64 chase_blend=0.0;
 i32(i32) camera_mode=fn(command){
@@ -1918,12 +1919,22 @@ unit(f64,f64,i32) project_visual=fn(alpha,aspect,avatar){
     presentation[53]=if(chase_blend>0.0&&chase_blend<1.0){1.0}else{0.0};
     presentation[54]=projection.cos(yaw_out);presentation[55]=projection.sin(yaw_out);
     presentation[56]=projection.cos(pitch_out);presentation[57]=projection.sin(pitch_out);
-    unsafe {host.visual(core.pointer_cast<*?u8>(&?presentation[0]),58);};
+    presentation[58]=if(entry&&state[29]==1.0){core.float_extend<f64>(heat)}else{0.0};
+    presentation[59]=if(presentation[58]>0.01&&heat_load<1.0){1.0}else{0.0};
+    unsafe {host.visual(core.pointer_cast<*?u8>(&?presentation[0]),60);};
 };
 i32(f64,f64) globe_tiles=fn(now,height){
     bool scanned=globe.scan(now,height,presentation[49],presentation[50],presentation[51],presentation[52],presentation[48],
         presentation[54],presentation[55],presentation[56],presentation[57],presentation[44],presentation[45],presentation[46],presentation[47]);
     globe.publish();
     if(scanned){1}else{0}
+};
+unit() reentry_shell=fn{entry_view.geometry();};
+unit(f64) reentry_visual=fn(clock){
+    if(presentation[58]>0.01){
+        f64 phase=if(presentation[59]==1.0){clock*0.001}else{presentation[37]*0.17};
+        entry_view.frame(presentation[0]-presentation[38],presentation[1]-presentation[39],presentation[2]-presentation[40],
+            core.float_extend<f64>(flow_x),core.float_extend<f64>(flow_y),core.float_extend<f64>(flow_z),presentation[58],phase);
+    };
 };
 %%end
