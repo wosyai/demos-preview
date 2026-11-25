@@ -1052,6 +1052,34 @@ unit(f32) hull_lap_joint = fn(z){
     paint(0.32,0.37,0.38,0.64);
     quad(-1.548,-1.28,z+0.040,-1.548,1.23,z+0.040,-1.589,1.17,z+0.071,-1.589,-1.22,z+0.071,0.72);
 };
+unit(f32,f32,f32,f32,f32,f32) ledger_face=fn(x0,y0,x1,y1,near,far){
+    quad(x0,y0,near,x0,y0,far,x1,y1,far,x1,y1,near,0.88);
+};
+unit(f32,f32,i32) formed_service_span=fn(near,far,bay){
+    paint(0.52,0.55,0.51,0.62);
+    ledger_face(-1.56,1.26,-1.443,1.26,near,far);
+    paint(0.77,0.74,0.61,0.62);
+    ledger_face(-1.443,1.26,-1.400,1.222,near,far);
+    paint(0.46,0.52,0.51,0.62);
+    ledger_face(-1.400,1.222,-1.400,1.188,near,far);
+    paint(0.24,0.28,0.30,0.64);
+    ledger_face(-1.400,1.188,-1.447,1.170,near,far);
+    if(bay==1){paint(0.40,0.43,0.43,0.62);}else{paint(0.19,0.24,0.28,0.64);};
+    ledger_face(-1.447,1.170,-1.447,1.106,near,far);
+    paint(0.50,0.48,0.40,0.62);
+    ledger_face(-1.447,1.106,-1.400,1.077,near,far);
+    paint(0.35,0.43,0.48,0.62);
+    ledger_face(-1.400,1.077,-1.427,1.02,near,far);
+    paint(0.20,0.26,0.29,0.62);
+    ledger_face(-1.427,1.02,-1.56,1.02,near,far);
+};
+unit() main_service_ledger=fn {
+    formed_service_span(-12.2,-8.68,0);
+    formed_service_span(-8.68,-6.85,1);
+    formed_service_span(-6.85,-4.96,0);
+    formed_service_span(-4.96,-2.24,1);
+    formed_service_span(-2.24,1.70,0);
+};
 unit() exterior_primary_shell = fn {
     f32 back=-3.33; f32 face=-1.59;
     f32 base=-1.83; f32 top=1.87; f32 aft=-13.0; f32 fore=1.80;
@@ -1066,7 +1094,15 @@ unit() exterior_primary_shell = fn {
     paint(0.36,0.38,0.37,0.62);
     quad(face,0.084,aft,face,0.084,fore,-1.617,0.141,fore,-1.617,0.141,aft,0.80);
     paint(0.38,0.41,0.42,0.11);
-    quad(-1.617,0.141,aft,-1.617,0.141,fore,face,top,fore,face,top,aft,0.69);
+    ledger_face(-1.617,0.141,-1.599,1.26,aft,fore);
+    paint(0.27,0.34,0.38,0.62);
+    ledger_face(-1.599,1.26,-1.585,1.322,aft,fore);
+    paint(0.53,0.57,0.56,0.62);
+    ledger_face(-1.585,1.322,-1.570,1.423,aft,fore);
+    paint(0.50,0.55,0.55,0.62);
+    ledger_face(-1.570,1.423,-1.583,1.757,aft,fore);
+    paint(0.65,0.63,0.54,0.62);
+    ledger_face(-1.583,1.757,face,top,aft,fore);
 };
 
 unit(i32) hull_mat=fn(m){
@@ -1124,7 +1160,7 @@ unit() eva_room = fn {
     sweep(-1.43,1.27,-5.16,-1.47,0.95,-5.77,0.025,0.025,1,0,12);
     paint(0.51,0.53,0.52,0.11);
     box(-1.48,-1.74,-12.2,0.24,0.18,13.9);
-    box(-1.56,1.02,-12.2,0.16,0.24,13.9);
+    main_service_ledger();
     paint(0.89,0.50,0.17,0.17);
     sweep(-1.46,-1.40,-11.9,-1.46,-1.40,1.9,0.047,0.047,1,0,12);
     sweep(-1.46,0.92,1.9,-1.46,0.92,-4.30,0.041,0.041,1,0,6);
