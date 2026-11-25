@@ -179,7 +179,7 @@ unit(f32,f32,f32,f32,f32,f32,f32,f32,i32,i32,i32) round_shell = fn(px,py,pz,ax,a
         round_shell(px,py,pz,ax,ay,az,r0,r1,ring_axis,n+1,t);
     };
 };
-unit(f32,f32,f32) quilt_panel = fn(y,z,billow){
+unit(f32,f32,f32,bool) quilt_panel = fn(y,z,billow,formed){
     f32 skin=-1.500; f32 loft=skin+billow;
     f32 h=y+0.81; f32 far=z+2.42;
     f32 lip0=z+0.09;f32 lip1=far-0.11;
@@ -188,12 +188,40 @@ unit(f32,f32,f32) quilt_panel = fn(y,z,billow){
     f32 lo_a=loft-0.014; f32 lo_b=loft+0.005;
     f32 hi_a=loft+0.006; f32 hi_b=loft-0.016;
     f32 ridge=loft-0.024; f32 ridge_b=loft-0.011;
+    f32 red=r;f32 green=g;f32 blue=b;f32 finish=lit;
+    if(formed){paint(red*0.66,green*0.72,blue*0.77,finish);};
     quad(skin,y,z,skin,y,far,lo_b,low,lip1,lo_a,low,lip0,0.86);
+    if(!formed){
     quad(skin,y,z,lo_a,low,lip0,hi_a,high,lip0,skin,h,z,0.78);
     quad(skin,y,far,skin,h,far,hi_b,high,lip1,lo_b,low,lip1,0.81);
+    };
     quad(skin,h,z,hi_a,high,lip0,hi_b,high,lip1,skin,h,far,0.86);
-    quad(lo_a,low,lip0,lo_b,low,lip1,ridge_b,line+0.10,lip1,ridge,line,lip0,0.86);
-    quad(ridge,line,lip0,ridge_b,line+0.10,lip1,hi_b,high,lip1,hi_a,high,lip0,0.93);
+    if(formed){
+      f32 foot=line-0.090;f32 cap=line+0.020;
+      f32 ridge0=loft-0.043;f32 ridge1=loft-0.031;
+      f32 crown0=loft+0.019;f32 crown1=loft+0.021;
+      paint(red*0.66,green*0.72,blue*0.77,finish);
+      quad(skin,y,z,lo_a,low,lip0,ridge0,foot,lip0,skin,foot,z,0.78);
+      quad(skin,foot,z,ridge0,foot,lip0,crown0,line,lip0,skin,line,z,0.78);
+      quad(skin,line,z,crown0,line,lip0,crown0,cap,lip0,skin,cap,z,0.78);
+      quad(skin,cap,z,crown0,cap,lip0,hi_a,high,lip0,skin,h,z,0.78);
+      quad(skin,y,far,skin,foot+0.10,far,ridge1,foot+0.10,lip1,lo_b,low,lip1,0.81);
+      quad(skin,foot+0.10,far,skin,line+0.10,far,crown1,line+0.10,lip1,ridge1,foot+0.10,lip1,0.81);
+      quad(skin,line+0.10,far,skin,cap+0.10,far,crown1,cap+0.10,lip1,crown1,line+0.10,lip1,0.81);
+      quad(skin,cap+0.10,far,skin,h,far,hi_b,high,lip1,crown1,cap+0.10,lip1,0.81);
+      paint(red*0.79,green*0.86,blue*0.93,finish);
+      quad(lo_a,low,lip0,lo_b,low,lip1,ridge1,foot+0.10,lip1,ridge0,foot,lip0,0.82);
+      paint(red*0.48,green*0.51,blue*0.53,finish);
+      quad(ridge0,foot,lip0,ridge1,foot+0.10,lip1,crown1,line+0.10,lip1,crown0,line,lip0,0.74);
+      paint(red*0.97,green*0.93,blue*0.85,finish);
+      quad(crown0,line,lip0,crown1,line+0.10,lip1,crown1,cap+0.10,lip1,crown0,cap,lip0,0.95);
+      paint(red*0.91,green*0.89,blue*0.84,finish);
+      quad(crown0,cap,lip0,crown1,cap+0.10,lip1,hi_b,high,lip1,hi_a,high,lip0,0.93);
+    }else{
+      quad(lo_a,low,lip0,lo_b,low,lip1,ridge_b,line+0.10,lip1,ridge,line,lip0,0.86);
+      quad(ridge,line,lip0,ridge_b,line+0.10,lip1,hi_b,high,lip1,hi_a,high,lip0,0.93);
+    };
+    paint(red,green,blue,finish);
 };
 unit(i32) blanket = fn(n) {
     if(n<10) {
@@ -201,7 +229,7 @@ unit(i32) blanket = fn(n) {
         f32 zz=-11.6+core.sint_to_float<f32>(n/3)*2.48;
         f32 tint=0.77+0.027*core.sint_to_float<f32>(n%4);
         paint(tint,tint*0.97,tint*0.90,if(n==7){0.18375}else{0.18});
-        quilt_panel(yy,zz,0.031+core.sint_to_float<f32>(n%3)*0.014);
+        quilt_panel(yy,zz,0.031+core.sint_to_float<f32>(n%3)*0.014,n==7||n==8);
         paint(0.37,0.38,0.39,0.15);
         quad(-1.475,yy,zz,-1.475,yy+0.81,zz,-1.475,yy+0.81,zz+0.027,-1.475,yy,zz+0.027,0.69);
         quad(-1.475,yy+0.76,zz+0.04,-1.475,yy+0.794,zz+0.04,-1.475,yy+0.794,zz+2.38,-1.475,yy+0.76,zz+2.38,0.69);
@@ -923,17 +951,43 @@ unit(f32) service_seam = fn(z){
     sweep(-1.391,0.578,z+0.023,-1.381,0.578,z+0.023,0.026,0.0,0,0,6);
     sweep(-1.391,-0.510,z+0.023,-1.381,-0.510,z+0.023,0.026,0.0,0,0,6);
 };
-unit(f32,f32) pressure_course = fn(low,high){
-    paint(0.76,0.75,0.70,0.752);
+unit(f32,f32,f32,f32,i32) pressure_bay=fn(low,high,a,far,k){
+    f32 back=-1.531;f32 face=-1.484;
+    f32 lo=low+0.054;f32 hi=high-0.046;
+    f32 aa=a+0.052;f32 bb=far-0.054;
+    paint(0.25,0.30,0.33,0.62);
+    quad(back,low,a,back,low,far,face,lo,bb,face,lo,aa,0.82);
+    quad(back,low,a,face,lo,aa,face,hi,aa,back,high,a,0.84);
+    paint(0.54,0.57,0.55,0.62);
+    quad(back,low,far,back,high,far,face,hi,bb,face,lo,bb,0.89);
+    quad(back,high,a,face,hi,aa,face,hi,bb,back,high,far,0.92);
+    if(k%3==0){paint(0.76,0.77,0.72,0.752);}else{
+     if(k%3==1){paint(0.53,0.58,0.59,0.752);}else{paint(0.66,0.67,0.59,0.752);};
+    };
+    quad(face,lo,aa,face,hi,aa,face,hi,bb,face,lo,bb,0.93);
+};
+unit(f32,f32,i32,i32) pressure_bays=fn(low,high,k,n){
+    if(k<n){
+      f32 width=2.017/core.sint_to_float<f32>(n);
+      f32 a=-3.958+core.sint_to_float<f32>(k)*width;
+      f32 far=-3.958+core.sint_to_float<f32>(k+1)*width;
+      i32 tint=if(n==4){1}else{0};
+      pressure_bay(low,high,a,far,k+tint);
+      pressure_bays(low,high,k+1,n);
+    };
+};
+unit(f32,f32,i32) pressure_course = fn(low,high,n){
+    paint(0.48,0.51,0.49,0.62);
     quad(-1.585,low,-4.16,-1.585,high,-4.16,-1.531,high,-3.958,-1.531,low,-3.958,0.89);
-    quad(-1.531,low,-3.958,-1.531,high,-3.958,-1.531,high,-1.941,-1.531,low,-1.941,0.93);
+    pressure_bays(low,high,0,n);
+    paint(0.44,0.50,0.51,0.62);
     quad(-1.531,low,-1.941,-1.531,high,-1.941,-1.585,high,-1.74,-1.585,low,-1.74,0.86);
 };
 unit() pressure_skin = fn {
     paint(0.24,0.28,0.30,0.64);
     quad(-1.546,-0.090,-3.96,-1.546,-0.061,-3.96,-1.546,-0.061,-1.94,-1.546,-0.090,-1.94,0.66);
-    pressure_course(-0.76,-0.09);
-    pressure_course(-0.061,0.96);
+    pressure_course(-0.76,-0.09,3);
+    pressure_course(-0.061,0.96,4);
     paint(0.45,0.48,0.47,0.62);
     box(-1.554,-0.108,-4.16,0.034,0.066,0.169);
     box(-1.554,-0.108,-1.91,0.034,0.066,0.169);
@@ -1030,7 +1084,7 @@ unit(i32) hull_mesh=fn(i){if(i<station.total){
 bool hull_uploaded=false;
 unit() hull_upload=fn{
     if(!hull_uploaded){
-        station.build();count=0;hull_mesh(0);
+        station.build();count=0;hull_mesh(0);pressure_skin();
         unsafe {host.hull(core.pointer_cast<*?u8>(&?mesh[0][0][0][0][0]),count*8);};
         hull_uploaded=true;
     };
@@ -1040,7 +1094,7 @@ unit() eva_room = fn {
     hull_upload();count=0;
     exterior_primary_shell();
     hull_lap_joint(-1.28);hull_lap_joint(-0.47);hull_lap_joint(-4.74);hull_lap_joint(-5.86);
-    blanket(3);pressure_skin();station_fasteners(0);airlock();catwalk(0);
+    blanket(3);station_fasteners(0);airlock();catwalk(0);
     paint(0.40,0.44,0.43,0.13);
     box(-1.05,1.68,-5.48,0.078,0.096,3.48);
     box(-1.04,-1.22,-5.51,0.091,0.13,3.52);
