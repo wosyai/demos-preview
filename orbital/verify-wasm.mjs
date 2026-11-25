@@ -293,7 +293,8 @@ assert.equal(state[10],0,'coasting past the hatch does not count as a grip');
 step(64);assert.equal(state[9],0);
 step(0,.272,.34);
 while(Math.hypot(state[5],state[7])>.16)step(4);
-step(0,-1.382,-.15);
+// Turn back toward the hatch long enough for the free body to catch up.
+for(let i=0;i<115&&state[10]!==1;i++)step(0,-.81-state[3],-.15-state[4]);
 step();
 assert.equal(state[10],1,[...state].join(","));
 step(64);until(()=>state[19]===6,64);
@@ -475,3 +476,43 @@ for(const frame of captureFrames){
 assert.ok(heldSamples>5&&sweepSamples>60);
 assert.ok(gripClearance>=0,'digit volume must not penetrate any modeled bar during the mission sweep: '+gripClearance);
 console.log('Grip render: '+sweepSamples+' transition and '+heldSamples+' held samples. Minimum conservative clearance '+(gripClearance*1000).toFixed(2)+' mm.');
+
+// The free body catches the gaze around a signed wrapping boundary. The
+// anchored stance preserves world contacts under sustained excessive input.
+const az=(a,b)=>Math.atan2(Math.sin(a-b),Math.cos(a-b));
+engine.select_arm(1);engine.select_deck(1);step(0,0,0,0);
+let seams=0;
+for(const direction of [1,-1]){
+ let lastHead=state[3],lastBody=state[21];
+ for(let i=0;i<620;i++){
+  step(0,direction*.035,i<220?direction*.032:0);
+  if(Math.abs(state[3]-lastHead)>3)seams++;
+  assert.ok(Math.abs(az(state[3],state[21]))<=.9401&&Math.abs(state[4]-state[22])<=.6001,'free neck stays within its signed envelope');
+  assert.ok(direction*az(state[3],lastHead)>-.0001&&Math.abs(az(state[3],lastHead))<.075,'continued turning keeps direction across the seam');
+  assert.ok(Math.abs(az(state[21],lastBody))<=.015,'free body follows at its slower physical rate');
+  lastHead=state[3];lastBody=state[21];
+ }
+}
+assert.ok(seams>=2,'free look crossed the signed yaw seam in both directions');
+for(let i=0;i<180;i++)step();
+assert.ok(Math.abs(az(state[3],state[21]))<.025&&Math.abs(state[4]-state[22])<.025,'free body catches up without new input');
+reset();until(()=>state[10]===1,260);
+step(64);until(()=>state[9]===2,0);
+const railEye=[...state.slice(0,3)], railHand=[...state.slice(12,15)], anchor=[state[3],state[4]];
+for(const direction of [1,-1,1]){
+ for(let i=0;i<180;i++){
+  step(0,direction*1.7,direction*1.6);
+  assert.ok(Math.abs(az(state[3],state[21]))<=.3701&&Math.abs(state[4]-state[22])<=.2901,'held neck stays within reduced envelope');
+  assert.ok(Math.abs(az(state[3],anchor[0]))<=.4201&&Math.abs(state[4]-anchor[1])<=.3201,'held camera cannot wind around the grip');
+  assert.ok(Math.abs(az(state[21],anchor[0]))<=.101&&Math.abs(state[22]-anchor[1])<=.081,'held torso stays within its small anchored lean');
+  assert.deepEqual([...state.slice(0,3)],railEye);
+  assert.deepEqual([...state.slice(12,15)],railHand);
+ }
+}
+step();let beforeTurn=state[3];step(64,.025);
+for(let i=0;i<25;i++){
+ assert.ok(Math.abs(az(state[3],beforeTurn))<.085,'release widens the angular envelope without a snap');
+ beforeTurn=state[3];step(0,.025);
+}
+assert.equal(state[9],0,'head continues turning after release');
+console.log('Head and torso: free signed seam crossings, catch-up, smaller held envelope, immutable held contact anchors and gradual release passed.');

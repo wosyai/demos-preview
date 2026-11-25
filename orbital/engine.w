@@ -1000,6 +1000,7 @@ f32 grip=0.0; f32 reach=0.0; f32 carry=0.0;f32 carry_y=0.0;f32 carry_z=0.0;
 f32 dock_yaw=0.0; f32 dock_pitch=0.0;
 f32 dock_vx=0.0; f32 dock_vy=0.0; f32 dock_vz=0.0;
 f32 body_yaw=0.0; f32 body_pitch=0.0;
+f32 hold_yaw=0.0;f32 hold_pitch=0.0;
 f32 stick_x=0.0;f32 stick_forward=0.0;
 f32 thrust_x=0.0;f32 thrust_y=0.0;f32 thrust_z=0.0;
 bool wall_contact=false;
@@ -1123,7 +1124,7 @@ unit() reset = fn {
         pilot_y=-130000.0;vz=-176.55786;pitch=-0.40;yaw=-0.25;
     };
     delta_v=20.0;orbital_seconds=0.0;set_rotator(0.0,0.0);
-    atmosphere=false;orbit_altitude=if(reentry_exercise){260000.0}else{390000.0};orbit_warp=1.0;body_yaw=yaw;body_pitch=pitch;set_thrust(0.0,0.0);thrust_x=0.0;thrust_y=0.0;thrust_z=0.0;wall_contact=false;
+    atmosphere=false;orbit_altitude=if(reentry_exercise){260000.0}else{390000.0};orbit_warp=1.0;body_yaw=yaw;body_pitch=pitch;hold_yaw=yaw;hold_pitch=pitch;set_thrust(0.0,0.0);thrust_x=0.0;thrust_y=0.0;thrust_z=0.0;wall_contact=false;
     mode=0;mark=0;grip=0.0;reach=0.0;carry=0.0;latch=0;station_leg=0;
     if(cargo_locked||lock_pose>0){cargo_locked=false;ready=false;};
     lock_kind=0;lock_pose=0;lock_clock=0.0;
@@ -1234,7 +1235,19 @@ unit() eva_glove = fn {
 unit(f32,i32,f32,f32) tick = fn(dt,keys,look_x,look_y) {
     if(!ready){if(deck==0){draw();}else{eva_room();};ready=true;};
     f32 d=limit(dt,0.0,0.032);
-    if(mode!=1){yaw=wrap_yaw(yaw+limit(look_x,-3.14,3.14));pitch=limit(pitch+look_y,-1.48,1.48);};
+    f32 bind=if(mode==2){1.0}else{if(mode==3){grip}else{0.0}};
+    f32 yaw_limit=0.94-0.57*bind;
+    f32 pitch_limit=0.60-0.31*bind;
+    if(mode!=1){
+        f32 dyaw=limit(wrap_yaw(yaw-body_yaw)+limit(look_x,-1.65,1.65),-yaw_limit,yaw_limit);
+        f32 target=wrap_yaw(body_yaw+dyaw);
+        f32 target_pitch=limit(pitch+look_y,body_pitch-pitch_limit,body_pitch+pitch_limit);
+        if(mode==2){
+            target=wrap_yaw(hold_yaw+limit(wrap_yaw(target-hold_yaw),-0.42,0.42));
+            target_pitch=limit(target_pitch,hold_pitch-0.32,hold_pitch+0.32);
+        };
+        yaw=target;pitch=limit(target_pitch,-1.48,1.48);
+    };
     f32 ax=limit(axis(keys,2,1)+stick_x,-1.0,1.0);
     f32 forward=limit(axis(keys,4,8)+stick_forward,-1.0,1.0);
     f32 ay=axis(keys,16,32);
@@ -1343,7 +1356,7 @@ unit(f32,i32,f32,f32) tick = fn(dt,keys,look_x,look_y) {
         vx=(dock_x-carry)*slope+dock_vx*tangent_speed;
         vy=(dock_y-carry_y)*slope+dock_vy*tangent_speed;
         vz=(dock_z-carry_z)*slope+dock_vz*tangent_speed;
-        if(timer>=1.0){mode=2;pilot_x=dock_x;pilot_y=dock_y;pilot_z=dock_z;vx=0.0;vy=0.0;vz=0.0;if(for_hatch){alignment_stage=6;}else{if(for_alignment){alignment_stage=2;};};};
+        if(timer>=1.0){mode=2;hold_yaw=yaw;hold_pitch=pitch;pilot_x=dock_x;pilot_y=dock_y;pilot_z=dock_z;vx=0.0;vy=0.0;vz=0.0;if(for_hatch){alignment_stage=6;}else{if(for_alignment){alignment_stage=2;};};};
     };
     if(mode==3){
         grip=limit(grip-d*(if(deck==0){3.5}else{2.8}),0.0,1.0);
@@ -1377,8 +1390,27 @@ unit(f32,i32,f32,f32) tick = fn(dt,keys,look_x,look_y) {
     if(deck==1 && mode==0 && !reentry_exercise && !atmosphere){
         state[20]=if(alignment_stage==5){5.0}else{if(alignment_stage==1){4.0}else{if(alignment_stage==0){1.0+core.sint_to_float<f32>(station_leg)}else{0.0}}};
     };
-    body_yaw=wrap_yaw(body_yaw+d*limit(wrap_yaw(yaw-body_yaw)*3.0,-0.88,0.88));
-    body_pitch=body_pitch+d*limit((pitch-body_pitch)*3.0,-0.72,0.72);
+    f32 hold_blend=if(mode==2){1.0}else{if(mode==3){grip}else{0.0}};
+    f32 lean_yaw=wrap_yaw(hold_yaw+limit(wrap_yaw(yaw-hold_yaw)*0.20,-0.095,0.095));
+    f32 lean_pitch=hold_pitch+limit((pitch-hold_pitch)*0.18,-0.061,0.061);
+    f32 body_goal=wrap_yaw(yaw+wrap_yaw(lean_yaw-yaw)*hold_blend);
+    f32 pitch_goal=pitch+(lean_pitch-pitch)*hold_blend;
+    f32 yaw_rate=0.88-hold_blend*0.51;
+    f32 pitch_rate=0.72-hold_blend*0.39;
+    body_yaw=wrap_yaw(body_yaw+d*limit(wrap_yaw(body_goal-body_yaw)*3.0,-yaw_rate,yaw_rate));
+    body_pitch=body_pitch+d*limit((pitch_goal-body_pitch)*3.0,-pitch_rate,pitch_rate);
+    if(mode==1 || mode==2 && bind==0.0){
+        f32 settle_yaw=0.94-0.84*grip;
+        f32 settle_pitch=0.60-0.52*grip;
+        body_yaw=wrap_yaw(yaw-limit(wrap_yaw(yaw-body_yaw),-settle_yaw,settle_yaw));
+        body_pitch=pitch-limit(pitch-body_pitch,-settle_pitch,settle_pitch);
+    }else{
+        f32 safe_yaw=0.94-0.57*hold_blend;
+        f32 safe_pitch=0.60-0.31*hold_blend;
+        yaw=wrap_yaw(body_yaw+limit(wrap_yaw(yaw-body_yaw),-safe_yaw,safe_yaw));
+        pitch=limit(pitch,body_pitch-safe_pitch,body_pitch+safe_pitch);
+    };
+    state[3]=yaw;state[4]=pitch;
     state[21]=body_yaw;state[22]=body_pitch;
     state[23]=thrust_x;state[24]=thrust_y;state[25]=thrust_z;
     state[26]=if(wall_contact){1.0}else{0.0};
