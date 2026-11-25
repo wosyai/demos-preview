@@ -1,6 +1,6 @@
 import {hudText} from "./hud-text.mjs?v=1";
 import {exteriorSky} from "./exterior-sky.mjs?v=1";
-import {chaseView,loadApolloBody,loadProceduralSuit,stationGrip} from "./apollo-body.mjs?v=13";
+import {chaseView,loadApolloBody,loadProceduralSuit,stationGrip} from "./apollo-body.mjs?v=14";
 const $ = id => document.getElementById(id);
 const canvas = $("view");
 const main = canvas.parentElement;
@@ -549,7 +549,7 @@ function render(alpha) {
  gl.clear(gl.DEPTH_BUFFER_BIT);
  gl.enable(gl.DEPTH_TEST);bind(scene);
  gl.uniform1i(scene.lightingUpgrade,Number(upgradedSky));gl.uniform3fv(scene.earthBounceDir,orbit.center.slice(0,3));
- const contact=body&&(!apolloModelActive||!drawBody)?stationGrip(pose):null;
+ const contact=body&&!apolloModelActive?stationGrip(pose):null;
  if(contact){gl.uniform4f(scene.gripContact,...contact.center,contact.progress);gl.uniform1f(scene.gripRadius,contact.radius);}
  else gl.uniform4f(scene.gripContact,0,0,0,0);
  gl.uniform1i(scene.routeLens,pose[20]);gl.uniform1i(scene.routeReach,pose[10]);
