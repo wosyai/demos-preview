@@ -19,9 +19,10 @@ The browser owns WebGL 2 projection, materials, planet backdrop, and input
 transport. The simulation uses finite expanded collision proxies for the
 primary shell, hatch assembly, major catwalk courses, console and cargo,
 not render-triangle collision for the entire station. The same proxies stop
-the chase-camera boom without changing the astronaut path. An optional,
-locally supplied Apollo full body may be enabled with `?suit=apollo`; its
-full-suit asset is not distributed with the source.
+the chase-camera boom without changing the astronaut path. The preview loads the full Apollo suit for chase view when its gameplay asset
+is present. Helmet view uses the original articulated arms and equipment.
+A source checkout without it uses the original procedural suit. Use
+`?suit=procedural` to force the fallback.
 
 ## Run / build
 
@@ -86,8 +87,8 @@ spherical photographic Earth backdrop. Earth imagery:
 Amy Moran and Jesse Allen, from Suomi NPP VIIRS. The image is presented in a
 fictional orbit and does not imply NASA endorsement.
 
-A compact indexed Apollo arm is available only as a load fallback. The default
-uses the original two-arm suit and equipment mesh.
+The Apollo model and its textures are third-party assets outside the project
+license. See [Apollo NOTICE](art/apollo-NOTICE) for attribution and terms.
 [Art sources, credit, and two-pose export](art/README.md).
 
 Only the next usable grip is lit. The locator lenses are built into the rails,

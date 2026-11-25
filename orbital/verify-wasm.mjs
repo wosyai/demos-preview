@@ -1,3 +1,4 @@
+import {stationGrip,ProceduralPose} from './apollo-body.mjs';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 const path=process.argv[2] ?? new URL('./orbital.wasm',import.meta.url);
@@ -15,7 +16,11 @@ engine=new WebAssembly.Instance(wasm,{orbital:{
  frame(p,n){assert.equal(n,38);state=read(p,n);}
 },wasi_snapshot_preview1:{proc_exit(n){throw Error("Station exited: "+n);}}}).exports;
 engine._start();
-const step=(keys=0,yaw=0,pitch=0,dt=1/60)=>engine.tick(dt,keys,yaw,pitch);
+const captureFrames=[];
+const step=(keys=0,yaw=0,pitch=0,dt=1/60)=>{
+ engine.tick(dt,keys,yaw,pitch);
+ if(state[15]===1&&state[8]>.004&&[1,2,3].includes(state[9]))captureFrames.push([...state]);
+};
 const until=(test,keys,cap=400)=>{for(let i=0;i<cap&&!test();i++)step(keys);assert.ok(test(),'state did not arrive '+[...state]);};
 let initial,contact;
 const capture=()=>[...state.slice(0,21),...new Array(17).fill(0),...hand];
@@ -429,3 +434,44 @@ assert.equal(engine.camera_clip(0,0,0,3,0,3),1,'unobstructed chase boom keeps it
 assert.ok(Math.abs(engine.camera_clip(0,0,0,-3,0,0)-(-1.37/-3-.04))<.0001,'chase boom clips using the same station hull');
 step(0,0,0,0);assert.deepEqual([...state],cameraBefore,'camera clipping has no lasting simulation input or pose effects');
 console.log('Camera: unobstructed and hull-obstructed chase sweeps leave Wosy flight state unchanged.');
+
+// Independently test the drawn rigid-digit transforms against the cylindrical
+// rail, using real capture/hold/release poses from the existing mission above.
+// Bound each pressure digit by its largest radial envelope along its long axis.
+// The wide-phone playback can press Grip sooner than the deterministic
+// keyboard mission above. Keep its first observed fixed-tick pose as a guard.
+const fastLandscapeReach=new Float32Array(38);
+fastLandscapeReach.set([-.038953826,-.12249782,-.94724554,-.03049158,-.09634365],0);
+fastLandscapeReach.set([.006554406,1,1,1,-.26837078,-.52280921,-1.74621487,1],8);
+fastLandscapeReach.set([-.03002458,-.09506718],21);
+captureFrames.push(fastLandscapeReach);
+// The hatch approach can come in below the handle on desktop.
+const lowHatchReach=new Float32Array(38);
+lowHatchReach.set([-0.3595730364,-0.02891877852,-1.90815413,-0.7693254352,-0.1500000209],0);
+lowHatchReach.set([0.5337272882,1,0,1,-0.7766054273,-0.2747149467,-2.586382151,1],8);
+lowHatchReach.set([5,0,0.381921947,-0.07271004468],19);
+captureFrames.push(lowHatchReach);
+const handPose=new ProceduralPose();
+const phalanges=[[.047,.041,.032],[.050,.044,.034],[.047,.042,.033],[.041,.038,.029]];
+let gripClearance=Infinity,heldSamples=0,sweepSamples=0;
+for(const frame of captureFrames){
+ const grip=stationGrip(frame);
+ if(!grip)continue;
+ const {palette,joints}=handPose.solve(frame);
+ const nearest=(joint,beg,end,radius)=>{
+  const m=palette.subarray(joint*16,joint*16+16);
+  const [dy,dz]=[m[13]-grip.center[1],m[14]-grip.center[2]], py=m[9],pz=m[10];
+  const d=py*py+pz*pz, t=Math.max(beg,Math.min(end,d?-(dy*py+dz*pz)/d:beg));
+  return Math.hypot(dy+py*t,dz+pz*t)-radius-grip.radius;
+ };
+ for(const [i,digit] of phalanges.entries())for(const [k,l] of digit.entries())
+  gripClearance=Math.min(gripClearance,nearest(12+i*3+k,-.05*l,1.05*l,.0124-k*.0016-i*.0004));
+ gripClearance=Math.min(gripClearance,nearest(24,-.005,.041,.015),nearest(25,-.005,.037,.013));
+ if(frame[9]===2&&frame[8]===1){
+  heldSamples++;
+  assert.ok(joints.Left.error<=.001,'glove wrist can reach its fitted contact without stretching its limb lengths');
+ }else sweepSamples++;
+}
+assert.ok(heldSamples>5&&sweepSamples>60);
+assert.ok(gripClearance>=0,'digit volume must not penetrate any modeled bar during the mission sweep: '+gripClearance);
+console.log('Grip render: '+sweepSamples+' transition and '+heldSamples+' held samples. Minimum conservative clearance '+(gripClearance*1000).toFixed(2)+' mm.');

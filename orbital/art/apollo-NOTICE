@@ -9,6 +9,9 @@ Source: https://github.com/alexmaietta/apollo-astronaut-asset
 
 Not affiliated with or endorsed by NVIDIA or NASA.
 
-The optional full-suit apollo-body.glb is a reduced rendition of the same
+The full-suit apollo-body.glb used by the Orbital preview is a reduced rendition of the same
 Apollo v1.1.0 asset. The rig license text is provided as apollo-LICENSE;
 the original NVIDIA meshes/materials/textures are not relicensed.
+
+This third-party asset is not covered by the project license.
+NVIDIA Omniverse terms: https://docs.omniverse.nvidia.com/usd/latest/common/NVIDIA_Omniverse_License_Agreement.html

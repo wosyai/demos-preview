@@ -14,6 +14,100 @@ const matrix=(t=[0,0,0],[x,y,z,w]=[0,0,0,1],[a,b,c]=[1,1,1])=>[
  c*2*(x*z+y*w),c*2*(y*z-x*w),c*(1-2*(x*x+y*y)),0,...t,1
 ];
 const orbitRotation=(axis,r)=>[...mul(unit(axis),Math.sin(r/2)),Math.cos(r/2)];
+const fingers=[[-.033,0,.047,.041,.032],[-.011,.035,.050,.044,.034],[.012,.025,.047,.042,.033],[.035,-.02,.041,.038,.029]];
+const gripWidth=.023;
+const approachBars=[null,{center:[-.18,-.57,-1.59],radius:.087},{center:[-.18,-.57,-3.43],radius:.087}];
+const radial=(center,x,r,t)=>add(center,[x,r*Math.cos(t),r*Math.sin(t)]);
+const inward=t=>[0,Math.sin(t),-Math.cos(t)];
+const gripSmooth=t=>{const q=clamp(t,0,1);return q*q*(3-2*q);};
+export function stationGrip(frame){
+ const weight=frame[8];
+ if(weight<.004||frame[15]!==1||frame[29]===1)return null;
+ const rest=[frame[0]-.23,frame[1]-.40,frame[2]-.80];
+ const center=rest.map((v,i)=>v+(frame[12+i]-v)/weight);
+ const radius=frame[19]>=5?.082:.087;
+ const theta=frame[19]>=5?.61:.365;
+ const direction=inward(theta);
+ const knuckle=radial(center,gripWidth,radius+.020,theta);
+ const wrist=sub(knuckle,mul(direction,.066));
+ const basis=transformBasis([-1,0,0],cross(direction,[-1,0,0]),direction,wrist);
+ return {center,radius,theta,wrist,direction,basis,progress:gripSmooth((weight-.69)/.31)};
+}
+function wristApproach(rest,contact,weight,releasing){
+ if(!contact)return rest;
+ const {wrist,center}=contact;
+ const end=sub(wrist,center), start=sub(rest,center), a=Math.atan2(start[2],start[1]), b=Math.atan2(end[2],end[1]);
+ const r=Math.hypot(end[1],end[2]), h=r+.084;
+ if(weight>=.69)return radial(center,end[0],r+(h-r)*(1-contact.progress),b);
+ const q=gripSmooth(weight/.69), angle=a+Math.atan2(Math.sin(b-a),Math.cos(b-a))*q;
+ const r0=Math.hypot(start[1],start[2]);
+ const rr=r0+(h-r0)*q+.095*Math.sin(Math.PI*q)+(releasing?.096:.060)*gripSmooth(weight/.040)*(1-q);
+ return radial(center,start[0]+(end[0]-start[0])*q,rr,angle);
+}
+function fitDigits(palette,palm,contact){
+ const weight=contact?.progress??0;
+ const localToFit=(from,to)=>{
+  const d=sub(to,contact.wrist),g=contact.basis;
+  return mix(from,[dot(d,g.slice(0,3)),dot(d,g.slice(4,7)),dot(d,g.slice(8,11))],weight);
+ };
+ const assign=(id,a0,b0)=>{
+  const a=transform(palm,a0),b=transform(palm,b0);
+  const z=unit(sub(b,a)),r=unit(cross(Math.abs(z[1])>.94?[1,0,0]:[0,1,0],z));
+  palette.set(transformBasis(r,cross(z,r),z,a),id*16);
+ };
+ for(const [f,[splay,bias,...lengths]] of fingers.entries()){
+  let local=[splay,.003,.067], angle=.19-bias;
+  let t=contact?contact.theta+bias:0;
+  const r=contact?contact.radius+.019:0;
+  for(const [j,l] of lengths.entries()){
+   const next=add(local,[0,-Math.sin(angle)*l,Math.cos(angle)*l]);
+   let a=local,b=next;
+   if(weight>0){
+    const dt=2*Math.asin(l/(2*r));
+    a=localToFit(a,radial(contact.center,gripWidth-splay,r,t));
+    b=localToFit(b,radial(contact.center,gripWidth-splay,r,t-dt));t-=dt;
+   }
+   assign(12+f*3+j,a,b);local=next;angle+=.38;
+  }
+ }
+ let prev=[-.039,-.018,.032];
+ for(const [j,nextLocal] of [[0,[-.051,-.031,.056]],[1,[-.049,-.069,.072]]]){
+  let next=nextLocal;
+  if(weight>0){
+   const r=contact.radius+.022;
+   const t=[.58,.91,1.59];
+   if(!j)prev=localToFit(prev,radial(contact.center,.076,r,t[0]));
+   next=localToFit(next,radial(contact.center,.076-.007*j,r,t[j+1]));
+  }
+  assign(24+j,prev,next);prev=next;
+ }
+}
+// Near an active bar the open hand also needs space. This preserves the
+// authored cylinder during the last bit of approach and the first retreat.
+function clearanceShift(palette,bar,normal){
+ const fit=(joint,from,to,radius,shift)=>{
+  const i=joint*16;
+  const y=palette[i+13]-bar.center[1]+normal[1]*shift;
+  const z=palette[i+14]-bar.center[2]+normal[2]*shift;
+  const dy=palette[i+9],dz=palette[i+10],d=dy*dy+dz*dz;
+  const t=clamp(d?-(y*dy+z*dz)/d:from,from,to);
+  const rr=bar.radius+radius+.0022;
+  return (y+dy*t)**2+(z+dz*t)**2>=rr*rr;
+ };
+ const clear=shift=>{
+  for(const [digit,[,,...lengths]] of fingers.entries())for(const [k,l] of lengths.entries()){
+   if(!fit(12+digit*3+k,-.05*l,1.05*l,.0124-k*.0016-digit*.0004,shift))return false;
+  }
+  return fit(24,-.005,.041,.015,shift)&&fit(25,-.005,.037,.013,shift);
+ };
+ if(clear(0))return 0;
+ let a=0,b=.245;
+ for(let pass=0;pass<9;pass++){
+  const m=(a+b)*.5;
+  if(clear(m))b=m;else a=m;
+ }
+ return b;
+}
 function facing(yaw,pitch){
  const sy=Math.sin(yaw),cy=Math.cos(yaw),sp=Math.sin(pitch),cp=Math.cos(pitch);
  return {forward:[sy*cp,sp,-cy*cp],right:[cy,0,sy],up:[-sy*sp,cp,cy*sp]};
@@ -81,7 +175,7 @@ export class ApolloPose {
   const eye=Array.from(frame.slice(0,3));
   const body=facing(frame[21]??frame[3],frame[22]??frame[4]);
   const head=facing(frame[3],frame[4]);
-  const grip=clamp(frame[8],0,1);
+  const grip=clamp(frame[8],0,1), contact=stationGrip(frame);
   // Apollo faces +X, +Y is up and right is +Z in the exported GLB.
   const base=transformBasis(body.forward,body.up,body.right,
       sub(eye,add(mul(body.up,1.623),mul(body.forward,-.095))));
@@ -112,7 +206,7 @@ export class ApolloPose {
    const reach=side==='Left'?grip:0;
    const authoredWrist=Array.from(frame.slice(12,15));
    const published=options.wrist??add(authoredWrist,[.068,.154,.077]);
-   const target=reach?mix(rest,published,reach):rest;
+   const target=reach&&contact?wristApproach(rest,contact,reach,frame[9]===3):reach?mix(rest,published,reach):rest;
    const pole=add(mul(body.right,s*.51),mul(body.up,-1));
    if(reach){
     const collar=index('LeftShoulder'), anchor=origin(joints[collar]);
@@ -132,8 +226,24 @@ export class ApolloPose {
    const afterLower=origin(joints[lower]), afterWrist=origin(joints[wrist]);
    install(lower,align(joints[lower],sub(afterWrist,afterLower),sub(M.wrist,M.elbow)));
    const palm=index(side+'HandPalm');
-   const forward=reach?unit(mix(controllerForward,options.gripForward??head.forward,reach)):controllerForward;
-   const m=align(joints[wrist],sub(origin(joints[palm]),origin(joints[wrist])),forward);
+   const swing=contact?gripSmooth(reach/.69):reach;
+   const forward=reach?unit(mix(controllerForward,contact?.direction??options.gripForward??head.forward,swing)):controllerForward;
+
+   let m=align(joints[wrist],sub(origin(joints[palm]),origin(joints[wrist])),forward);
+   if(reach&&contact){
+    const left=index('LeftHandIndexMetacarpal'), little=index('LeftHandLittleMetacarpal');
+    const wristRest=joints[wrist], spread=sub(origin(joints[little]),origin(joints[left]));
+    const coords=[0,4,8].map(j=>dot(unit(wristRest.slice(j,j+3)),spread));
+    const across=sub(transform(m,coords),origin(m));
+    // Untwist the skin across the rail only after the palm travels around it.
+    const along=unit(sub(across,mul(forward,dot(across,forward))));
+    const normal=unit(sub([-1,0,0],mul(forward,dot([-1,0,0],forward))));
+    if(length(along)>.1&&length(normal)>.1){
+     const radians=Math.atan2(dot(cross(along,normal),forward),dot(along,normal));
+     const p=origin(m); m=product(matrix(p,orbitRotation(forward,radians*swing)),[...m.slice(0,12),0,0,0,1]);
+    }
+   }
+
    install(wrist,m);
    const curl=.72+.28*reach;
    // Mirror the approved closed bake's per-knuckle curls.
@@ -303,7 +413,15 @@ export async function loadApolloBody(gl,url=new URL('./apollo-body.glb',import.m
    meshes.push({name:node.name,vao,first:sleeveParts.has(node.name),elements,nearElements,nearCount,len:indices.length,kind:indices instanceof Uint16Array?gl.UNSIGNED_SHORT:gl.UNSIGNED_INT,tex,color:mat.baseColorFactor??[1,1,1,1]});
   }
  }
- return renderAvatar(gl,pose,meshes);
+ const fullBody=renderAvatar(gl,pose,meshes), helmetView=loadProceduralSuit(gl);
+ let active=helmetView;
+ return {
+  draw(frame,camera){
+   active=camera.thirdPerson?fullBody:helmetView;
+   active.draw(frame,camera);
+  },
+  diagnostics:()=>active.diagnostics(),
+ };
 }
 
 function renderAvatar(gl,pose,meshes,hasEquipment=false){
@@ -335,7 +453,8 @@ function renderAvatar(gl,pose,meshes,hasEquipment=false){
      const skip=thirdPerson?m.closeCount:0;
      const cull=thirdPerson&&!gl.isEnabled(gl.CULL_FACE);
      if(cull)gl.enable(gl.CULL_FACE);
-     gl.drawElements(gl.TRIANGLES,thirdPerson?m.len-skip:m.nearCount,gl.UNSIGNED_SHORT,skip*2);
+     const range=m.ranges?.[(thirdPerson?1:0)+(last.detailedHand?2:0)];
+     gl.drawElements(gl.TRIANGLES,range?.count??(thirdPerson?m.len-skip:m.nearCount),gl.UNSIGNED_SHORT,(range?.start??skip)*2);
      if(cull)gl.disable(gl.CULL_FACE);
     }else{
      gl.uniform4fv(U.baseColor,m.color);
@@ -397,10 +516,10 @@ function rigidMesh(gl,groups){
  // Draw the near prefix or the full rigid suit as one indexed batch. The
  // original bone palette supplies transforms without CPU vertex uploads.
  const vao=gl.createVertexArray();gl.bindVertexArray(vao);
- const vertices=[],indices=[],joints=[];
+ const vertices=[],indices=[],joints=[],subsets=[];
  let nearCount=0,closeCount=0;
- for(const {joint,color,buf,first} of [...groups.filter(g=>g.first==='close'),...groups.filter(g=>g.first===true),...groups.filter(g=>!g.first)]){
-  const seen=new Map();
+ for(const {joint,color,buf,first,detail} of [...groups.filter(g=>g.first==='close'),...groups.filter(g=>g.first===true),...groups.filter(g=>!g.first)]){
+  const seen=new Map(),start=indices.length;
   for(let i=0;i<buf.length;i+=6){
    const v=buf.slice(i,i+6).map(x=>Math.round(x*100000)/100000), key=v.join(',');
    let n=seen.get(key);
@@ -413,6 +532,19 @@ function rigidMesh(gl,groups){
   }
   if(first)nearCount=indices.length;
   if(first==='close')closeCount=indices.length;
+  subsets.push({first,detail,start,end:indices.length});
+ }
+ let ranges;
+ if(subsets.some(g=>g.detail!=='all')){
+  const packed=[];
+  ranges=Array.from({length:4},(_,i)=>{
+   const start=packed.length,detail=i>=2?'grip':'rest',chase=i%2===1;
+   for(const g of subsets)if((g.detail==='all'||g.detail===detail)&&(chase?g.first!=='close':g.first)){
+    for(let k=g.start;k<g.end;k++)packed.push(indices[k]);
+   }
+   return {start,count:packed.length-start};
+  });
+  gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER,gl.createBuffer());gl.bufferData(gl.ELEMENT_ARRAY_BUFFER,new Uint16Array(packed),gl.STATIC_DRAW);
  }
  gl.bindBuffer(gl.ARRAY_BUFFER,gl.createBuffer());gl.bufferData(gl.ARRAY_BUFFER,new Float32Array(vertices),gl.STATIC_DRAW);
  for(const [i,n,offset] of [[0,3,0],[1,3,12],[5,4,24]]){
@@ -420,13 +552,13 @@ function rigidMesh(gl,groups){
  }
  gl.bindBuffer(gl.ARRAY_BUFFER,gl.createBuffer());gl.bufferData(gl.ARRAY_BUFFER,new Uint8Array(joints),gl.STATIC_DRAW);
  gl.enableVertexAttribArray(3);gl.vertexAttribIPointer(3,1,gl.UNSIGNED_BYTE,1,0);
- gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER,gl.createBuffer());gl.bufferData(gl.ELEMENT_ARRAY_BUFFER,new Uint16Array(indices),gl.STATIC_DRAW);
- return [{vao,len:indices.length,nearCount,closeCount,first:true,baked:true}];
+ if(!ranges){gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER,gl.createBuffer());gl.bufferData(gl.ELEMENT_ARRAY_BUFFER,new Uint16Array(indices),gl.STATIC_DRAW);}
+ return [{vao,len:indices.length,nearCount,closeCount,first:true,baked:true,ranges}];
 }
 function metalShop(){
  const groups=[];
- const get=(joint,color,first)=>{let g=groups.find(g=>g.joint===joint&&g.color===color&&g.first===first);
-  if(!g){g={joint,color,first,buf:[]};groups.push(g);}return g.buf;};
+ const get=(joint,color,first,detail='all')=>{let g=groups.find(g=>g.joint===joint&&g.color===color&&g.first===first&&g.detail===detail);
+  if(!g){g={joint,color,first,detail,buf:[]};groups.push(g);}return g.buf;};
  const flat=(buf,...pts)=>{const n=unit(cross(sub(pts[1],pts[0]),sub(pts[2],pts[0])));for(let i=1;i<pts.length-1;i++)buf.push(...pts[0],...n,...pts[i],...n,...pts[i+1],...n);};
  const box=(j,c,h,k,first=true,r=.007)=>{
   // Eight-point chamfer cut in each corner of a beveled perimeter.
@@ -517,8 +649,8 @@ function createPlume(gl,joint){
 export function loadProceduralSuit(gl){
  const navy=[.035,.067,.085,.48], rubber=[.039,.048,.052,.32], white=[.75,.74,.66,.18], panel=[.24,.30,.32,.50], gold=[.42,.25,.09,.92], pale=[.83,.86,.83,.64], red=[.64,.18,.055,.54];
  const {groups,get,box,tube}=metalShop();
- const shell=(joint,center,rx,ry,rz,color)=>{
-  const buf=get(joint,color,joint>=4);
+ const shell=(joint,center,rx,ry,rz,color,visibility=joint>=4,detail='all')=>{
+  const buf=get(joint,color,visibility,detail);
   const L=joint===1?24:joint===0?14:rx>=.070?20:12,S=joint===1?12:joint===0?7:rx>=.070?9:6;
   const p=(i,j)=>{
    const theta=j*2*Math.PI/L, phi=(i/S-.5)*Math.PI, c=Math.cos(phi);
@@ -533,7 +665,7 @@ export function loadProceduralSuit(gl){
  };
  shell(0,[0,-.38,0],.26,.325,.16,white);
  shell(0,[0,-.39,.102],.205,.21,.126,panel);
- const seam=[.59,.59,.53,.22],trim=[.098,.138,.144,.49];
+ const seam=[.59,.59,.53,.22],trim=[.098,.138,.144,.49],knuckle=[.236,.216,.174,.24],leather=[.099,.110,.102,.19];
  tube(0,[[0,-.169,.013],[0,-.143,.013],[0,-.126,.013]],[.112,.118,.106],trim,false,24);
  tube(0,[[0,-.141,.013],[0,-.132,.013]],[.119,.116],pale,false,20);
  for(const side of [-1,1]){
@@ -573,14 +705,32 @@ export function loadProceduralSuit(gl){
   box(j+1,[0,.068,.116],[.034,.012,.041],panel,'close',.009);
   box(j+1,[0,.081,.116],[.023,.002,.024],navy,'close',.005);
   box(j+1,[.007,.084,.124],[.011,.001,.004],gold,'close',.002);
-  shell(j+2,[0,0,.040],.047,.039,.058,panel);
-  shell(j+2,[(i?1:-1)*.037,-.012,.044],.021,.026,.042,rubber);
-  for(let f=0;f<4;f++)shell(j+2,[(f-1.5)*.021,.001,.079],.013,.020,.037,rubber);
+  if(i){
+   shell(j+2,[0,0,.040],.047,.039,.058,panel);
+   shell(j+2,[.037,-.012,.044],.021,.026,.042,rubber);
+   for(let f=0;f<4;f++)shell(j+2,[(f-1.5)*.021,.001,.079],.013,.020,.037,rubber);
+  }else{
+   // The broad silhouette suffices while holding the controller. Draw
+   // individual digits only for a reach, release, or a necessary lift.
+   shell(j+2,[0,0,.040],.047,.039,.058,panel,true,'rest');
+   shell(j+2,[-.037,-.012,.044],.021,.026,.042,rubber,true,'rest');
+   for(let f=0;f<4;f++)shell(j+2,[(f-1.5)*.021,.001,.079],.013,.020,.037,rubber,true,'rest');
+   shell(j+2,[0,0,.035],.046,.027,.042,panel,true,'grip');
+   shell(j+2,[0,.022,.037],.040,.010,.030,leather,true,'grip');
+   for(const [i,[,,...lengths]] of fingers.entries())for(const [q,l] of lengths.entries()){
+    const jnt=12+i*3+q;
+    const rad=.0124-q*.0016-i*.0004;
+    shell(jnt,[0,0,l*.50],rad,rad*.92,l*.55,rubber,true,'grip');
+    shell(jnt,[0,rad*.73,l*.49],rad*.76,.0047,l*.34,knuckle,'close','grip');
+   }
+   shell(24,[0,0,.018],.015,.014,.023,rubber,true,'grip');
+   shell(25,[0,0,.016],.013,.012,.021,rubber,true,'grip');
+  }
  }
  return renderAvatar(gl,new ProceduralPose(),rigidMesh(gl,[...groups,...createEquipment()]),true);
 }
 
-class ProceduralPose{
+export class ProceduralPose{
  constructor(){this.palette=new Float32Array(89*16);}
  solve(frame,options={}){
   const eye=Array.from(frame.slice(0,3));
@@ -589,7 +739,8 @@ class ProceduralPose{
   const helmet=transformBasis(head.right,head.up,mul(head.forward,-1),eye);
   this.palette.set(gear,0);this.palette.set(helmet,16);
   const {amount,controls}=equipmentPose(this.palette,frame,body,gear);
-  const grip=clamp(frame[8],0,1), debug={};
+  const grip=clamp(frame[8],0,1), debug={},contact=stationGrip(frame);
+  let detailedHand=Boolean(contact);
   const wristFrame=options.wrist??add(Array.from(frame.slice(12,15)),[.068,.154,.077]);
   const aim=(a,b)=>{
    const z=unit(sub(b,a));
@@ -600,17 +751,48 @@ class ProceduralPose{
    let a=transform(gear,[s*.228,-.177,-.076]);
    const control=controls[i], handle=transform(gear,control.handle), controlAxis=unit(sub(handle,transform(gear,control.stem)));
    const rest=sub(handle,mul(controlAxis,.064));
-   const reach=i===0?grip:0, target=mix(rest,wristFrame,reach);
+   const reach=i===0?grip:0, target=i===0&&contact?wristApproach(rest,contact,reach,frame[9]===3):mix(rest,wristFrame,reach);
    const deficit=Math.max(0,length(sub(target,a))-.496);
-   if(reach&&deficit)a=add(a,mul(unit(sub(target,a)),Math.min(.17,deficit)*Math.min(1,reach*2.1)));
-   const M=elbowIK(a,target,.276,.232,add(mul(body.right,s*.46),mul(body.up,-1)));
-   const hand=unit(mix(controlAxis,options.gripForward??head.forward,reach));
+   if(reach&&deficit)a=add(a,mul(unit(sub(target,a)),Math.min(contact&&frame[19]>=5?.242:contact&&frame[19]>=1?.182:.17,deficit)*Math.min(1,reach*2.1)));
+   const pole=add(mul(body.right,s*.46),mul(body.up,-1));
+   let M=elbowIK(a,target,.276,.232,pole);
+   const alignment=contact&&i===0?gripSmooth(reach/.69):reach;
+   const hand=unit(mix(controlAxis,(contact&&i===0?contact.direction:(options.gripForward??head.forward)),alignment));
    const j=(4+3*i)*16;
+   const palmAt=at=>{
+    const open=aim(at,add(at,hand));
+    if(i!==0||!contact)return open;
+    const x0=open.slice(0,3),xWorld=mix(x0,[-1,0,0],alignment);
+    const x=unit(sub(xWorld,mul(hand,dot(xWorld,hand))));
+    return transformBasis(x,cross(hand,x),hand,at);
+   };
+   let palm=palmAt(M.wrist);
+   if(i===0){
+    if(contact)fitDigits(this.palette,palm,contact);
+    const rail=frame[20];
+    const activeRail=approachBars[rail];
+    const check=contact??activeRail;
+    if(check&&reach<.70&&Math.abs(M.wrist[0]-check.center[0])<.55){
+     const delta=sub(M.wrist,check.center);
+     if(Math.hypot(delta[1],delta[2])<.31){
+      if(!contact)fitDigits(this.palette,palm,null);
+      const near=contact?sub(contact.wrist,check.center):sub(eye,check.center);
+      const normal=unit([0,near[1],near[2]]);
+      const amount=clearanceShift(this.palette,check,normal);
+      if(amount>0){
+       detailedHand=true;
+       M=elbowIK(a,add(M.wrist,mul(normal,amount)),.276,.232,pole);
+       palm=palmAt(M.wrist);
+       fitDigits(this.palette,palm,contact);
+      }
+     }
+    }
+   }
    this.palette.set(aim(a,M.elbow),j);
    this.palette.set(aim(M.elbow,M.wrist),j+16);
-   this.palette.set(aim(M.wrist,add(M.wrist,hand)),j+32);
+   this.palette.set(palm,j+32);
    debug[i?'Right':'Left']={shoulder:a,elbow:M.elbow,wrist:M.wrist,requested:target,error:M.wristError};
   }
-  return {palette:this.palette,joints:debug,plume:Math.min(.66,Math.sqrt(amount)*.46)};
+  return {palette:this.palette,joints:debug,detailedHand,plume:Math.min(.66,Math.sqrt(amount)*.46)};
  }
 }
