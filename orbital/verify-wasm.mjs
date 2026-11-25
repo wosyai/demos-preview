@@ -71,6 +71,11 @@ for(const material of lenses)assert.ok(evaRoom.some((n,i)=>i%8===7&&Math.abs(n-m
 assert.ok(evaRoom.length/24<6680,'route indicators and console details stay within the static batch budget');
 assert.equal(state[15],1);assert.ok(evaRoom.length>=5400*8 && evaRoom.length<6680*24 && evaRoom.length%24===0);
 assert.ok(evaRoom.every(Number.isFinite) && hand.every(Number.isFinite));
+const airlockLid=[];
+for(let i=0;i<hull.length;i+=8)if(Math.abs(hull[i+7]-.754)<.0001)airlockLid.push(hull.slice(i,i+8));
+assert.equal(airlockLid.length,90,'closed pressure lid is one immutable 30-segment bowl');
+assert.ok(airlockLid.every(v=>v[0]>=-1.2781&&v[0]<=-1.2659
+ &&Math.hypot(v[1]-.27,v[2]+2.60)<.527),'lid stays behind the physical latch and route locators');
 const maskedPanel=[];
 for(let i=0;i<evaRoom.length;i+=8)if(Math.abs(evaRoom[i+7]-.18375)<.0001)maskedPanel.push(evaRoom.slice(i,i+8));
 assert.equal(maskedPanel.length,84,'only the formed faces of thermal panel n=7 are registered');
