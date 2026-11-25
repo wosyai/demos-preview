@@ -1603,8 +1603,21 @@ unit() eva_glove = fn {
     glove_fingers(px,py,pz,0);
     unsafe {host.hands(core.pointer_cast<*?u8>(&?mesh[0][0][0][0][0]),count*8);};
 };
+bool(f32,f32,f32,f32,f32) approaching_stop_window=fn(dx,dy,dz,distance_sq,speed_sq){
+    bool warn=false;
+    if(distance_sq>=0.18 && distance_sq<3.24 && speed_sq>0.063){
+        f32 distance=core.float_trunc<f32>(scaled_root(core.float_extend<f64>(distance_sq),1.0));
+        f32 close=(dx*vx+dy*vy+dz*vz)/distance;
+        if(close>0.25 && close*close>speed_sq*0.52){
+           f32 window=0.4243+close*0.24+speed_sq*0.43;
+           warn=distance<=window;
+        };
+    };
+    warn
+};
 hud.Cargo cargo_phase=hud.Cargo::rails;
 hud.Steering steer_cue=hud.Steering::none;
+i32 arrival_pulse=0;
 i32() hud_code = fn{
     hud.Motion motion=hud.flight(mode);
     bool far=pilot_x*pilot_x+pilot_y*pilot_y+pilot_z*pilot_z>22500.0;
@@ -1615,6 +1628,7 @@ i32() hud_code = fn{
         f32 forward=sy*vx-cy*vz;
         opposite=hud.counter(vx*cy+vz*sy,forward*cp+vy*sp,vy*cp-forward*sp);
     };
+    if(steer_cue==hud.Steering::ease_hatch||steer_cue==hud.Steering::ease_console){opposite=arrival_pulse;};
     i32 code=hud.packet(motion,cargo_phase,deck==1,cargo_locked,reach==1.0,reentry_exercise,atmosphere,far,delta_v==0.0,
                burn,orbit_warp>1.0,station_leg,mark,steer_cue,opposite);
     if(reentry_exercise && atmosphere){
@@ -1770,14 +1784,23 @@ unit(f32,i32,f32,f32) tick = fn(dt,keys,look_x,look_y) {
     state[13]=if(deck==0){-0.21}else{pilot_y-0.40+(arm_y()-pilot_y+0.40)*grip};
     state[14]=if(deck==0){-1.94}else{pilot_z-0.80+(arm_z()-pilot_z+0.80)*grip}; state[15]=core.sint_to_float<f32>(deck);
     state[16]=core.sint_to_float<f32>(station_leg); state[17]=if(cargo_locked){1.0}else{0.0};
-    steer_cue=hud.Steering::none;
+    steer_cue=hud.Steering::none;arrival_pulse=0;
     if(deck==1 && mode==0 && (alignment_stage<5 || for_hatch)){
         if(distance_sq<0.73 && !aligned){steer_cue=hud.Steering::face_rail;};
         if(distance_sq<0.94 && aligned && speed_sq>2.25){steer_cue=hud.Steering::slow_rail;};
         if(for_alignment || for_hatch){
             steer_cue=travel_hint;
-            if(nearby && !slow){steer_cue=hud.Steering::counterthrust;};
+            if((nearby && !slow)||approaching_stop_window(dock_x-pilot_x,dock_y-pilot_y,dock_z-pilot_z,distance_sq,speed_sq)){
+                steer_cue=hud.Steering::counterthrust;
+            };
             if(nearby && slow && !aligned){steer_cue=aim_hint;};
+            if(!nearby && slow && aligned && distance_sq<1.44){
+                steer_cue=if(for_hatch){hud.Steering::ease_hatch}else{hud.Steering::ease_console};
+                f32 ax0=dock_x-pilot_x;f32 ay0=dock_y-pilot_y;f32 az0=dock_z-pilot_z;
+                f32 forward0=ax0*sine(yaw)-az0*cosine(yaw);
+                arrival_pulse=hud.counter(-ax0*cosine(yaw)-az0*sine(yaw),-forward0*cosine(pitch)-ay0*sine(pitch),
+                    forward0*sine(pitch)-ay0*cosine(pitch));
+            };
         };
     };
     state[18]=hud.guidance_code(steer_cue);

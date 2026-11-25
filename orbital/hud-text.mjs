@@ -48,7 +48,9 @@ const messages=[
  ["Atmosphere reached","120 km interface crossed. Watch the descent at ×24. Thrusters cannot arrest this entry.","Coasting through entry","120 km interface · ×24"],
  ["Robot arm clearing","The cradle is carrying the load. Wait for the robot arm to clear.","Arm clearing","Arm clearing"],
  ["Entry heating","Hot gas is forming along the flight path. Switch camera to see the wake.","Entry in progress","Plasma heating · ×24"],
- ["Suit lost","The unshielded suit exceeded its heating limit in this exercise. Reset to replay.","Reset to replay","Heating limit exceeded"]
+ ["Suit lost","The unshielded suit exceeded its heating limit in this exercise. Reset to replay.","Reset to replay","Heating limit exceeded"],
+ ["Ease toward the hatch","Use a short thrust pulse to close the last gap, then match speed.","Out of reach","Pulse toward the hatch"],
+ ["Ease toward the console","Use a short thrust pulse to close the last gap, then match speed.","Out of reach","Pulse toward the console"]
 ];
 const sections=["TRAINING 01 / HANDRAIL","EVA / 1 OF 3","EVA / 2 OF 3","EVA / 3 OF 3","EVA / CARGO ALIGNMENT","EVA / AIRLOCK RETURN","ORBIT / REENTRY"];
 const arrow=["+","+","+","+","→","←","↑","↓"];
@@ -62,6 +64,12 @@ export function hudText(code,leg,touchLookSeen){
  const entry=messages[code&63], aim=(code>>>6)&7, route=Boolean(code&512);
  let [objective,tip,action,short=""]=typeof entry==="function"?entry(rails[leg],leg===0&&!touchLookSeen):entry;
  if(short===null)short=counter(code>>>19);
+ if((code&63)===44||(code&63)===45){
+  const local=code>>>19;
+  if(local&1)short="Aim down, then pulse";
+  else if(local&2)short="Aim up, then pulse";
+  else if(local&60)short=counter(local).replace("Thrust ","Pulse ");
+ }
  if(code&16384){tip="Propellant depleted. Existing drift continues.";short="Propellant depleted";}
  return {objective,tip,action,short,section:sections[(code>>>16)&7],
    aim:Boolean(aim),route,marker:route?(aim===4?"❯":"❮"):arrow[aim],

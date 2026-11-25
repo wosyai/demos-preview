@@ -1,7 +1,7 @@
 %%start
 enum Motion { floating; taking; held; pushing; }
 enum Cargo { rails; pin; approach; aligning; lowering; seated; closing; opening; parking; delivered; return_hatch; handle; locking; complete; }
-enum Steering { none; face_rail; slow_rail; counterthrust; right; left; up; down; hatch_right; hatch_left; }
+enum Steering { none; face_rail; slow_rail; counterthrust; right; left; up; down; hatch_right; hatch_left; ease_hatch; ease_console; }
 f32(Steering) guidance_code=fn(steering){
     f32 wire=0.0;
     if(steering==Steering::face_rail){wire=1.0;};
@@ -13,6 +13,8 @@ f32(Steering) guidance_code=fn(steering){
     if(steering==Steering::down){wire=7.0;};
     if(steering==Steering::hatch_right){wire=8.0;};
     if(steering==Steering::hatch_left){wire=9.0;};
+    if(steering==Steering::ease_hatch){wire=10.0;};
+    if(steering==Steering::ease_console){wire=11.0;};
     wire
 };
 
@@ -69,7 +71,7 @@ i32(Motion,Cargo,bool,bool,Steering,i32) outside=fn(motion,stage,locked,reach,cu
             if(motion==Motion::taking){message=12;}
             else{if(reach){message=13;}
             else{if(cue==Steering::counterthrust){message=14;}
-            else{if(aim_to_target(cue)){message=15;};};};};
+            else{if(aim_to_target(cue)){message=15;}else{if(cue==Steering::ease_console){message=45;};};};};};
         };
         if(stage==Cargo::aligning){message=16;};
         if(stage==Cargo::lowering){message=17;};
@@ -83,7 +85,7 @@ i32(Motion,Cargo,bool,bool,Steering,i32) outside=fn(motion,stage,locked,reach,cu
             if(motion==Motion::taking){message=25;}
             else{if(reach){message=26;}
             else{if(cue==Steering::counterthrust){message=27;}
-            else{if(aim_to_target(cue)){message=28;};};};};
+            else{if(aim_to_target(cue)){message=28;}else{if(cue==Steering::ease_hatch){message=44;};};};};};
         };
         if(stage==Cargo::handle){message=29;};
         if(stage==Cargo::locking){message=30;};

@@ -380,13 +380,43 @@ step();assert.equal(state[18],9,'the still-offscreen hatch gets a left cue befor
 step(64);assert.equal(state[9],0,'cargo is too far from hatch to grip');
 assert.equal(state[10],0);
 until(()=>state[18]===3,0,480);
+const hatchDistance=()=>Math.hypot(state[0]+.39,state[1]+.025,state[2]+1.86);
+assert.ok(hatchDistance()>.65&&hatchDistance()<1.20,'return cue precedes the .424 m grip volume without advertising maneuver at cast-off');
+hudIs("Match speed at the hatch",false);
 assert.equal(state[10],0,'coasting past the hatch does not count as a grip');
 step(64);assert.equal(state[9],0);
-step(0,.272,.34);
-while(Math.hypot(state[5],state[7])>.16)step(4);
-// Turn back toward the hatch long enough for the free body to catch up.
-for(let i=0;i<115&&state[10]!==1;i++)step(0,-.81-state[3],-.15-state[4]);
-step();
+step(0,0,-state[4]);
+for(let i=0;i<100&&Math.hypot(state[5],state[7])>.085;i++){
+ const yaw=state[3],pitch=state[4],vx=state[5],vy=state[6],vz=state[7];
+ const magnitude=Math.hypot(vx,vz);
+ engine.set_thrust(-(vx*Math.cos(yaw)+vz*Math.sin(yaw))/magnitude,-((vx*Math.sin(yaw)-vz*Math.cos(yaw))*Math.cos(pitch)+vy*Math.sin(pitch))/magnitude);
+ step(0);
+}
+engine.set_thrust(0,0);
+assert.ok(hatchDistance()>.45,'deliberately reacting immediately can stop outside grab reach');
+for(let i=0;i<80&&state[18]!==10;i++){
+ const aimX=-.94-state[0],aimY=-.14-state[1],aimZ=-2.48-state[2];
+ const yaw=Math.atan2(aimX,-aimZ),pitch=Math.asin(aimY/Math.hypot(aimX,aimY,aimZ));
+ step(0,yaw-state[3],pitch-state[4]);
+}
+assert.equal(state[18],10,JSON.stringify({state:[...state],hatchDistance:hatchDistance()}));
+hudIs("Ease toward the hatch",false);
+let sawPulse=hint().short.includes("ulse");
+const limitPulse=(n)=>Math.max(-.6,Math.min(.6,n));
+for(let i=0;i<450&&state[10]!==1;i++){
+ const dx=-.39-state[0],dy=-.025-state[1],dz=-1.86-state[2];
+ const aimX=-.94-state[0],aimY=-.14-state[1],aimZ=-2.48-state[2];
+ const yaw=Math.atan2(aimX,-aimZ),pitch=Math.asin(aimY/Math.hypot(aimX,aimY,aimZ));
+ const ax=limitPulse(dx*2-state[5]*2.8),az=limitPulse(dz*2-state[7]*2.8);
+ const localF=ax*Math.sin(state[3])-az*Math.cos(state[3]);
+ const localR=ax*Math.cos(state[3])+az*Math.sin(state[3]);
+ engine.set_thrust(localR,localF);
+ const ay=dy*2-state[6]*2.8-localF*Math.sin(state[4]);
+ step(Math.abs(ay)>.13?(ay>0?16:32)|256:0,yaw-state[3],pitch-state[4]);
+ if(state[18]===10){sawPulse=true;assert.ok(hint().short.includes("ulse"));}
+}
+engine.set_thrust(0,0);
+assert.ok(sawPulse,'when the pilot slowed out of reach, a directional pulse cue was shown');
 assert.equal(state[10],1,[...state].join(","));
 step(64);until(()=>state[19]===6,64);
  hudIs("Airlock handle secured",true);assert.equal(hint().section,"EVA / AIRLOCK RETURN");
