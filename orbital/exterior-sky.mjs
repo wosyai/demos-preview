@@ -1,4 +1,4 @@
-export const exteriorSky = `
+export const exteriorSky = profile => `
 uniform int starReady;
 uniform sampler2D starMap;
 uniform float earthAngle;
@@ -10,9 +10,7 @@ uniform float earthTexelAngle;
 vec3 orbitalStars(vec3 ray) {
   // Fixed world-to-atlas orientation. A turn away from the Sun uncovers
   // the atlas's dense dust lane; it is never centered on the camera.
-  const mat3 galaxy=mat3(.8124226,-.5092981,.2838750,
-                         .5136543,.8555399,.0648896,
-                         -.2759145,.0930958,.9566631);
+  const mat3 galaxy=mat3(${Array.from(profile.subarray(20,29),v=>v.toFixed(7)).join(",")});
   vec3 q=galaxy*ray;
   vec2 uv=vec2(atan(q.x,-q.z)*.159154943+.5,acos(clamp(q.y,-1.,1.))*.318309886);
   vec2 gx=dFdx(uv),gy=dFdy(uv);
@@ -25,16 +23,16 @@ vec3 orbitalStars(vec3 ray) {
 }
 vec3 orbitalMoon(vec3 backdrop,vec3 ray,vec3 sun) {
   // Showcase angular size, independent of the orbital dynamics.
-  vec3 M=normalize(vec3(.76,.57,-.31));
+  vec3 M=normalize(vec3(${Array.from(profile.subarray(14,17),v=>v.toFixed(2)).join(",")}));
   vec3 d=ray-M;
   float chord2=dot(d,d);
-  const float r2=.00372906;
+  const float r2=${profile[17].toFixed(8)};
   float edgeAA=max(fwidth(chord2),.000001);
   if(chord2>=r2+edgeAA*.65)return backdrop;
   float cover=1.-smoothstep(r2-edgeAA*.65,r2+edgeAA*.65,chord2);
   vec3 right=normalize(cross(M,vec3(0.,1.,0.)));
   vec3 up=cross(right,M);
-  vec2 disk=vec2(dot(ray,right),dot(ray,up))/.06104854;
+  vec2 disk=vec2(dot(ray,right),dot(ray,up))/${profile[18].toFixed(8)};
   float face=sqrt(max(0.,1.-dot(disk,disk)));
   vec3 normal=normalize(right*disk.x+up*disk.y-M*face);
   vec3 rock=moonReady==1?textureLod(moonMap,vec2(.5)+vec2(disk.x,-disk.y)*.495,0.).rgb:vec3(.59,128./255.,128./255.);
@@ -56,7 +54,7 @@ vec3 orbitalExterior(vec3 ray, vec3 backdrop, vec3 centerDir, float earthSinRadi
   // Angle from Sun expressed as half-chord; stable at dot ≈ 1.
   vec3 toSun=ray-S;
   float s2=dot(toSun,toSun);
-  float discRadius2=.0009869;
+  float discRadius2=${profile[19].toFixed(7)};
   float discAA=max(fwidth(s2),.000001);
   float disc=1.-smoothstep(discRadius2-discAA*.55,discRadius2+discAA*.55,s2);
   float beyond=max(0.,s2-discRadius2);

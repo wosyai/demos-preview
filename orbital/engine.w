@@ -6,12 +6,14 @@ globe = namespace orbital "globe-tiles.w";
 entry_view = namespace orbital "entry-presentation.w";
 control = namespace orbital "controls.w";
 render_policy = namespace orbital "render-budget.w";
+sky_art = namespace orbital "sky-art.w";
 host = extern wasm "orbital" {
     unsafe unit(*?u8,i32) scenery;
     unsafe unit(*?u8,i32) hull;
     unsafe unit(*?u8,i32) hands;
     unsafe unit(*?u8,i32) frame;
     unsafe unit(*?u8,i32) visual;
+    unsafe unit(*?u8,i32) hud_view;
 };
 f32[8] vertex = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0];
 f32[8][16] page0 = [vertex, vertex, vertex, vertex, vertex, vertex, vertex, vertex, vertex, vertex, vertex, vertex, vertex, vertex, vertex, vertex];
@@ -1982,4 +1984,84 @@ unit(f64,i32,i32,i32) quality_adapt=fn(period,live,full,software){
 };
 unit(f64,f64,f64,i32,i32) quality_plan=fn(w,h,dpr,full,software){render_policy.plan(w,h,dpr,full==1,software==1);};
 i32(i32,i32,i32,i32) quality_shadow=fn(full,hardware,coarse,maximum){render_policy.shadow(full==1,hardware==1,coarse==1,maximum)};
+f64[7] hud_view_row=[0.0,0.0,0.0,0.0,0.0,0.0,0.0];
+i32() hud_view=fn{
+    f64 hx=core.float_extend<f64>(state[3]);f64 hp=core.float_extend<f64>(state[4]);
+    f64 vx1=core.float_extend<f64>(state[5]);f64 vy1=core.float_extend<f64>(state[6]);f64 vz1=core.float_extend<f64>(state[7]);
+    f64 sy=projection.sin(hx);f64 cy=projection.cos(hx);f64 sp=projection.sin(hp);f64 cp=projection.cos(hp);
+    f64 along=(vx1*sy-vz1*cy)*cp+vy1*sp;
+    f64 side=vx1*cy+vz1*sy;
+    f64 speed=projection.norm(vx1,vy1,vz1);
+    bool entry=state[32]==1.0&&state[29]==1.0;
+    i32 code=hud_code();
+    hud_view_row[0]=speed;
+    hud_view_row[1]=projection.atan2(side,along);
+    hud_view_row[2]=if(speed>0.08&&!entry){1.0}else{0.0};
+    hud_view_row[3]=if(entry){1.0}else{0.0};
+    hud_view_row[4]=if((code&63)==43){1.0}else{0.0};
+    hud_view_row[5]=if(station_leg==0&&(control.status()&1)==0){1.0}else{0.0};
+    hud_view_row[6]=core.sint_to_float<f64>(hud.copy_intent(code));
+    unsafe {host.hud_view(core.pointer_cast<*?u8>(&?hud_view_row[0]),7);};
+    code
+};
+unit() celestial_profile=fn{sky_art.publish();};
+bool drew_view=false;
+bool saw_spin=false;
+bool drew_avatar=false;
+i32 draw_epoch=-1;
+i32 draw_width=0;
+i32 draw_height=0;
+f64 draw_spin=0.0;
+f64[60] last_view=presentation;
+u64[10] motion_lanes=[21,22,23,24,25,33,34,35,36,43];
+bool(u64) matching_movement=fn(i){
+    if(i==10){true}else{
+        u64 lane=motion_lanes[i];
+        last_view[lane]==presentation[lane]&&matching_movement(i+1)
+    }
+};
+i32(i32,i32,i32,i32,i32) draw_plan=fn(epoch,width,height,avatar,sky){
+    bool outside=presentation[15]==1.0;
+    bool equipped=outside&&avatar==1;
+    bool orbit_enabled=outside&&sky==1;
+    bool sky_moved=orbit_enabled&&(!saw_spin||projection.abs(presentation[48]-draw_spin)>=0.0006);
+    bool evolving=presentation[59]==1.0;
+    bool same=drew_view&&draw_epoch==epoch&&draw_width==width&&draw_height==height&&
+        last_view[41]==presentation[41]&&last_view[42]==presentation[42]&&
+        projection.abs(last_view[38]-presentation[38])<0.00002&&projection.abs(last_view[39]-presentation[39])<0.00002&&
+        projection.abs(last_view[40]-presentation[40])<0.00002&&last_view[8]==presentation[8]&&last_view[20]==presentation[20]&&
+        last_view[10]==presentation[10]&&drew_avatar==equipped&&(!equipped||matching_movement(0))&&!sky_moved&&!evolving;
+    if(same){0}else{
+        bool holding=drew_view&&projection.abs(last_view[41]-presentation[41])<0.001&&projection.abs(last_view[42]-presentation[42])<0.001;
+        if(sky_moved){draw_spin=presentation[48];saw_spin=true;};
+        draw_epoch=epoch;draw_width=width;draw_height=height;drew_avatar=equipped;drew_view=true;
+        last_view=presentation;
+        if(holding){2}else{1}
+    }
+};
+bool cached_sky=false;
+i32 cached_width=0;i32 cached_height=0;
+i32 cached_photo=0;i32 cached_star=0;i32 cached_moon=0;i32 cached_tiles=0;
+f64[60] cached_projection=presentation;
+bool(u64) keep_planet=fn(i){
+    if(i==53){true}else{projection.abs(presentation[i]-cached_projection[i])<0.0006&&keep_planet(i+1)}
+};
+i32(i32,i32,i32,i32,i32,i32,i32) sky_plan=fn(width,height,upgraded,photo,stars,moon,tile_epoch){
+    bool eva=presentation[15]==1.0;
+    bool orbit_needed=eva&&upgraded==1;
+    bool same=cached_sky&&cached_width==width&&cached_height==height&&
+        projection.abs(cached_projection[41]-presentation[41])<0.001&&
+        projection.abs(cached_projection[42]-presentation[42])<0.001&&
+        cached_projection[15]==presentation[15]&&cached_photo==photo&&cached_projection[47]==presentation[47]&&
+        cached_tiles==tile_epoch&&(!orbit_needed||(cached_star==stars&&cached_moon==moon&&
+            projection.abs(cached_projection[48]-presentation[48])<0.0006&&keep_planet(49)));
+    if(same){0}else{
+        cached_sky=true;cached_width=width;cached_height=height;
+        cached_photo=photo;cached_star=stars;cached_moon=moon;cached_tiles=tile_epoch;
+        cached_projection=presentation;
+        1
+    }
+};
+i32(i32,i32) globe_request=fn(mask,in_flight){globe.request(mask,in_flight)};
+f64(f64) globe_retry=fn(now){globe.retry(now)};
 %%end

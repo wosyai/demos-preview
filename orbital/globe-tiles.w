@@ -82,4 +82,15 @@ bool(f64,f64,f64,f64,f64,f64,f64,f64,f64,f64,f64,f64,f64,f64,f64) scan=fn(now,he
     }
 };
 unit() publish=fn{unsafe {bridge.earth_tiles(core.pointer_cast<*?u8>(&?tiles[0]),19);};};
+i32(i32,i32,i32,f64) choose=fn(slot,mask,best,weight){
+    if(slot==9){best}else{
+        bool allowed=(mask&(1<<slot))!=0;
+        u64 index=core.int_extend<u64>(slot);
+        f64 score=tiles[10+index];
+        if(allowed&&IDs[index]>=0&&score>weight){choose(slot+1,mask,slot,score)}
+        else{choose(slot+1,mask,best,weight)}
+    }
+};
+i32(i32,i32) request=fn(mask,in_flight){if(in_flight>=2){-1}else{choose(0,mask,-1,-1.0)}};
+f64(f64) retry=fn(now){now+60000.0};
 %%end

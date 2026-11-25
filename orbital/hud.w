@@ -132,4 +132,14 @@ fn(motion,stage,eva,locked,reach,reentry,entry,far,depleted,burn,warping,leg,mar
     (flag(far&&eva&&!entry)<<12) | (flag(far)<<13) | (flag(depleted&&eva&&!reentry&&motion==Motion::floating&&!entry&&!far)<<14) |
     (flag(burn)<<15) | (section<<16) | (opposite<<19)
 };
+enum CopyIntent { ordinary; counterthrust; arrival_pulse; empty_tank; }
+i32(i32) copy_intent=fn(code){
+    i32 message=code&63;
+    CopyIntent intent=if((code&16384)!=0){CopyIntent::empty_tank}
+        else{if(message==44||message==45){CopyIntent::arrival_pulse}
+        else{if(message==6||message==14||message==27){CopyIntent::counterthrust}
+        else{CopyIntent::ordinary}}};
+    if(intent==CopyIntent::empty_tank){3}else{if(intent==CopyIntent::arrival_pulse){2}
+    else{if(intent==CopyIntent::counterthrust){1}else{0}}}
+};
 %%end

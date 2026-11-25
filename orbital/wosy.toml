@@ -54,6 +54,12 @@ input_advance = "input_advance"
 quality_adapt = "quality_adapt"
 quality_plan = "quality_plan"
 quality_shadow = "quality_shadow"
+hud_view = "hud_view"
+celestial_profile = "celestial_profile"
+draw_plan = "draw_plan"
+sky_plan = "sky_plan"
+globe_request = "globe_request"
+globe_retry = "globe_retry"
 
 [targets.app.profiles.dev]
 main_artifact = "main"

@@ -1,10 +1,10 @@
 // Ground truth is the same VIIRS acquisition at two scales. Only the visible
 // fine luminance pages live on the GPU; the base photograph owns global color.
-export function earthDetail(gl,program,invalidate,query) {
- const NX=32,NY=16,S=1024,slots=9,unit=8;
+export function earthDetail(gl,program,invalidate,query,request,backoff) {
+ const NX=32,S=1024,slots=9,unit=8;
  const [pagesLoc,mapLoc,pixelLoc]=['earthPages[0]','earthFine','earthTexelAngle'].map(k=>gl.getUniformLocation(program,k));
  const names=new Int32Array(slots).fill(-1), desired=new Int32Array(slots).fill(-1);
- const priority=new Float64Array(slots),tasks=new Set(),retry=new Map();
+ const tasks=new Set(),retry=new Map();
  let gpu=gl.createTexture(),large=false,version=0,seen=-1,pixelAngle=1;
  const bind=()=>{gl.activeTexture(gl.TEXTURE0+unit);gl.bindTexture(gl.TEXTURE_2D_ARRAY,gpu);};
  const allocate=(w,d)=>{bind();gl.texStorage3D(gl.TEXTURE_2D_ARRAY,w===1?1:4,gl.R8,w,w,d);
@@ -14,11 +14,10 @@ export function earthDetail(gl,program,invalidate,query) {
    for(const dir of [gl.TEXTURE_WRAP_S,gl.TEXTURE_WRAP_T])gl.texParameteri(gl.TEXTURE_2D_ARRAY,dir,gl.CLAMP_TO_EDGE);
  };
  allocate(1,1);
- const slot=id=>(id%NX)%3+3*(Math.floor(id/NX)%3);
- function load(id) {
+ function load(id,layer) {
    tasks.add(id);
-   const image=new Image(),x=id%NX,y=Math.floor(id/NX),layer=slot(id);
-   const failed=()=>{retry.set(id,performance.now()+60000);};
+   const image=new Image(),x=id%NX,y=Math.floor(id/NX);
+   const failed=()=>{retry.set(id,backoff(performance.now()));};
    image.onload=async()=>{
      let mips=[];
      try{
@@ -38,18 +37,22 @@ export function earthDetail(gl,program,invalidate,query) {
  }
  function pump(){
    const now=performance.now();
-   while(tasks.size<2){
-     let pick=-1,w=0;
-     for(let i=0;i<slots;i++){const id=desired[i];if(id<0||id===names[i]||tasks.has(id)||(retry.get(id)||0)>now)continue;
-       if(priority[i]>w){pick=id;w=priority[i];}}
-     if(pick<0)break;load(pick);
+   for(;;){
+     let available=0;
+     for(let i=0;i<slots;i++){
+       const id=desired[i];
+       if(id>=0&&id!==names[i]&&!tasks.has(id)&&(retry.get(id)||0)<=now)available|=1<<i;
+     }
+     const layer=request(available,tasks.size);
+     if(layer<0)break;
+     load(desired[layer],layer);
    }
  }
  function update(height){
    const {row,scanned}=query(performance.now(),height);
    pixelAngle=row[0];
    if(!scanned)return;
-   desired.set(row.subarray(1,10));priority.set(row.subarray(10,19));
+   desired.set(row.subarray(1,10));
    pump();
  }
  return {update,bind(){bind();gl.uniform1i(mapLoc,unit);gl.uniform1f(pixelLoc,pixelAngle);if(seen!==version){gl.uniform1iv(pagesLoc,names);seen=version;}}};
