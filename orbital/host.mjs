@@ -9,6 +9,7 @@ const options=new URLSearchParams(location.search);
 let nativeQuality=options.get("quality")==="full";
 const wantsApollo=options.get("suit")!=="procedural";
 const upgradedSky=options.get("sky")!=="legacy";
+const upgradedPractical=options.get("practical")!=="legacy";
 const gl = canvas.getContext("webgl2", {alpha:false, antialias:false, preserveDrawingBuffer:false});
 const rendererInfo=gl?.getExtension("WEBGL_debug_renderer_info");
 const rendererLabel=rendererInfo?String(gl.getParameter(rendererInfo.UNMASKED_RENDERER_WEBGL)):"";
@@ -86,6 +87,7 @@ uniform int eva;
 uniform highp sampler2DShadow sunMap;
 uniform int detailedShadow;
 uniform int lightingUpgrade;
+uniform bool practicalLighting;
 uniform vec3 earthBounceDir;
 uniform vec4 gripContact;
 uniform float gripRadius;
@@ -115,6 +117,43 @@ float shadowAt(vec3 p,vec3 n,float direct){
  float depth=u.z-(.00021+.00030*incline);
  return texture(sunMap,vec3(u.xy,depth));
 }
+// Wosy transfer_hatch lamp-centre coordinates (right, up, depth).
+// Top and bottom rim fixtures face inward/down; recessed lamps throw forward
+// through the cavity. The local baffle suppresses light behind the pressure skin.
+vec2 practicalSource(vec3 P, vec3 N, vec3 V, vec3 source, vec3 axis, float power, float roughness) {
+  vec3 d=source-P;
+  float rr=dot(d,d);
+  if(rr>.77)return vec2(0.);
+  vec3 L=d*inversesqrt(max(rr,.0001));
+  float receive=max(dot(N,L),0.);
+  float cosine=dot(-L,axis);
+  if(cosine<-.23)return vec2(0.);
+  float beam=smoothstep(-.23,.58,cosine);
+  float range=1.-smoothstep(.29,.77,rr);
+  float a=power*beam*range/(rr+.026);
+  vec3 H=normalize(L+V);
+  float soft=pow(max(dot(N,H),0.),mix(54.,12.,roughness));
+  return vec2(receive+.11,receive*soft)*a;
+}
+vec2 servicePractical(vec3 p,vec3 n,vec3 viewDir,float roughness,out bool inPort) {
+  inPort=false;
+  vec3 r=p-vec3(-1.10,.20,-6.39);
+  if(abs(r.x)>1.22||abs(r.y)>1.18||r.z<-.95||r.z>.79)return vec2(0.);
+  vec3 xAxis=vec3(.926,0.,-.378),zAxis=vec3(.378,0.,.926);
+  vec3 P=vec3(dot(r,xAxis),r.y,dot(r,zAxis));
+  float radius2=dot(P.xy,P.xy);
+  if(P.z<-.67||P.z>.32||radius2>1.248)return vec2(0.);
+  inPort=true;
+  vec3 N=vec3(dot(n,xAxis),n.y,dot(n,zAxis));
+  vec3 V=normalize(vec3(dot(viewDir,xAxis),viewDir.y,dot(viewDir,zAxis)));
+  float mask=(1.-smoothstep(.80,1.19,radius2))*smoothstep(-.672,-.629,P.z)*(1.-smoothstep(.17,.32,P.z));
+  vec2 C=practicalSource(P,N,V,vec3(-.001,.646,.177),vec3(0.,-.77,-.64),.108,roughness);
+  C+=practicalSource(P,N,V,vec3(-.001,-.643,.177),vec3(0.,.77,-.64),.116,roughness);
+  C+=practicalSource(P,N,V,vec3(-.3695,-.239,-.473),vec3(.34,.29,.89),.082,roughness);
+  C+=practicalSource(P,N,V,vec3(.3655,.286,-.470),vec3(-.31,-.27,.91),.086,roughness);
+  return min(vec2(.89,.48),C*mask);
+}
+
 vec3 sunColor(vec3 n){
  bool steel=material.y>.56 && material.y<.69;
  bool emitter=material.y>.8;
@@ -152,6 +191,16 @@ vec3 sunColor(vec3 n){
  vec3 sheet=texel.rgb;
  float polish=pressure?47.:layer==1.?70.:layer==3.?36.:layer==5.?40.:29.;
  float metal=pressure?.17:layer==1.?.49:layer==3.?.21:solar?.18:.075;
+ float roughness=.60;
+ if(practicalLighting&&steel&&layer==1.&&!foil&&!suit){
+   // Oxide patches vary the highlight on the same sampled weathering map,
+   // not by placing a color filter over the material or the sunlight.
+   float burnish=smoothstep(.29,.73,texel.r);
+   roughness=mix(.74,.28,burnish);
+   polish=mix(25.,81.,burnish);
+   metal*=mix(.82,1.18,burnish);
+ }
+ if(practicalLighting&&foil){roughness=.73;polish=19.;metal*=.72;}
  if(skin){
    vec3 q=cross(dFdy(world),n),p=cross(n,dFdx(world));
    vec2 a=dFdx(uv),b=dFdy(uv);
@@ -231,7 +280,12 @@ vec3 sunColor(vec3 n){
      energy*=1.-.46*gripContact.w*surface*across*cover;
    }
  }
- if(material.x>1.)energy+=(material.x-1.)*col*vec3(1.24,.66,.28);
+ bool inPort=false;
+ if(practicalLighting){
+   vec2 warm=servicePractical(world,n,eye-world,roughness,inPort);
+   energy+=col*vec3(1.34,.55,.22)*warm.x+vec3(.90,.41,.14)*metal*warm.y;
+ }
+ if(material.x>1.)energy+=(material.x-1.)*col*vec3(1.24,.66,.28)*(inPort?.18:1.);
  if(emitter) energy+=col*.53;
  return pow(max(vec3(0.),energy/(energy*.48+vec3(.85))),vec3(.79));
 }
@@ -379,7 +433,7 @@ function program(a,b) {
  }
  gl.linkProgram(p);
  if(!gl.getProgramParameter(p,gl.LINK_STATUS))throw Error(gl.getProgramInfoLog(p));
- return {p, eye:gl.getUniformLocation(p,"eye"), basis:gl.getUniformLocation(p,"basis"), optics:gl.getUniformLocation(p,"optics"), roll:gl.getUniformLocation(p,"roll"), eva:gl.getUniformLocation(p,"eva"), photo:gl.getUniformLocation(p,"photo"), earth:gl.getUniformLocation(p,"earthMap"),starMap:gl.getUniformLocation(p,"starMap"),starReady:gl.getUniformLocation(p,"starReady"),upgradedSky:gl.getUniformLocation(p,"upgradedSky"),orbitCenter:gl.getUniformLocation(p,"orbitCenter"),earthAngle:gl.getUniformLocation(p,"earthAngle"), backdrop:gl.getUniformLocation(p,"backdrop"), sunMap:gl.getUniformLocation(p,"sunMap"),armPose:gl.getUniformLocation(p,"armPose"),armSurfaceReady:gl.getUniformLocation(p,"armSurfaceReady"),panelStampReady:gl.getUniformLocation(p,"panelStampReady"),pressureStampReady:gl.getUniformLocation(p,"pressureStampReady"),fasciaStampReady:gl.getUniformLocation(p,"fasciaStampReady"), renderFraction:gl.getUniformLocation(p,"renderFraction"),surfaceTile:gl.getUniformLocation(p,"surfaceTile"), routeLens:gl.getUniformLocation(p,"routeLens"), routeReach:gl.getUniformLocation(p,"routeReach"), detailedShadow:gl.getUniformLocation(p,"detailedShadow"),lightingUpgrade:gl.getUniformLocation(p,"lightingUpgrade"),earthBounceDir:gl.getUniformLocation(p,"earthBounceDir"),gripContact:gl.getUniformLocation(p,"gripContact"),gripRadius:gl.getUniformLocation(p,"gripRadius")};
+ return {p, eye:gl.getUniformLocation(p,"eye"), basis:gl.getUniformLocation(p,"basis"), optics:gl.getUniformLocation(p,"optics"), roll:gl.getUniformLocation(p,"roll"), eva:gl.getUniformLocation(p,"eva"), photo:gl.getUniformLocation(p,"photo"), earth:gl.getUniformLocation(p,"earthMap"),starMap:gl.getUniformLocation(p,"starMap"),starReady:gl.getUniformLocation(p,"starReady"),upgradedSky:gl.getUniformLocation(p,"upgradedSky"),orbitCenter:gl.getUniformLocation(p,"orbitCenter"),earthAngle:gl.getUniformLocation(p,"earthAngle"), backdrop:gl.getUniformLocation(p,"backdrop"), sunMap:gl.getUniformLocation(p,"sunMap"),armPose:gl.getUniformLocation(p,"armPose"),armSurfaceReady:gl.getUniformLocation(p,"armSurfaceReady"),panelStampReady:gl.getUniformLocation(p,"panelStampReady"),pressureStampReady:gl.getUniformLocation(p,"pressureStampReady"),fasciaStampReady:gl.getUniformLocation(p,"fasciaStampReady"), renderFraction:gl.getUniformLocation(p,"renderFraction"),surfaceTile:gl.getUniformLocation(p,"surfaceTile"), routeLens:gl.getUniformLocation(p,"routeLens"), routeReach:gl.getUniformLocation(p,"routeReach"), detailedShadow:gl.getUniformLocation(p,"detailedShadow"),lightingUpgrade:gl.getUniformLocation(p,"lightingUpgrade"),practicalLighting:gl.getUniformLocation(p,"practicalLighting"),earthBounceDir:gl.getUniformLocation(p,"earthBounceDir"),gripContact:gl.getUniformLocation(p,"gripContact"),gripRadius:gl.getUniformLocation(p,"gripRadius")};
 }
 const coarseShadow=matchMedia("(pointer:coarse)").matches;
 const maxShadow=gl?gl.getParameter(gl.MAX_TEXTURE_SIZE):1024;
@@ -552,8 +606,9 @@ function render(alpha) {
  if(holdingAngle)bakeBackdrop(bind,w,h,eva,heading,pitch,roll,orbit);
  gl.clear(gl.DEPTH_BUFFER_BIT);
  gl.enable(gl.DEPTH_TEST);bind(scene);
- gl.uniform1i(scene.lightingUpgrade,Number(upgradedSky));gl.uniform3fv(scene.earthBounceDir,orbit.center.slice(0,3));
- const contact=body&&!apolloModelActive?stationGrip(pose):null;
+ gl.uniform1i(scene.practicalLighting,Number(upgradedPractical));gl.uniform1i(scene.lightingUpgrade,Number(upgradedSky));gl.uniform3fv(scene.earthBounceDir,orbit.center.slice(0,3));
+ // Both suit solvers use this same Wosy-derived rail anchor; shade only in contact.
+ const contact=body&&(!apolloModelActive||upgradedPractical)?stationGrip(pose):null;
  if(contact){gl.uniform4f(scene.gripContact,...contact.center,contact.progress);gl.uniform1f(scene.gripRadius,contact.radius);}
  else gl.uniform4f(scene.gripContact,0,0,0,0);
  gl.uniform1i(scene.routeLens,pose[20]);gl.uniform1i(scene.routeReach,pose[10]);
