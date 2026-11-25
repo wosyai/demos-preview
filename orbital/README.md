@@ -91,6 +91,10 @@ spherical photographic Earth backdrop. Earth imagery:
 Amy Moran and Jesse Allen, from Suomi NPP VIIRS. The image is presented in a
 fictional orbit and does not imply NASA endorsement.
 
+Lunar albedo and relief: NASA Goddard Scientific Visualization Studio,
+[CGI Moon Kit](https://svs.gsfc.nasa.gov/4720/) (LRO WAC and LOLA).
+Relief is exaggerated for readability.
+
 The Apollo model and its textures are third-party assets outside the project
 license. See [Apollo NOTICE](art/apollo-NOTICE) for attribution and terms.
 [Art sources, credit, and two-pose export](art/README.md).

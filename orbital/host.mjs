@@ -1,7 +1,7 @@
 import {hudText} from "./hud-text.mjs?v=5";
 import {reentryGlow} from "./reentry-glow.mjs?v=1";
 import {earthDetail} from "./earth-detail.mjs";
-import {exteriorSky} from "./exterior-sky.mjs?v=4";
+import {exteriorSky} from "./exterior-sky.mjs?v=5";
 import {chaseView,loadApolloBody,loadProceduralSuit,stationGrip} from "./apollo-body.mjs?v=14";
 const $ = id => document.getElementById(id);
 const canvas = $("view");
@@ -1055,7 +1055,7 @@ try{
  starTexture=gl.createTexture();gl.activeTexture(gl.TEXTURE7);gl.bindTexture(gl.TEXTURE_2D,starTexture);
  gl.texImage2D(gl.TEXTURE_2D,0,gl.RGB,1,1,0,gl.RGB,gl.UNSIGNED_BYTE,new Uint8Array([0,0,0]));
  moonTexture=gl.createTexture();gl.activeTexture(gl.TEXTURE9);gl.bindTexture(gl.TEXTURE_2D,moonTexture);
- gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA,1,1,0,gl.RGBA,gl.UNSIGNED_BYTE,new Uint8Array([153,153,153,255]));
+ gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA,1,1,0,gl.RGBA,gl.UNSIGNED_BYTE,new Uint8Array([150,128,128,255]));
  gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MIN_FILTER,gl.LINEAR);
  gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MAG_FILTER,gl.LINEAR);
  gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_S,gl.CLAMP_TO_EDGE);
@@ -1069,14 +1069,14 @@ try{
    gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MIN_FILTER,gl.LINEAR_MIPMAP_LINEAR);gl.generateMipmap(gl.TEXTURE_2D);
    starReady=1;worldVersion++;
   };
-  stars.src=new URL("./starfield.jpg?v=1",import.meta.url).href;
+  stars.src=new URL("./starfield.jpg?v=2",import.meta.url).href;
   const moon=new Image();
   moon.onload=()=>{
    gl.activeTexture(gl.TEXTURE9);gl.bindTexture(gl.TEXTURE_2D,moonTexture);
    gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA,gl.RGBA,gl.UNSIGNED_BYTE,moon);
    moonReady=1;worldVersion++;
   };
-  moon.src=new URL("./moon-albedo.jpg?v=1",import.meta.url).href;
+  moon.src=new URL("./moon-relief.webp?v=1",import.meta.url).href;
  }
  const response=await fetch(new URL("./orbital.wasm?v=46",import.meta.url));
  if(!response.ok)throw Error("The station engine could not be downloaded.");
