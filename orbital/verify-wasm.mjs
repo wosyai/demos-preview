@@ -253,6 +253,7 @@ until(()=>state[19]===1,0);assert.equal(state[10],0);
 until(()=>state[0]>.77,0);
 assert.equal(state[18],3);assert.equal(state[10],0,'drifting through reach is not sufficient');
  hudIs("Match speed at the console",false);assert.equal(hint().short,"Thrust left");
+assert.ok(hint().tip.startsWith("Thrust left to slow down."),"desktop help exposes the same real counterthrust direction");
 step(64);assert.equal(state[9],0);
 engine.set_thrust(-1,0);while(state[5]>.08)step(256);engine.set_thrust(0,0);step();
 assert.equal(state[18],4);assert.equal(state[10],0,'counterthrust does not bypass aim');
@@ -383,6 +384,7 @@ until(()=>state[18]===3,0,480);
 const hatchDistance=()=>Math.hypot(state[0]+.39,state[1]+.025,state[2]+1.86);
 assert.ok(hatchDistance()>.65&&hatchDistance()<1.20,'return cue precedes the .424 m grip volume without advertising maneuver at cast-off');
 hudIs("Match speed at the hatch",false);
+assert.ok(hint().tip.startsWith(hint().short),"hatch counterthrust direction reaches both responsive displays");
 assert.equal(state[10],0,'coasting past the hatch does not count as a grip');
 step(64);assert.equal(state[9],0);
 step(0,0,-state[4]);
@@ -401,6 +403,7 @@ for(let i=0;i<80&&state[18]!==10;i++){
 }
 assert.equal(state[18],10,JSON.stringify({state:[...state],hatchDistance:hatchDistance()}));
 hudIs("Ease toward the hatch",false);
+assert.ok(hint().tip.startsWith(hint().short),"directional approach pulse reaches both viewports");
 let sawPulse=hint().short.includes("ulse");
 const limitPulse=(n)=>Math.max(-.6,Math.min(.6,n));
 for(let i=0;i<450&&state[10]!==1;i++){

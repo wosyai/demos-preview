@@ -63,12 +63,19 @@ function counter(face){
 export function hudText(code,leg,touchLookSeen){
  const entry=messages[code&63], aim=(code>>>6)&7, route=Boolean(code&512);
  let [objective,tip,action,short=""]=typeof entry==="function"?entry(rails[leg],leg===0&&!touchLookSeen):entry;
- if(short===null)short=counter(code>>>19);
+ if(short===null){
+  const direction=code>>>19;
+  short=counter(direction);
+  if(direction&63){
+   tip=(direction&3?short+", then thrust.":short+" to slow down.")+" Releasing thrust does not stop you.";
+  }
+ }
  if((code&63)===44||(code&63)===45){
   const local=code>>>19;
   if(local&1)short="Aim down, then pulse";
   else if(local&2)short="Aim up, then pulse";
   else if(local&60)short=counter(local).replace("Thrust ","Pulse ");
+  tip=short+". Use a short pulse, then match speed.";
  }
  if(code&16384){tip="Propellant depleted. Existing drift continues.";short="Propellant depleted";}
  return {objective,tip,action,short,section:sections[(code>>>16)&7],

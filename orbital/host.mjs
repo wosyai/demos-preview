@@ -1,4 +1,4 @@
-import {hudText} from "./hud-text.mjs?v=4";
+import {hudText} from "./hud-text.mjs?v=5";
 import {reentryGlow} from "./reentry-glow.mjs?v=1";
 import {earthDetail} from "./earth-detail.mjs";
 import {exteriorSky} from "./exterior-sky.mjs?v=3";
