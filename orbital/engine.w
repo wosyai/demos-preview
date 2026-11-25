@@ -2,6 +2,7 @@
 station = namespace orbital "station.w";
 hud = namespace orbital "hud.w";
 packing = namespace orbital "indexed-pack.w";
+material_scene = namespace orbital "station-material.w";
 projection = namespace orbital "presentation.w";
 globe = namespace orbital "globe-tiles.w";
 entry_view = namespace orbital "entry-presentation.w";
@@ -327,7 +328,7 @@ unit(i32) blanket = fn(n) {
         f32 yy=core.sint_to_float<f32>(n%3)*0.86-1.62;
         f32 zz=-11.6+core.sint_to_float<f32>(n/3)*2.48;
         f32 tint=0.77+0.027*core.sint_to_float<f32>(n%4);
-        paint(tint,tint*0.97,tint*0.90,if(n==7){0.18375}else{if(n==8){0.18525}else{0.18}});
+        paint(tint,tint*0.97,tint*0.90,if(n==7){material_scene.blanket_lower()}else{if(n==8){material_scene.blanket_upper()}else{0.18}});
         quilt_panel(yy,zz,0.031+core.sint_to_float<f32>(n%3)*0.014,n==7||n==8);
         paint(0.37,0.38,0.39,0.15);
         quad(-1.475,yy,zz,-1.475,yy+0.81,zz,-1.475,yy+0.81,zz+0.027,-1.475,yy,zz+0.027,0.69);
@@ -436,7 +437,7 @@ unit(i32) traversal_rail = fn(leg) {
         pt(0.239,-0.467,z+0.106,0.92);
         pt(0.197,-0.426,z+0.106,0.92);
     };
-    paint(0.53,0.54,0.54,0.6205);
+    paint(0.53,0.54,0.54,material_scene.walk_rail());
     if(leg==2){
         round_shell(-1.55,-0.57,z,-0.55,-0.57,z,0.087,0.087,0,0,36);
         round_shell(0.30,-0.57,z,0.95,-0.57,z,0.087,0.087,0,0,24);
@@ -529,7 +530,7 @@ unit(f32,f32,f32,f32,f32,i32) fascia_ring = fn(dy,scale0,scale1,z0,z1,k){
 unit(f32) cargo_fascia = fn(dy){
     paint(0.24,0.30,0.31,0.66);
     fascia_ring(dy,1.03,1.0,-6.671,-6.614,0);
-    f32 tagged=0.75625-dy*0.00625;
+    f32 tagged=material_scene.cargo_fascia()-dy*material_scene.fascia_step();
     paint(0.62,0.64,0.63,tagged);
     fascia_ring(dy,1.0,0.94,-6.614,-6.579,0);
     fascia_ring(dy,0.94,0.79,-6.579,-6.577,0);
@@ -957,7 +958,8 @@ unit(f32,f32,f32) port_vertex = fn(u,v,depth){
         f32 bounce=upper*1.25+lower*0.96;
         r=r*(0.69+bounce*3.65);g=g*(0.70+bounce*2.38);b=b*(0.74+bounce*1.05);
     };
-    pt(-1.10+u*0.926+depth*0.378,0.20+v,-6.39-u*0.378+depth*0.926,exposure);
+    f32 c=material_scene.port_frame(3);f32 sn=material_scene.port_frame(4);
+    pt(material_scene.port_frame(0)+u*c+depth*sn,material_scene.port_frame(1)+v,material_scene.port_frame(2)-u*sn+depth*c,exposure);
     r=red;g=green;b=blue;
 };
 unit(f32,f32,f32,f32,f32,f32,f32,f32,f32,f32,f32,f32) port_quad = fn(u0,v0,d0,u1,v1,d1,u2,v2,d2,u3,v3,d3){
@@ -1028,6 +1030,9 @@ unit() port_liner = fn {
     port_quad(-0.225,-0.428,0.041,-0.197,-0.428,0.041,-0.197,-0.428,-0.57,-0.225,-0.428,-0.57);
     port_quad(0.197,-0.428,0.041,0.225,-0.428,0.041,0.225,-0.428,-0.57,0.197,-0.428,-0.57);
 };
+unit(u64) port_authored_lamp=fn(lane){
+    port_lamp(material_scene.housing(lane,0),material_scene.housing(lane,1),material_scene.housing(lane,2));
+};
 unit() transfer_hatch = fn {
     paint(0.37,0.39,0.41,0.67);port_skin(0.91,-0.57,0.91,-0.045,0);
     port_finish=1;
@@ -1047,10 +1052,7 @@ unit() transfer_hatch = fn {
     port_plate(-0.098,-0.688,0.195,0.028,0.166);
     port_dynamic_only=true;port_liner();port_dynamic_only=false;
     port_fasteners(0);
-    port_lamp(-0.063,0.611,0.165);
-    port_lamp(-0.063,-0.678,0.165);
-    port_lamp(-0.432,-0.274,-0.485);
-    port_lamp(0.303,0.251,-0.482);
+    port_authored_lamp(0);port_authored_lamp(1);port_authored_lamp(2);port_authored_lamp(3);
     paint(0.14,0.15,0.15,0.64);port_plate(0.56,-0.285,0.12,0.29,0.171);
     paint(0.15,0.66,0.71,0.93);port_plate(0.586,-0.244,0.061,0.024,0.178);
     paint(0.30,0.28,0.25,0.65);
@@ -1093,8 +1095,8 @@ unit(f32,f32,f32,f32,i32) pressure_bay=fn(low,high,a,far,k){
     paint(0.54,0.57,0.55,0.62);
     quad(back,low,far,back,high,far,face,hi,bb,face,lo,bb,0.89);
     quad(back,high,a,face,hi,aa,face,hi,bb,back,high,far,0.92);
-    if(k%3==0){paint(0.76,0.77,0.72,0.752);}else{
-     if(k%3==1){paint(0.53,0.58,0.59,0.752);}else{paint(0.66,0.67,0.59,0.752);};
+    if(k%3==0){paint(0.76,0.77,0.72,material_scene.pressure_skin());}else{
+     if(k%3==1){paint(0.53,0.58,0.59,material_scene.pressure_skin());}else{paint(0.66,0.67,0.59,material_scene.pressure_skin());};
     };
     quad(face,lo,aa,face,hi,aa,face,hi,bb,face,lo,bb,0.93);
 };
@@ -2130,4 +2132,5 @@ i32(i32,i32,i32,i32,i32,i32,i32) sky_plan=fn(width,height,upgraded,photo,stars,m
 };
 i32(i32,i32) globe_request=fn(mask,in_flight){globe.request(mask,in_flight)};
 f64(f64) globe_retry=fn(now){globe.retry(now)};
+unit() material_profile=fn{material_scene.publish();};
 %%end

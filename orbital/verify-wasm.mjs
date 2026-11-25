@@ -7,11 +7,11 @@ const path=process.argv[2] ?? new URL('./orbital.wasm',import.meta.url);
 const wasm=new WebAssembly.Module(readFileSync(path));
 const imports=WebAssembly.Module.imports(wasm);
 const actual=imports.map(({module,name,kind})=>`${module}.${name}:${kind}`).sort();
-const orbitalImports=['orbital.earth_tiles:function','orbital.entry_shell:function','orbital.entry_visual:function','orbital.frame:function','orbital.hands:function','orbital.hud_view:function','orbital.indexed:function','orbital.render_budget:function','orbital.sky_art:function','orbital.visual:function'];
+const orbitalImports=['orbital.earth_tiles:function','orbital.entry_shell:function','orbital.entry_visual:function','orbital.frame:function','orbital.hands:function','orbital.hud_view:function','orbital.indexed:function','orbital.material_art:function','orbital.render_budget:function','orbital.sky_art:function','orbital.visual:function'];
 const procExit='wasi_snapshot_preview1.proc_exit:function';
 assert.deepEqual(actual,actual.includes(procExit)?[...orbitalImports,procExit]:orbitalImports,
  'expected the exact browser import contract (Orbital callbacks and optional WASI proc_exit)');
-let roomVertices,roomElements,skyArt,hudView,rendererPlan,entryMesh,entrySample,earthTiles,visual,hull,hullLoads=0,room,hand,state,engine,roomLoads=0,handLoads=0,roomSpan,stagedRoom;
+let materialArt,roomVertices,roomElements,skyArt,hudView,rendererPlan,entryMesh,entrySample,earthTiles,visual,hull,hullLoads=0,room,hand,state,engine,roomLoads=0,handLoads=0,roomSpan,stagedRoom;
 const roomPatches=[];
 function read(p,n){assert.equal(p%4,0);return new Float32Array(engine.memory.buffer,p,n).slice();}
 engine=new WebAssembly.Instance(wasm,{orbital:{
@@ -49,6 +49,7 @@ engine=new WebAssembly.Instance(wasm,{orbital:{
    roomPatches.push({id,start,len});
   }
  },hands(p,n){hand=read(p,n);handLoads++;},
+ material_art(p,n){assert.equal(n,75);assert.equal(p%8,0);materialArt=new Float64Array(engine.memory.buffer,p,n).slice();},
  sky_art(p,n){assert.equal(n,29);assert.equal(p%8,0);skyArt=new Float64Array(engine.memory.buffer,p,n).slice();},
  hud_view(p,n){assert.equal(n,7);assert.equal(p%8,0);hudView=new Float64Array(engine.memory.buffer,p,n).slice();},
  render_budget(p,n){assert.equal(n,3);assert.equal(p%8,0);rendererPlan=new Float64Array(engine.memory.buffer,p,n).slice();},
@@ -63,7 +64,9 @@ engine=new WebAssembly.Instance(wasm,{orbital:{
  }
 },wasi_snapshot_preview1:{proc_exit(n){throw Error("Station exited: "+n);}}}).exports;
 engine._start();
-engine.celestial_profile();
+engine.celestial_profile();engine.material_profile();
+assert.deepEqual([...materialArt.slice(0,10)],[.6205,.18375,.18525,.752,.75625,-1.10,.20,-6.39,.926,.378]);
+assert.deepEqual([...materialArt.slice(22,29)],[-.001,.646,.177,0,-.77,-.64,.108]);
 assert.ok(Math.abs(Math.hypot(...skyArt.slice(0,3))-1)<1e-12,'one normalized Sun before drawing');
 assert.deepEqual([...skyArt.slice(9,20)],[0,.3,-5,6.4,14,.76,.57,-.31,.00372906,.06104854,.0009869]);
 assert.deepEqual([...skyArt.slice(0,9)].map(x=>x.toFixed(7)),[

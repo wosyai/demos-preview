@@ -64,7 +64,7 @@ void main(){
  armUV=armPose.w<0.?vec2(0.):(vec2(uvHigh%16u,uvHigh/16u)*256.+armUVLow)/4095.;
 }`;
 // Wosy's one Sun drives the station, fitted suit, depth pass and sky.
-let orbitalSun, skyArt;
+let orbitalSun, skyArt,materialArt;
 const glslVec=v=>"vec3("+Array.from(v,x=>x.toFixed(7)).join(",")+")";
 const sunShader = profile => `
 const vec3 sunDir=${glslVec(profile.subarray(0,3))};
@@ -86,7 +86,10 @@ const depthFS=`#version 300 es
 precision mediump float;
 void main(){}
 `;
-const exteriorMaterial=sun=>`
+const exteriorMaterial=(sun,profile)=>{
+const n=i=>profile[i].toFixed(8);
+const v=i=>`vec3(${n(i)},${n(i+1)},${n(i+2)})`;
+return `
 uniform int eva;
 uniform highp sampler2DShadow sunMap;
 uniform int detailedShadow;
@@ -145,36 +148,36 @@ vec2 practicalSource(vec3 P, vec3 N, vec3 V, vec3 source, vec3 axis, float power
 }
 vec2 servicePractical(vec3 p,vec3 n,vec3 viewDir,float roughness,out bool inPort) {
   inPort=false;
-  vec3 r=p-vec3(-1.10,.20,-6.39);
-  if(abs(r.x)>1.22||abs(r.y)>1.18||r.z<-.95||r.z>.79)return vec2(0.);
-  vec3 xAxis=vec3(.926,0.,-.378),zAxis=vec3(.378,0.,.926);
+  vec3 r=p-${v(5)};
+  if(abs(r.x)>${n(10)}||abs(r.y)>${n(11)}||r.z<${n(12)}||r.z>${n(13)})return vec2(0.);
+  vec3 xAxis=vec3(${n(8)},0.,-${n(9)}),zAxis=vec3(${n(9)},0.,${n(8)});
   vec3 P=vec3(dot(r,xAxis),r.y,dot(r,zAxis));
   float radius2=dot(P.xy,P.xy);
-  if(P.z<-.67||P.z>.32||radius2>1.248)return vec2(0.);
+  if(P.z<${n(14)}||P.z>${n(15)}||radius2>${n(16)})return vec2(0.);
   inPort=true;
-  float mask=(1.-smoothstep(.80,1.19,radius2))*smoothstep(-.672,-.629,P.z)*(1.-smoothstep(.17,.32,P.z));
+  float mask=(1.-smoothstep(${n(17)},${n(18)},radius2))*smoothstep(${n(19)},${n(20)},P.z)*(1.-smoothstep(${n(21)},${n(15)},P.z));
   if(mask<=0.)return vec2(0.);
   vec3 N=vec3(dot(n,xAxis),n.y,dot(n,zAxis));
   vec3 V=normalize(vec3(dot(viewDir,xAxis),viewDir.y,dot(viewDir,zAxis)));
-  vec2 C=practicalSource(P,N,V,vec3(-.001,.646,.177),vec3(0.,-.77,-.64),.108,roughness);
-  C+=practicalSource(P,N,V,vec3(-.001,-.643,.177),vec3(0.,.77,-.64),.116,roughness);
-  C+=practicalSource(P,N,V,vec3(-.3695,-.239,-.473),vec3(.34,.29,.89),.082,roughness);
-  C+=practicalSource(P,N,V,vec3(.3655,.286,-.470),vec3(-.31,-.27,.91),.086,roughness);
+  vec2 C=practicalSource(P,N,V,${v(22)},${v(25)},${n(28)},roughness);
+  C+=practicalSource(P,N,V,${v(29)},${v(32)},${n(35)},roughness);
+  C+=practicalSource(P,N,V,${v(36)},${v(39)},${n(42)},roughness);
+  C+=practicalSource(P,N,V,${v(43)},${v(46)},${n(49)},roughness);
   return min(vec2(.89,.48),C*mask);
 }
 
 vec3 sunColor(vec3 n){
  bool steel=material.y>.56 && material.y<.69;
  bool emitter=material.y>.8;
- bool upperBlanket=abs(material.y-.18525)<.0007;
- bool maskedPanel=abs(material.y-.18375)<.0007||upperBlanket;
+ bool upperBlanket=abs(material.y-${n(2)})<.0007;
+ bool maskedPanel=abs(material.y-${n(1)})<.0007||upperBlanket;
  bool foil=maskedPanel || (material.y>.165 && material.y<.188 && surface.r>.52 && surface.b>surface.r*.78 && abs(n.x)>.86 && world.x<-1.3);
  bool suit=material.x>=0. && dot(fittedNormal,fittedNormal)>.25;
  bool armor=material.y>.705 && material.y<.735;
  bool solar=surface.b>2.*surface.r && material.y>.4 && material.y<.52;
  bool skin=suit&&armSurfaceReady;
  bool stamp=maskedPanel&&panelStampReady;
- bool pressure=pressureStampReady&&abs(material.y-.752)<.0007;
+ bool pressure=pressureStampReady&&abs(material.y-${n(3)})<.0007;
  bool fascia=fasciaStampReady && material.y>.7558 && material.y<.7592;
  vec3 lamp=vec3(1.00,.91,.78);
  bool warm=surface.r>surface.b*1.53 && surface.g<surface.r*.86 && !emitter;
@@ -190,12 +193,12 @@ vec3 sunColor(vec3 n){
   bool alternate=mod(floor(panelUV.x)+floor(panelUV.y),2.)>.5;
   thermalUV=alternate?vec2(1.-panelUV.x,panelUV.y):panelUV;
   if(stamp){
-   vec2 registered=vec2((world.z+6.64)/2.42,1.-(world.y+(upperBlanket?-.10:.76))/.81);
+   vec2 registered=vec2((world.z+${n(62)})/${n(63)},1.-(world.y+(upperBlanket?${n(64)}:${n(65)}))/${n(66)});
    if(upperBlanket)registered.x=1.-registered.x;
    thermalUV=clamp(registered,vec2(.002),vec2(.998));
   }
  }
- vec2 grain=skin?uv:fascia?clamp(vec2(world.x-.72,1.-(world.y-.205+clamp((material.y-.75625)*160.,0.,.40))/.64),.003,.997):pressure?clamp(vec2((world.z+4.16)/2.42,1.-(world.y+.76)/1.72),.002,.998):layer==1.?vec2(world.x*.87,(world.y*.78+world.z*.43)*1.42):
+ vec2 grain=skin?uv:fascia?clamp(vec2(world.x-${n(69)},1.-(world.y-${n(70)}+clamp((material.y-${n(4)})*${n(71)},0.,${n(72)}))/${n(73)}),.003,.997):pressure?clamp(vec2((world.z+${n(67)})/${n(63)},1.-(world.y+${n(65)})/${n(68)}),.002,.998):layer==1.?vec2(world.x*.87,(world.y*.78+world.z*.43)*1.42):
    suit?tex*vec2(13.5,16.):foil?thermalUV:
    layer==4.?tex*1.8:tex*vec2(.91,1.14);
  vec4 texel=texture(surfaceTile,vec3(grain,layer));
@@ -229,7 +232,7 @@ vec3 sunColor(vec3 n){
  if(shadow>0.){
    vec3 halfway=normalize(sunDir+normalize(eye-world));
    float lobe=max(dot(n,halfway),0.);
-   if(abs(material.y-.6205)<.00013){
+   if(abs(material.y-${n(0)})<.00013){
      // Turned rail shells have a narrow lobe across the brushed grain.
      lobe=min(1.,lobe*inversesqrt(max(.32,1.-.87*halfway.x*halfway.x)));
      polish=134.;
@@ -312,7 +315,8 @@ vec3 sunColor(vec3 n){
  return pow(max(vec3(0.),energy/(energy*.48+vec3(.85))),vec3(.79));
 }
 `;
-const fs = sun=>`#version 300 es
+};
+const fs = (sun,material)=>`#version 300 es
 precision highp float;
 in vec3 surface;
 in vec3 world;
@@ -321,7 +325,7 @@ in vec3 fittedNormal;
 in vec2 armUV;
 out vec4 pix;
 ${view}
-${exteriorMaterial(sun)}
+${exteriorMaterial(sun,material)}
 void main(){
  vec3 normal=normalize(cross(dFdx(world),dFdy(world)));
  if(eva==1){
@@ -839,11 +843,12 @@ function shadowBuffer(size){
  }
 try{
  if(!gl)throw Error("WebGL 2 is required to render the station.");
- const response=await fetch(new URL("./orbital.wasm?v=56",import.meta.url));
+ const response=await fetch(new URL("./orbital.wasm?v=57",import.meta.url));
  if(!response.ok)throw Error("The station engine could not be downloaded.");
  const {instance}=await WebAssembly.instantiate(await response.arrayBuffer(),{
   orbital:{
    indexed:uploadIndexed,hands:uploadHands,
+   material_art(p,n){if(n!==75)throw Error("Unexpected station material profile");materialArt=new Float64Array(engine.memory.buffer,p,n);},
    sky_art(p,n){if(n!==29)throw Error("Unexpected celestial profile");skyArt=new Float64Array(engine.memory.buffer,p,n);},
    hud_view(p,n){if(n!==7)throw Error("Unexpected HUD projection");hudRow=new Float64Array(engine.memory.buffer,p,n);},
    render_budget(p,n){if(n!==3)throw Error("Unexpected renderer plan");renderPlan=new Float64Array(engine.memory.buffer,p,n);},
@@ -855,10 +860,10 @@ try{
   },
   wasi_snapshot_preview1:{proc_exit(n){throw Error("Station exited: "+n);}}
  });
- engine=instance.exports;engine._start();engine.celestial_profile();
+ engine=instance.exports;engine._start();engine.celestial_profile();engine.material_profile();
  orbitalSun=skyArt.subarray(0,3);
  const sun=sunShader(skyArt);
- scene=program(vs,fs(sun));space=program(svs,sfs(sun,skyArt));skyCopy=program(svs,skyCopyFS);depth=program(depthVS(sun),depthFS);room=batch();hand=batch();hull=batch();
+ scene=program(vs,fs(sun,materialArt));space=program(svs,sfs(sun,skyArt));skyCopy=program(svs,skyCopyFS);depth=program(depthVS(sun),depthFS);room=batch();hand=batch();hull=batch();
  skyTexture=gl.createTexture();gl.bindTexture(gl.TEXTURE_2D,skyTexture);
  for(const mode of [gl.TEXTURE_MIN_FILTER,gl.TEXTURE_MAG_FILTER])gl.texParameteri(gl.TEXTURE_2D,mode,gl.LINEAR);
  for(const axis of [gl.TEXTURE_WRAP_S,gl.TEXTURE_WRAP_T])gl.texParameteri(gl.TEXTURE_2D,axis,gl.CLAMP_TO_EDGE);

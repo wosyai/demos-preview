@@ -60,6 +60,7 @@ draw_plan = "draw_plan"
 sky_plan = "sky_plan"
 globe_request = "globe_request"
 globe_retry = "globe_retry"
+material_profile = "material_profile"
 
 [targets.app.profiles.dev]
 main_artifact = "main"
