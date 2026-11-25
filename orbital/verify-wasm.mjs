@@ -222,7 +222,29 @@ const cradleSeated=room, handoffCamera=[...state.slice(0,8)];
 for(let i=0;i<60;i++)step(64);
 assert.equal(state[19],3,'held seat input never commands the transfer');
 assert.equal(roomLoads,countBeforeLatch+7);
-step();step(64);assert.equal(state[19],4);
+step();step(64);assert.equal(state[19],3.25);
+const transferBatches=roomLoads, transferMeshes=[];
+for(let n=0;n<39&&state[19]<4;n++){
+ const previousBatch=roomLoads;step(n===0||n===2?0:64);
+ assert.deepEqual([...state.slice(0,8)],handoffCamera,'the docked eye and velocity do not change');
+ if(roomLoads!==previousBatch)transferMeshes.push({room,stage:state[19],contact:state[13]});
+}
+assert.equal(state[19],4);
+assert.equal(roomLoads,transferBatches+6);
+assert.deepEqual(transferMeshes.map(v=>v.stage),[3.25,3.25,3.5,3.5,3.5,4]);
+const ease=t=>t*t*(3-2*t);
+for(const [i,{room:m,contact}] of transferMeshes.entries()){
+ const k=ease(Math.min((i+1)/3,1)), j=ease(Math.max((i-2)/3,0));
+ for(const x of [.49,1.71]){
+  assert.ok(hasVertex(m,x+.041,-.372-.333*k,-6.554),'both keeper jaws close before robot release');
+  assert.ok(hasVertex(m,x+.061,-.686,-6.655),'landed lugs are fixed throughout');
+  assert.ok(m.some((v,n)=>n%8===0&&nearEq(v,x+.067)&&nearEq(m[n+1],-.469)&&nearEq(m[n+2],-6.509)&&nearEq(m[n+4],i>=2?1:.51)),'keeper confirmation changes only on the fully closed pose');
+ }
+ assert.ok(hasVertex(m,1.96,.331+.14*j,-6.838)&&hasVertex(m,1.96,.022-.14*j,-6.838),'robot jaws stay closed until the cradle is seated');
+ assert.ok(hasVertex(m,2.17,.13,-7.13)&&hasVertex(m,2.20,.22,-6.523),'the cargo and wrist stay fixed');
+ assert.ok(nearEq(contact,-.43+.07*k),'the glove stays attached to the lever');
+}
+
 assert.deepEqual([...state.slice(0,8)],handoffCamera,'handoff keeps the restrained eye and aim fixed');
 assert.deepEqual([...state.slice(12,15)].map(n=>n.toFixed(2)),['1.09','-0.36','-4.81']);
 for(const x of [.49,1.71]){
@@ -233,7 +255,7 @@ assert.ok(hasVertex(cradleSeated,1.96,.331,-6.838)&&hasVertex(room,1.96,.471,-6.
 assert.ok(hasVertex(cradleSeated,1.96,.022,-6.838)&&hasVertex(room,1.96,-.118,-6.838),'lower gripper jaw opens away from cargo');
 assert.ok(hasVertex(room,2.17,.13,-7.13)&&hasVertex(room,2.20,.22,-6.523),'the load and robot wrist hold steady through the handoff');
 for(let i=0;i<60;i++)step(64);
-assert.equal(roomLoads,countBeforeLatch+8,'handoff invalidates cached world once');
+assert.equal(roomLoads,countBeforeLatch+13,'the handoff publishes only six bounded world poses');
 assert.equal(state[19],4,'held transfer does not push off');
 step();step(64);until(()=>state[19]===5,0);
 assert.equal(state[18],0,"release never advertises a stale console brake cue as the hatch");
@@ -260,7 +282,7 @@ assert.ok(hasVertex(openHatch,-1.015,-.14,-2.398)&&hasVertex(room,-1.015,-.03,-2
 assert.ok(hasVertex(room,2.17,.13,-7.13)&&hasVertex(room,.49+.041,-.705,-6.554),'cargo stays seated under its closed keepers');
 for(let i=0;i<30;i++){step();step(64);}
 assert.equal(state[19],7);
-assert.equal(roomLoads,countBeforeLatch+9,'only the hatch endpoint republishes geometry');
+assert.equal(roomLoads,countBeforeLatch+14,'only the hatch endpoint republishes geometry');
 reset();assert.deepEqual(capture(),evaStart,'reset restores the current exercise');
 assert.deepEqual(room,evaRoom);
 until(()=>state[2]<-4.719,4);
@@ -268,7 +290,7 @@ assert.ok(state[2]>-4.721 && state[7]===0,'EVA cannot pass into the radiator');
 step(64);assert.equal(state[17],0,'skipping the rails cannot lock cargo');
 engine.select_deck(0);step(0,0,0,0);
 assert.deepEqual(capture(),initial,'indoor mode round-trips without exterior state');
-assert.equal(roomLoads,13,'only deck changes, locks, authored alignment poses and reset republish geometry');
+assert.equal(roomLoads,18,'only deck changes, locks, authored alignment poses and reset republish geometry');
 console.log('EVA WASM: geometry, distinct grip, eligibility and release, exterior bulkhead, reset and indoor round-trip passed.');
 
 const raw=readFileSync(new URL('./apollo-arm.bin',import.meta.url));

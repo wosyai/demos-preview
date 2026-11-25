@@ -243,6 +243,12 @@ bool cargo_locked=false;
 i32 alignment_stage=0;
 f32 seat_clock=0.0;
 i32 seat_pose=0;
+f32 transfer_clock=0.0;
+i32 transfer_pose=0;
+f32(i32) transfer_ease = fn(index){
+    f32 t=limit(core.sint_to_float<f32>(index)/3.0,0.0,1.0);
+    t*t*(3.0-2.0*t)
+};
 f32[7] elbow_dx=[0.0,0.005204942,0.014663307,0.017319421,0.005443067,-0.016463812,-0.028937600];
 f32[7] elbow_dy=[0.0,-0.003655004,-0.009332873,-0.009841309,-0.004177934,0.002321792,0.004856000];
 f32[7] elbow_dz=[0.0,-0.000982262,-0.002095023,-0.001543880,-0.001316310,-0.004557410,-0.007602000];
@@ -252,7 +258,7 @@ f32() seat_blend = fn {
 };
 bool alignment_braked=false;
 f32(i32) rail_depth = fn(leg) {if(leg==0){-1.59}else{if(leg==1){-3.43}else{-4.88}}};
-f32() align_pin_y = fn {if(alignment_stage>=4){-0.36}else{-0.54+0.11*seat_blend()}};
+f32() align_pin_y = fn {if(alignment_stage>=4){-0.36}else{if(alignment_stage==3){-0.43+0.07*transfer_ease(transfer_pose)}else{-0.54+0.11*seat_blend()}}};
 f32() arm_x = fn {if(alignment_stage>=5){-0.94}else{if(alignment_stage>=1){1.09}else{-0.18}}};
 f32() arm_y = fn {if(alignment_stage>=5){if(alignment_stage==7){-0.03}else{-0.14}}else{if(alignment_stage>=1){align_pin_y()}else{if(cargo_locked){-0.45}else{-0.57}}}};
 f32() arm_z = fn {if(alignment_stage>=5){-2.48}else{if(alignment_stage>=1){-4.81}else{rail_depth(station_leg)}}};
@@ -416,11 +422,11 @@ unit(f32,f32) cargo_keeper = fn(x,dy){
     box(x,-0.699,-6.740,0.25,0.48,0.124);
     paint(0.75,0.56,0.28,0.34);
     box(x+0.061,-0.286+dy,-6.655,0.120,0.083,0.096);
-    f32 jaw=if(alignment_stage>=4){-0.705}else{-0.372};
+    f32 jaw=-0.372-0.333*transfer_ease(transfer_pose);
     paint(0.69,0.72,0.68,0.71);
     box(x+0.041,jaw,-6.554,0.160,0.183,0.038);
     box(x+0.041,jaw+0.102,-6.648,0.160,0.052,0.098);
-    if(alignment_stage>=4){paint(0.20,1.0,0.57,0.96);}else{paint(1.0,0.51,0.18,0.94);};
+    if(transfer_pose>=3){paint(0.20,1.0,0.57,0.96);}else{paint(1.0,0.51,0.18,0.94);};
     box(x+0.067,-0.469,-6.509,0.108,0.026,0.009);
 };
 unit() suspended_cargo = fn {
@@ -544,7 +550,7 @@ unit() manipulator = fn {
     box(2.14,0.407+dy,-6.581,0.13,0.033,0.010);
     paint(0.56,0.61,0.61,0.62);
     box(2.16,0.22+dy,-6.892,0.064,0.72,0.092);
-    f32 jaw_open=if(alignment_stage>=4){0.14}else{0.0};
+    f32 jaw_open=0.14*transfer_ease(transfer_pose-3);
     box(2.04,0.700+dy+jaw_open,-6.889,0.16,0.128,0.140);
     box(2.04,0.415+dy-jaw_open,-6.889,0.16,0.121,0.140);
     paint(0.71,0.50,0.24,0.35);
@@ -963,7 +969,7 @@ unit() reset = fn {
     pilot_x=0.0; pilot_y=0.0; pilot_z=0.37;vx=0.0;vy=0.0;vz=0.0;yaw=if(deck==0){0.13}else{-0.03};pitch=if(deck==0){-0.035}else{-0.095};timer=0.0;
     mode=0;mark=0;grip=0.0;reach=0.0;carry=0.0;latch=0;station_leg=0;
     if(cargo_locked){cargo_locked=false;ready=false;};
-    alignment_stage=0;seat_clock=0.0;seat_pose=0;alignment_braked=false;
+    alignment_stage=0;seat_clock=0.0;seat_pose=0;transfer_clock=0.0;transfer_pose=0;alignment_braked=false;
 };
 unit(i32) select_deck = fn(which){
     i32 choice=if(which==1){1}else{0};
@@ -1119,8 +1125,9 @@ unit(f32,i32,f32,f32) tick = fn(dt,keys,look_x,look_y) {
                 if(!cargo_locked){cargo_locked=true;mark=2;mesh_grip=-1.0;eva_room();}
                 else{if(alignment_stage==0){mode=3;mark=2;vx=0.36;vz=0.035;}
                 else{if(alignment_stage==2 && seat_clock==0.0){seat_clock=0.001;}
-                else{if(alignment_stage==3 || alignment_stage==6){alignment_stage=alignment_stage+1;mesh_grip=-1.0;eva_room();}
-                else{if(alignment_stage==4){mode=3;mark=2;vx=-0.49;vz=0.76;alignment_braked=false;};};};};};
+                else{if(alignment_stage==3 && transfer_clock==0.0){transfer_clock=0.001;}
+                else{if(alignment_stage==6){alignment_stage=alignment_stage+1;mesh_grip=-1.0;eva_room();}
+                else{if(alignment_stage==4){mode=3;mark=2;vx=-0.49;vz=0.76;alignment_braked=false;};};};};};};
             }else{
                 mode=3;mark=2;
                 vz=if(deck==0){-0.19}else{-0.43};
@@ -1133,6 +1140,14 @@ unit(f32,i32,f32,f32) tick = fn(dt,keys,look_x,look_y) {
         if(seat_clock>=core.sint_to_float<f32>(seat_pose+1)*0.08){
             seat_pose=seat_pose+1;
             if(seat_pose==6){seat_clock=0.0;alignment_stage=3;};
+            mesh_grip=-1.0;eva_room();
+        };
+    };
+    if(transfer_clock>0.0){
+        transfer_clock=transfer_clock+d;
+        if(transfer_clock>=core.sint_to_float<f32>(transfer_pose+1)*0.085){
+            transfer_pose=transfer_pose+1;
+            if(transfer_pose==6){transfer_clock=0.0;alignment_stage=4;};
             mesh_grip=-1.0;eva_room();
         };
     };
@@ -1169,7 +1184,7 @@ unit(f32,i32,f32,f32) tick = fn(dt,keys,look_x,look_y) {
             if(nearby && alignment_braked && !aligned){state[18]=aim_hint;};
         };
     };
-    state[19]=if(seat_clock>0.0){2.5}else{core.sint_to_float<f32>(alignment_stage)};
+    state[19]=if(seat_clock>0.0){2.5}else{if(transfer_clock>0.0){if(transfer_pose<3){3.25}else{3.5}}else{core.sint_to_float<f32>(alignment_stage)}};
     if((deck==0||!external_arm) && (mesh_x!=pilot_x || mesh_y!=pilot_y || mesh_z!=pilot_z || mesh_grip!=grip || mesh_deck!=deck)){
         if(deck==0){glove();}else{eva_glove();};
         mesh_x=pilot_x;mesh_y=pilot_y;mesh_z=pilot_z;mesh_grip=grip;mesh_deck=deck;
