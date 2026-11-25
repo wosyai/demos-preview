@@ -138,14 +138,21 @@ assert.equal(state[14].toFixed(2),'-4.88');
 for(let i=0;i<120;i++)step(64);
 assert.equal(state[17],0,'holding grip does not seat the latch automatically');
 step();step(64);
+assert.equal(state[19],.5);
+const cargoLockCamera=[...state.slice(0,8)], cargoLockPoses=[];
+for(let i=0;i<24&&state[17]===0;i++){
+ const seen=roomLoads;step(i===0||i===2?0:64);
+ if(seen!==roomLoads)cargoLockPoses.push({m:room,w:[...state.slice(12,15)],locked:state[17]});
+ assert.deepEqual([...state.slice(0,8)],cargoLockCamera);
+}
 assert.equal(state[17],1);assert.equal(state[9],2,'latch is secured with the glove still braced');
-assert.equal(roomLoads,countBeforeLatch+1);
+assert.equal(roomLoads,countBeforeLatch+4);
 assert.notDeepEqual(room,beforeLatch,'the contact lever and status light visibly change');
 const seatedPin=[...state.slice(12,15)];
 assert.ok(Math.abs(seatedPin[1]-openPin[1]-.12)<1e-5,'Wosy moves the held wrist exactly with the detent');
 assert.equal(seatedPin[0],openPin[0]);assert.equal(seatedPin[2],openPin[2]);
 assert.notDeepEqual(hand,openGlove,'fallback glove reaches the same seated endpoint');
-assert.equal(handLoads,openHandLoads+1,'fallback uploads the hand exactly once for seating');
+assert.equal(handLoads,openHandLoads+4,'fallback uploads only the four pin poses');
 function pinVertices(mesh,pose){
  return mesh.filter((v,i)=>i%8===1&&Math.abs(mesh[i-1]-pose[0])<.16&&
    Math.abs(v-pose[1])<.088&&Math.abs(mesh[i+1]-pose[2])<.088&&
@@ -161,9 +168,16 @@ function luminanceCode(mesh){
  return found;
 }
 assert.ok(luminanceCode(beforeLatch).some(rgb=>rgb[0]>.9&&rgb[1]<.65),'physical latch light starts amber');
+assert.equal(cargoLockPoses.length,4);
+for(const [i,{m,w,locked}] of cargoLockPoses.entries()){
+ const t=(i+1)/4;
+ assert.ok(Math.abs(w[1]-(-.57+.12*t*t*(3-2*t)))<.0001&&pinVertices(m,w)>30,'cargo pin and hand share every timed pose');
+ assert.equal(locked,+(i===3));
+ assert.ok(luminanceCode(m).some(rgb=>i===3?rgb[0]<.4&&rgb[1]>.9:rgb[0]>.9&&rgb[1]<.65));
+}
 assert.ok(luminanceCode(room).some(rgb=>rgb[0]<.4&&rgb[1]>.90),'physical latch light ends green');
 step();step(64);
-assert.equal(roomLoads,countBeforeLatch+1,'releasing the seated lock does not regenerate the station');
+assert.equal(roomLoads,countBeforeLatch+4,'releasing the seated lock does not regenerate the station');
 assert.equal(state[9],3);
 until(()=>state[19]===1,0);assert.equal(state[10],0);
 until(()=>state[0]>.77,0);
@@ -217,11 +231,11 @@ const wristIndicator=(m)=>m.some((f,i)=>i%8===4&&f>.95&&m[i-4]>2.12&&m[i-4]<2.28
 assert.equal(wristIndicator(beforeLatch),false);
 assert.equal(wristIndicator(room),true,'the local seating endpoint changes the remote gripper status');
 assert.deepEqual([...state.slice(12,15)].map(n=>n.toFixed(2)),['1.09','-0.43','-4.81']);
-assert.equal(roomLoads,countBeforeLatch+7,'seating updates only the six authored timed poses');
+assert.equal(roomLoads,countBeforeLatch+10,'seating updates only the six authored timed poses');
 const cradleSeated=room, handoffCamera=[...state.slice(0,8)];
 for(let i=0;i<60;i++)step(64);
 assert.equal(state[19],3,'held seat input never commands the transfer');
-assert.equal(roomLoads,countBeforeLatch+7);
+assert.equal(roomLoads,countBeforeLatch+10);
 step();step(64);assert.equal(state[19],3.25);
 const transferBatches=roomLoads, transferMeshes=[];
 for(let n=0;n<39&&state[19]<4;n++){
@@ -255,7 +269,7 @@ assert.ok(hasVertex(cradleSeated,1.96,.331,-6.838)&&hasVertex(room,1.96,.471,-6.
 assert.ok(hasVertex(cradleSeated,1.96,.022,-6.838)&&hasVertex(room,1.96,-.118,-6.838),'lower gripper jaw opens away from cargo');
 assert.ok(hasVertex(room,2.17,.13,-7.13)&&hasVertex(room,2.20,.22,-6.523),'the load and robot wrist hold steady through the handoff');
 for(let i=0;i<60;i++)step(64);
-assert.equal(roomLoads,countBeforeLatch+13,'the handoff publishes only six bounded world poses');
+assert.equal(roomLoads,countBeforeLatch+16,'the handoff publishes only six bounded world poses');
 assert.equal(state[19],4,'held transfer does not push off');
 step();step(64);until(()=>state[19]===5,0);
 assert.equal(state[18],0,"release never advertises a stale console brake cue as the hatch");
@@ -274,7 +288,21 @@ step(64);until(()=>state[19]===6,64);
 assert.deepEqual([...state.slice(12,15)].map(n=>n.toFixed(2)),['-0.94','-0.14','-2.48']);
 for(let i=0;i<60;i++)step(64);assert.equal(state[19],6,'holding a capture does not lock it');
 const openHatch=room, lockEye=[...state.slice(0,8)];
-step();step(64);assert.equal(state[19],7);
+step();step(64);assert.equal(state[19],6.5);
+const lockHatchPoses=[];
+for(let i=0;i<24&&state[19]===6.5;i++){
+ const seen=roomLoads;step(i===0||i===2?0:64);
+ if(seen!==roomLoads)lockHatchPoses.push({m:room,y:state[13],stage:state[19]});
+ assert.deepEqual([...state.slice(0,8)],lockEye);
+}
+assert.equal(state[19],7);
+assert.equal(lockHatchPoses.length,4);
+for(const [i,{m,y,stage}] of lockHatchPoses.entries()){
+ const t=(i+1)/4;
+ assert.ok(nearEq(y,-.14+.11*t*t*(3-2*t))&&hasVertex(m,-1.11,y,-2.398)&&hasVertex(m,-1.015,y,-2.398),'hatch bar and wrist stay in contact with the original radius');
+ assert.equal(stage,i===3?7:6.5);
+ assert.ok(m.some((v,n)=>n%8===0&&nearEq(v,-.971)&&nearEq(m[n+1],-.186)&&nearEq(m[n+2],-2.381)&&nearEq(m[n+3],i===3?.27:1)&&nearEq(m[n+4],i===3?1:.55)),'hatch confirmation changes only at its final stop');
+}
 assert.deepEqual([...state.slice(0,8)],lockEye);
 assert.deepEqual([...state.slice(12,15)].map(n=>n.toFixed(2)),['-0.94','-0.03','-2.48']);
 assert.ok(hasVertex(openHatch,-1.11,-.14,-2.398)&&hasVertex(room,-1.11,-.03,-2.398),'actual hatch bar and glove rise together');
@@ -282,7 +310,7 @@ assert.ok(hasVertex(openHatch,-1.015,-.14,-2.398)&&hasVertex(room,-1.015,-.03,-2
 assert.ok(hasVertex(room,2.17,.13,-7.13)&&hasVertex(room,.49+.041,-.705,-6.554),'cargo stays seated under its closed keepers');
 for(let i=0;i<30;i++){step();step(64);}
 assert.equal(state[19],7);
-assert.equal(roomLoads,countBeforeLatch+14,'only the hatch endpoint republishes geometry');
+assert.equal(roomLoads,countBeforeLatch+20,'only the four hatch poses republish geometry');
 reset();assert.deepEqual(capture(),evaStart,'reset restores the current exercise');
 assert.deepEqual(room,evaRoom);
 until(()=>state[2]<-4.719,4);
@@ -290,7 +318,7 @@ assert.ok(state[2]>-4.721 && state[7]===0,'EVA cannot pass into the radiator');
 step(64);assert.equal(state[17],0,'skipping the rails cannot lock cargo');
 engine.select_deck(0);step(0,0,0,0);
 assert.deepEqual(capture(),initial,'indoor mode round-trips without exterior state');
-assert.equal(roomLoads,18,'only deck changes, locks, authored alignment poses and reset republish geometry');
+assert.equal(roomLoads,24,'only deck changes, locks, authored alignment poses and reset republish geometry');
 console.log('EVA WASM: geometry, distinct grip, eligibility and release, exterior bulkhead, reset and indoor round-trip passed.');
 
 const raw=readFileSync(new URL('./apollo-arm.bin',import.meta.url));
@@ -332,7 +360,7 @@ for (let next=1;next<3;next++) {
  assert.equal(state[16],next);
 }
 assert.deepEqual([...state.slice(12,15)],openPin);
-step();step(64);
+step();step(64);until(()=>state[17]===1,0);
 assert.deepEqual([...state.slice(12,15)],seatedPin,'the imported forearm receives the same exact pre/post seating endpoints');
 assert.equal(handLoads,uploadsForExternal,'seating the imported forearm never calls the mesh fallback');
 engine.select_arm(0);step();

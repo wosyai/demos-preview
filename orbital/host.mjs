@@ -427,7 +427,7 @@ function render(alpha) {
  const w=Math.max(1,Math.round(canvas.clientWidth*scale)), h=Math.max(1,Math.round(canvas.clientHeight*scale));
  if(w!==canvas.width || h!==canvas.height){canvas.width=w;canvas.height=h;}
  gl.viewport(0,0,w,h);
- const discreteContact=stage=>stage===2.5||stage===3.25||stage===3.5;
+ const discreteContact=stage=>stage===0.5||stage===2.5||stage===3.25||stage===3.5||stage===6.5;
  const seatContact=discreteContact(frame[19])||discreteContact(previous?.[19]);
  const pose=previous&&frame[15]===previous[15] ? frame.map((n,i)=>i<5||i===8||(!seatContact&&i>=12&&i<=14)?previous[i]+(n-previous[i])*alpha:n):frame;
  const [x,y,z,heading,pitch]=pose;
@@ -487,6 +487,7 @@ function hud(){
   if(locked){
    const cue=frame[18];
    if(align===7){objective="EVA complete";tip="Outer hatch locked. Cargo is secured and the station has your confirmation.";action="Hatch locked";}
+   else if(align===6.5){objective="Moving hatch bar";tip="Holding the bar until it seats.";action="Locking hatch";}
    else if(align===6){objective="Airlock handle secured";tip="Lift the locking bar into its upper detent.";action="Lock airlock";}
    else if(align===5&&mode===1){objective="Taking the airlock handle";tip="Holding station.";action="Gripping handle";}
    else if(align===5&&near){objective="Airlock handle in reach";tip="Grip the amber locking bar.";action="Grip hatch";}
@@ -508,6 +509,7 @@ function hud(){
    else {objective="Cargo lock secured";tip="Pin seated. Release toward the blue alignment console.";action="Drift to align";}
   }
   else if(mode===3){objective="Pushing off";tip="Drift toward the next rail.";action="Pushing off";}
+  else if(align===0.5){objective="Seating cargo pin";tip="Holding the pin until it seats.";action="Seating pin";}
   else if(mode===2&&leg===2){objective="Cargo lock in reach";tip="Seat the pin. The amber indicator turns green.";action="Seat cargo lock";}
   else if(mode===2){objective=rail+" secured";tip="Open your hand and push toward the next rail.";action="Release & push";}
   else if(mode===1){objective="Gripping the rail";tip="Your drift is arrested.";}
@@ -528,7 +530,7 @@ function hud(){
  if($("help").textContent!==tip)$("help").textContent=tip;
  const compact=$("compact-help");
  if(compact.textContent!==compactTip){compact.textContent=compactTip;compact.hidden=!compactTip;}
- $("action").disabled=!active||align===7||align===2.5||align===3.25||align===3.5||!(mode===2||(mode===0&&near===1));
+ $("action").disabled=!active||[0.5,2.5,3.25,3.5,6.5,7].includes(align)||!(mode===2||(mode===0&&near===1));
  if($("action").textContent!==action)$("action").textContent=action;
  const task=eva?(align>=5?"EVA / AIRLOCK RETURN":locked?"EVA / CARGO ALIGNMENT":"EVA / "+(leg+1)+" OF 3"):"TRAINING 01 / HANDRAIL";
  if($("exercise").textContent!==task)$("exercise").textContent=task;
@@ -802,7 +804,7 @@ try{
   gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_T,gl.CLAMP_TO_EDGE);earthReady=1;worldVersion++;
  };
  earth.src=new URL("./earth.jpg?v=2",import.meta.url).href;
- const response=await fetch(new URL("./orbital.wasm?v=22",import.meta.url));
+ const response=await fetch(new URL("./orbital.wasm?v=23",import.meta.url));
  if(!response.ok)throw Error("The station engine could not be downloaded.");
  const {instance}=await WebAssembly.instantiate(await response.arrayBuffer(),{
   orbital:{
