@@ -1,7 +1,7 @@
 import {hudText} from "./hud-text.mjs?v=5";
 import {reentryGlow} from "./reentry-glow.mjs?v=1";
 import {earthDetail} from "./earth-detail.mjs";
-import {exteriorSky} from "./exterior-sky.mjs?v=3";
+import {exteriorSky} from "./exterior-sky.mjs?v=4";
 import {chaseView,loadApolloBody,loadProceduralSuit,stationGrip} from "./apollo-body.mjs?v=14";
 const $ = id => document.getElementById(id);
 const canvas = $("view");
@@ -388,7 +388,7 @@ void main(){
    color+=spectrum*psf*(.050+.62*pow(magnitude,3.));
  }
  if(eva==1&&upgradedSky==1){
-   vec3 stars=starReady==1?color*.81+orbitalStars(ray)*.31:color;
+   vec3 stars=starReady==1?color*.81+orbitalStars(ray):color;
    pix=vec4(orbitalExterior(ray,stars,orbitCenter.xyz,orbitCenter.w),1.);return;
  }
  if(eva==1){
@@ -459,7 +459,7 @@ function program(a,b) {
  }
  gl.linkProgram(p);
  if(!gl.getProgramParameter(p,gl.LINK_STATUS))throw Error(gl.getProgramInfoLog(p));
- return {p, eye:gl.getUniformLocation(p,"eye"), basis:gl.getUniformLocation(p,"basis"), optics:gl.getUniformLocation(p,"optics"), roll:gl.getUniformLocation(p,"roll"), eva:gl.getUniformLocation(p,"eva"), photo:gl.getUniformLocation(p,"photo"), earth:gl.getUniformLocation(p,"earthMap"),starMap:gl.getUniformLocation(p,"starMap"),starReady:gl.getUniformLocation(p,"starReady"),upgradedSky:gl.getUniformLocation(p,"upgradedSky"),orbitCenter:gl.getUniformLocation(p,"orbitCenter"),earthAngle:gl.getUniformLocation(p,"earthAngle"), backdrop:gl.getUniformLocation(p,"backdrop"), sunMap:gl.getUniformLocation(p,"sunMap"),armPose:gl.getUniformLocation(p,"armPose"),armSurfaceReady:gl.getUniformLocation(p,"armSurfaceReady"),panelStampReady:gl.getUniformLocation(p,"panelStampReady"),pressureStampReady:gl.getUniformLocation(p,"pressureStampReady"),fasciaStampReady:gl.getUniformLocation(p,"fasciaStampReady"), renderFraction:gl.getUniformLocation(p,"renderFraction"),surfaceTile:gl.getUniformLocation(p,"surfaceTile"), routeLens:gl.getUniformLocation(p,"routeLens"), routeReach:gl.getUniformLocation(p,"routeReach"), detailedShadow:gl.getUniformLocation(p,"detailedShadow"),lightingUpgrade:gl.getUniformLocation(p,"lightingUpgrade"),practicalLighting:gl.getUniformLocation(p,"practicalLighting"),earthBounceDir:gl.getUniformLocation(p,"earthBounceDir"),gripContact:gl.getUniformLocation(p,"gripContact"),gripRadius:gl.getUniformLocation(p,"gripRadius")};
+ return {p, eye:gl.getUniformLocation(p,"eye"), basis:gl.getUniformLocation(p,"basis"), optics:gl.getUniformLocation(p,"optics"), roll:gl.getUniformLocation(p,"roll"), eva:gl.getUniformLocation(p,"eva"), photo:gl.getUniformLocation(p,"photo"), earth:gl.getUniformLocation(p,"earthMap"),starMap:gl.getUniformLocation(p,"starMap"),starReady:gl.getUniformLocation(p,"starReady"),moonMap:gl.getUniformLocation(p,"moonMap"),moonReady:gl.getUniformLocation(p,"moonReady"),upgradedSky:gl.getUniformLocation(p,"upgradedSky"),orbitCenter:gl.getUniformLocation(p,"orbitCenter"),earthAngle:gl.getUniformLocation(p,"earthAngle"), backdrop:gl.getUniformLocation(p,"backdrop"), sunMap:gl.getUniformLocation(p,"sunMap"),armPose:gl.getUniformLocation(p,"armPose"),armSurfaceReady:gl.getUniformLocation(p,"armSurfaceReady"),panelStampReady:gl.getUniformLocation(p,"panelStampReady"),pressureStampReady:gl.getUniformLocation(p,"pressureStampReady"),fasciaStampReady:gl.getUniformLocation(p,"fasciaStampReady"), renderFraction:gl.getUniformLocation(p,"renderFraction"),surfaceTile:gl.getUniformLocation(p,"surfaceTile"), routeLens:gl.getUniformLocation(p,"routeLens"), routeReach:gl.getUniformLocation(p,"routeReach"), detailedShadow:gl.getUniformLocation(p,"detailedShadow"),lightingUpgrade:gl.getUniformLocation(p,"lightingUpgrade"),practicalLighting:gl.getUniformLocation(p,"practicalLighting"),earthBounceDir:gl.getUniformLocation(p,"earthBounceDir"),gripContact:gl.getUniformLocation(p,"gripContact"),gripRadius:gl.getUniformLocation(p,"gripRadius")};
 }
 const coarseShadow=matchMedia("(pointer:coarse)").matches;
 const maxShadow=gl?gl.getParameter(gl.MAX_TEXTURE_SIZE):1024;
@@ -480,7 +480,7 @@ let renderLoad=1, slowFrames=0, fastFrames=0, stillFrames=0;
 let balanced=false, software=rasterSoftware;
 let previous=null;
 let worldVersion=0,renderVersion=-1,renderYaw=NaN,renderPitch=NaN,renderW=0,renderH=0,renderX=NaN,renderY=NaN,renderZ=NaN,renderGrip=NaN,renderRoute=-1,renderReach=-1;
-let scene,space,skyCopy,depth,shadowFbo,shadowTexture,earthTexture,starTexture,surfaceTexture,earthReady=0,starReady=0,engine,active=false, frame=null, grabbed=null, dx=0, dy=0, last=0, remainder=0, pulse=false, pulseDown=false;
+let scene,space,skyCopy,depth,shadowFbo,shadowTexture,earthTexture,starTexture,moonTexture,surfaceTexture,earthReady=0,starReady=0,moonReady=0,engine,active=false, frame=null, grabbed=null, dx=0, dy=0, last=0, remainder=0, pulse=false, pulseDown=false;
 const held=new Set();
 let coast=false,apolloBody=null,apolloModelActive=false,thirdPerson=false,chaseBlend=0;
 let avatarMotion="",renderSkySpin=NaN;
@@ -593,12 +593,13 @@ function meshes(program,eva,pose,onlyStatic=false){
    gl.bindVertexArray(hand.vao);gl.drawArrays(gl.TRIANGLES,0,hand.num);
  }
 }
-let skyFbo, skyTexture, priorHeading=NaN, priorPitch=NaN, skyW=0, skyH=0, skyHeading=NaN, skyPitch=NaN, skyDeck=-1, skyPhoto=-1, skyRoll=0, skyStars=-1, skySpin=NaN, skyOrbit=null;
+let skyFbo, skyTexture, priorHeading=NaN, priorPitch=NaN, skyW=0, skyH=0, skyHeading=NaN, skyPitch=NaN, skyDeck=-1, skyPhoto=-1, skyRoll=0, skyStars=-1, skyMoon=-1, skySpin=NaN, skyOrbit=null;
 let fineEarth;
 function bindOrbit(frame){
  fineEarth.bind();
  gl.activeTexture(gl.TEXTURE1);gl.bindTexture(gl.TEXTURE_2D,earthTexture);gl.uniform1i(space.earth,1);gl.uniform1i(space.photo,earthReady);
  gl.activeTexture(gl.TEXTURE7);gl.bindTexture(gl.TEXTURE_2D,starTexture);gl.uniform1i(space.starMap,7);gl.uniform1i(space.starReady,starReady);
+ gl.activeTexture(gl.TEXTURE9);gl.bindTexture(gl.TEXTURE_2D,moonTexture);gl.uniform1i(space.moonMap,9);gl.uniform1i(space.moonReady,moonReady);
  gl.uniform1i(space.upgradedSky,Number(upgradedSky));gl.uniform1f(space.earthAngle,frame.spin);gl.uniform4fv(space.orbitCenter,frame.center);
 }
 function skyState(pose){
@@ -613,7 +614,7 @@ function bakeBackdrop(bind,w,h,eva,heading,pitch,roll,orbit){
  const wide=skyW!==w || skyH!==h;
  if(!wide && Math.abs(skyHeading-heading)<.001 && Math.abs(skyPitch-pitch)<.001
     && skyDeck===Number(eva) && skyPhoto===earthReady && skyRoll===roll[1]
-    && (!eva||!upgradedSky||(skyStars===starReady&&Math.abs(orbit.spin-skySpin)<.0006
+    && (!eva||!upgradedSky||(skyStars===starReady&&skyMoon===moonReady&&Math.abs(orbit.spin-skySpin)<.0006
       && orbit.center.every((n,i)=>Math.abs(n-skyOrbit[i])<.0006))))return;
  if(wide){skyW=w;skyH=h;}
  gl.activeTexture(gl.TEXTURE3);gl.bindTexture(gl.TEXTURE_2D,skyTexture);
@@ -623,7 +624,7 @@ function bakeBackdrop(bind,w,h,eva,heading,pitch,roll,orbit){
  bindOrbit(orbit);
  gl.bindVertexArray(null);gl.drawArrays(gl.TRIANGLES,0,3);
  gl.bindFramebuffer(gl.FRAMEBUFFER,null);
- skyHeading=heading;skyPitch=pitch;skyDeck=Number(eva);skyPhoto=earthReady;skyRoll=roll[1];skyStars=starReady;skyOrbit=orbit.center;skySpin=orbit.spin;
+ skyHeading=heading;skyPitch=pitch;skyDeck=Number(eva);skyPhoto=earthReady;skyRoll=roll[1];skyStars=starReady;skyMoon=moonReady;skyOrbit=orbit.center;skySpin=orbit.spin;
 }
 let glow=null;
 function render(alpha) {
@@ -1053,6 +1054,12 @@ try{
  earth.src=new URL("./earth.jpg?v=2",import.meta.url).href;
  starTexture=gl.createTexture();gl.activeTexture(gl.TEXTURE7);gl.bindTexture(gl.TEXTURE_2D,starTexture);
  gl.texImage2D(gl.TEXTURE_2D,0,gl.RGB,1,1,0,gl.RGB,gl.UNSIGNED_BYTE,new Uint8Array([0,0,0]));
+ moonTexture=gl.createTexture();gl.activeTexture(gl.TEXTURE9);gl.bindTexture(gl.TEXTURE_2D,moonTexture);
+ gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA,1,1,0,gl.RGBA,gl.UNSIGNED_BYTE,new Uint8Array([153,153,153,255]));
+ gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MIN_FILTER,gl.LINEAR);
+ gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MAG_FILTER,gl.LINEAR);
+ gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_S,gl.CLAMP_TO_EDGE);
+ gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_T,gl.CLAMP_TO_EDGE);
  if(upgradedSky){
   const stars=new Image();
   stars.onload=()=>{
@@ -1063,6 +1070,13 @@ try{
    starReady=1;worldVersion++;
   };
   stars.src=new URL("./starfield.jpg?v=1",import.meta.url).href;
+  const moon=new Image();
+  moon.onload=()=>{
+   gl.activeTexture(gl.TEXTURE9);gl.bindTexture(gl.TEXTURE_2D,moonTexture);
+   gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA,gl.RGBA,gl.UNSIGNED_BYTE,moon);
+   moonReady=1;worldVersion++;
+  };
+  moon.src=new URL("./moon-albedo.jpg?v=1",import.meta.url).href;
  }
  const response=await fetch(new URL("./orbital.wasm?v=46",import.meta.url));
  if(!response.ok)throw Error("The station engine could not be downloaded.");

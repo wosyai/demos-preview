@@ -2,15 +2,47 @@ export const exteriorSky = `
 uniform int starReady;
 uniform sampler2D starMap;
 uniform float earthAngle;
+uniform sampler2D moonMap;
+uniform int moonReady;
 uniform highp sampler2DArray earthFine;
 uniform int earthPages[9];
 uniform float earthTexelAngle;
 vec3 orbitalStars(vec3 ray) {
-  vec2 uv=vec2(atan(ray.x,-ray.z)*.159154943+.5,acos(clamp(ray.y,-1.,1.))*.318309886);
+  // Fixed world-to-atlas orientation. A turn away from the Sun uncovers
+  // the atlas's dense dust lane; it is never centered on the camera.
+  const mat3 galaxy=mat3(.8124226,-.5092981,.2838750,
+                         .5136543,.8555399,.0648896,
+                         -.2759145,.0930958,.9566631);
+  vec3 q=galaxy*ray;
+  vec2 uv=vec2(atan(q.x,-q.z)*.159154943+.5,acos(clamp(q.y,-1.,1.))*.318309886);
   vec2 gx=dFdx(uv),gy=dFdy(uv);
   gx.x-=round(gx.x); gy.x-=round(gy.x);
-  // Gentle floor for low-exposure backdrop; no frozen cloud or vignette.
-  return textureGrad(starMap,uv,gx,gy).rgb*.79+vec3(.001,.0015,.002);
+  vec3 plate=textureGrad(starMap,uv,gx,gy).rgb;
+  float density=dot(plate,vec3(.2126,.7152,.0722));
+  float dust=smoothstep(.018,.103,density);
+  float exposure=mix(.26,1.23,dust)*(1.-.36*smoothstep(.21,.66,density));
+  return plate*exposure+vec3(.001,.0013,.0018);
+}
+vec3 orbitalMoon(vec3 backdrop,vec3 ray,vec3 sun) {
+  // Showcase angular size, independent of the orbital dynamics.
+  vec3 M=normalize(vec3(.76,.57,-.31));
+  vec3 d=ray-M;
+  float chord2=dot(d,d);
+  const float r2=.00190356;
+  float edgeAA=max(fwidth(chord2),.000001);
+  if(chord2>=r2+edgeAA*.65)return backdrop;
+  float cover=1.-smoothstep(r2-edgeAA*.65,r2+edgeAA*.65,chord2);
+  vec3 right=normalize(cross(M,vec3(0.,1.,0.)));
+  vec3 up=cross(right,M);
+  vec2 disk=vec2(dot(ray,right),dot(ray,up))/.04361939;
+  float face=sqrt(max(0.,1.-dot(disk,disk)));
+  vec3 normal=normalize(right*disk.x+up*disk.y-M*face);
+  float incidence=dot(normal,sun);
+  float daylight=sqrt(max(0.,incidence));
+  float rock=moonReady==1?textureLod(moonMap,vec2(.5)+vec2(disk.x,-disk.y)*.495,0.).r:.60;
+  // The solid night side occludes stars, with restrained cool reflected light.
+  vec3 lunar=rock*(vec3(.037,.045,.059)*(.63+.37*face)+vec3(1.04,.99,.91)*daylight);
+  return mix(backdrop,lunar,cover);
 }
 vec3 orbitalExterior(vec3 ray, vec3 backdrop, vec3 centerDir, float earthSinRadius) {
   vec3 S=normalize(sunDir);
@@ -23,11 +55,13 @@ vec3 orbitalExterior(vec3 ray, vec3 backdrop, vec3 centerDir, float earthSinRadi
   // Angle from Sun expressed as half-chord; stable at dot ≈ 1.
   vec3 toSun=ray-S;
   float s2=dot(toSun,toSun);
-  float discRadius2=.00002165;
+  float discRadius2=.0009869;
   float discAA=max(fwidth(s2),.000001);
   float disc=1.-smoothstep(discRadius2-discAA*.55,discRadius2+discAA*.55,s2);
-  float glare=.11*exp(-s2*360.)+.19*exp(-s2*5900.);
-  vec3 result=backdrop+vec3(1.,.86,.67)*(disc+glare);
+  float beyond=max(0.,s2-discRadius2);
+  float glare=s2<.009?(.12*exp(-beyond*650.)+.22*exp(-beyond*2650.))*(1.-smoothstep(.006,.009,s2)):0.;
+  float limbDark=.88+.12*sqrt(max(0.,1.-s2/discRadius2));
+  vec3 result=orbitalMoon(backdrop,ray,S)+vec3(1.,.89,.72)*(disc*limbDark+glare);
 
   // Closest approach: the ground can eclipse low air while leaving
   // higher air illuminated. Keep the aerosol belt tighter than blue air.
@@ -47,6 +81,10 @@ vec3 orbitalExterior(vec3 ray, vec3 backdrop, vec3 centerDir, float earthSinRadi
   vec3 lowerAir=mix(vec3(.007,.021,.058),vec3(.126,.36,.84),daylight)
       +vec3(.43,.13,.022)*twilight;
   result+=(rayleigh*.49+lowerAir*column*.39)*column*scatter*(1.-occult);
+  // Projected sunlight-scatter halo outside the silhouette only. Reuse
+  // ground eclipse: no glow on the night side, no veil over the clouds.
+  float spread=sqrt(column)*(1.-smoothstep(.008,.013,altitude));
+  result+=vec3(.033,.096,.221)*spread*daylight*daylight*scatter*(1.-occult);
 
   if(arc>=edge-aa){
     float projected=sqrt(max(0.,arc*arc-edge*edge)),distanceToSurface=arc-projected;
