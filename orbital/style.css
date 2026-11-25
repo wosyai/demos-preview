@@ -61,3 +61,6 @@ footer{position:absolute;bottom:1.35rem;left:50%;transform:translateX(-50%);widt
 .coast{position:absolute;right:max(.7rem,env(safe-area-inset-right));top:7rem;padding:.48rem .56rem;min-height:44px;font-size:.74rem;font-weight:750}
 .coast[aria-pressed=true]{background:#265b70;border-color:#abe3ed}
 @media(pointer:coarse),(max-width:680px){.coast{top:auto;bottom:max(8.6rem,calc(env(safe-area-inset-bottom) + 8.2rem))}}
+
+.signal-lost .telemetry>span{background:#f28b76;box-shadow:0 0 10px #d15e49}
+.signal-lost .telemetry>b{color:#ffd0c5}

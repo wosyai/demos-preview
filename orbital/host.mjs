@@ -712,7 +712,9 @@ function hud(){
  const clock=frame[30]>1?"×"+frame[30]+" · ":"";
  const entry=frame[32]===1&&frame[29]===1;
  $("flight-keys").hidden=entry;$("entry-keys").hidden=!entry;
- text("systems",(hudCode&63)===43?"SIGNAL LOST":"SYSTEMS ONLINE");
+ const signalLost=(hudCode&63)===43;
+ text("systems",signalLost?"SIGNAL LOST":"SYSTEMS ONLINE");
+ main.classList.toggle("signal-lost",signalLost);
  const readout=entry?clock+(frame[28]/1000).toFixed(1)+" km · "+(engine.entry_flow(5)/1000).toFixed(2)+" km/s":
    clock+(contact?"HULL CONTACT · ":view.burn?"THRUST · ":"DRIFT · ")+speed.toFixed(1)+" m/s"+(eva?" · Δv "+frame[31].toFixed(1)+" m/s":"")+(view.far?" · "+(frame[28]/1000).toFixed(0)+" km":"");
  text("flight-speed",readout);
