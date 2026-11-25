@@ -10,11 +10,26 @@ const orbitalImports=['orbital.frame:function','orbital.hands:function','orbital
 const procExit='wasi_snapshot_preview1.proc_exit:function';
 assert.deepEqual(actual,actual.includes(procExit)?[...orbitalImports,procExit]:orbitalImports,
  'expected the exact browser import contract (Orbital callbacks and optional WASI proc_exit)');
-let hull,hullLoads=0,room,hand,state,engine,roomLoads=0,handLoads=0;
+let hull,hullLoads=0,room,hand,state,engine,roomLoads=0,handLoads=0,roomSpan;
+const roomPatches=[];
 function read(p,n){assert.equal(p%4,0);return new Float32Array(engine.memory.buffer,p,n).slice();}
 engine=new WebAssembly.Instance(wasm,{orbital:{
  hull(p,n){hull=read(p,n);hullLoads++;},
- scenery(p,n){room=read(p,n);roomLoads++;},hands(p,n){hand=read(p,n);handLoads++;},
+ scenery(p,n){
+  const start=engine.scenery_motion(0),len=engine.scenery_motion(1);
+  assert.ok(start>=0&&len>=0&&start%24===0&&len%24===0);
+  if(engine.scenery_motion(2)){
+    assert.deepEqual([start,len],roomSpan,'partial room segment matches the last full indexed upload');
+    assert.ok(n===len&&len>0&&start+len<room.length);
+    const next=room.slice(),moving=read(p+start*4,n);
+    assert.ok(moving.every(Number.isFinite));
+    next.set(moving,start);room=next;roomPatches.push({start,len,n});
+  }else{
+    assert.ok(start+len<=n&&Boolean(start)===Boolean(len));
+    room=read(p,n);roomSpan=[start,len];
+  }
+  roomLoads++;
+ },hands(p,n){hand=read(p,n);handLoads++;},
  frame(p,n){assert.equal(n,38);state=read(p,n);}
 },wasi_snapshot_preview1:{proc_exit(n){throw Error("Station exited: "+n);}}}).exports;
 engine._start();
@@ -286,25 +301,52 @@ assert.equal(state[19],3,'held seat input never commands the transfer');
 assert.equal(roomLoads,countBeforeLatch+10);
 step();step(64);assert.equal(state[19],3.25);
  hudIs("Closing cradle keepers",false);
-const transferBatches=roomLoads, transferMeshes=[];
-for(let n=0;n<39&&state[19]<4;n++){
+const transferBatches=roomLoads, transferMeshes=[],patchStart=roomPatches.length;
+for(let n=0;n<90&&state[19]<4;n++){
  const previousBatch=roomLoads;step(n===0||n===2?0:64);
  assert.deepEqual([...state.slice(0,8)],handoffCamera,'the docked eye and velocity do not change');
  if(roomLoads!==previousBatch)transferMeshes.push({room,stage:state[19],contact:state[13]});
+ if(state[19]===3.75)hudIs("Robot arm clearing",false);
 }
 assert.equal(state[19],4);
-assert.equal(roomLoads,transferBatches+6);
-assert.deepEqual(transferMeshes.map(v=>v.stage),[3.25,3.25,3.5,3.5,3.5,4]);
+assert.equal(roomLoads,transferBatches+15);
+const patches=roomPatches.slice(patchStart);
+assert.equal(patches.length,8,'the eight intermediate parking poses issue robot-only updates');
+const {start:patchFirst,len:patchCount}=patches[0];
+assert.ok(patchCount/room.length<.26,'room pool updates are restricted to the robot');
+const whole=transferMeshes[5].room;
+for(const {room:current} of transferMeshes.slice(6,-1)){
+ assert.deepEqual(current.subarray(0,patchFirst),whole.subarray(0,patchFirst),'visible and shadow indices outside the robot stay shared');
+ assert.deepEqual(current.subarray(patchFirst+patchCount),whole.subarray(patchFirst+patchCount),'all landed station geometry remains bit-identical');
+}
+assert.deepEqual(transferMeshes.map(v=>v.stage),[3.25,3.25,3.5,3.5,3.5,3.75,3.75,3.75,3.75,3.75,3.75,3.75,3.75,3.75,4]);
 const ease=t=>t*t*(3-2*t);
+const armVertex=(i,x,y,z)=>{
+ const a=64*Math.PI/180*ease(Math.max(0,(i-8)/6)),px=2.8510624,py=.464856;
+ x+=.30*ease(Math.min(1,Math.max(0,(i-5)/3)));
+ return [px+(x-px)*Math.cos(a)-(y-py)*Math.sin(a),py+(x-px)*Math.sin(a)+(y-py)*Math.cos(a),z];
+};
 for(const [i,{room:m,contact}] of transferMeshes.entries()){
- const k=ease(Math.min((i+1)/3,1)), j=ease(Math.max((i-2)/3,0));
+ const k=ease(Math.min((i+1)/3,1)), j=ease(Math.min(1,Math.max((i-2)/3,0)));
  for(const x of [.49,1.71]){
   assert.ok(hasVertex(m,x+.041,-.372-.333*k,-6.554),'both keeper jaws close before robot release');
   assert.ok(hasVertex(m,x+.061,-.686,-6.655),'landed lugs are fixed throughout');
   assert.ok(m.some((v,n)=>n%8===0&&nearEq(v,x+.067)&&nearEq(m[n+1],-.469)&&nearEq(m[n+2],-6.509)&&nearEq(m[n+4],i>=2?1:.51)),'keeper confirmation changes only on the fully closed pose');
  }
- assert.ok(hasVertex(m,1.96,.331+.14*j,-6.838)&&hasVertex(m,1.96,.022-.14*j,-6.838),'robot jaws stay closed until the cradle is seated');
- assert.ok(hasVertex(m,2.17,.13,-7.13)&&hasVertex(m,2.20,.22,-6.523),'the cargo and wrist stay fixed');
+ assert.ok(hasVertex(m,...armVertex(i,1.96,.331+.14*j,-6.838))&&hasVertex(m,...armVertex(i,1.96,.022-.14*j,-6.838)),'robot jaws stay closed until the cradle is seated');
+ assert.ok(hasVertex(m,2.17,.13,-7.13)&&hasVertex(m,...armVertex(i,2.20,.22,-6.523)),'the landed cargo is fixed and the wrist follows the elbow arc');
+
+ if(i>=8){
+  // The two open jaws and wrist housing are convex boxes. Every corner is
+  // beyond the cargo end plane before rotation, so their entire sweep is clear.
+  for(const [x,y,z,w,h,d] of [[2.04,.44,-6.889,.16,.128,.140],[2.04,-.125,-6.889,.16,.121,.140],
+    [1.96,.471,-6.838,.113,.066,.115],[1.96,-.118,-6.838,.113,.065,.115],[2.13,.10,-6.88,.14,.22,.25]]){
+   for(const xx of [x,x+w])for(const yy of [y,y+h])for(const zz of [z,z+d]){
+    const point=armVertex(i,xx,yy,zz);
+    assert.ok(point[0]>2.17+.07&&hasVertex(m,...point),'each jaw/wrist corner clears the cargo cap plane before turning');
+   }
+  }
+ }
  assert.ok(nearEq(contact,-.43+.07*k),'the glove stays attached to the lever');
 }
 
@@ -314,11 +356,11 @@ for(const x of [.49,1.71]){
     assert.ok(hasVertex(cradleSeated,x+.041,-.372,-6.554)&&hasVertex(room,x+.041,-.705,-6.554),'cradle keepers slide down their guides');
     assert.ok(hasVertex(cradleSeated,x+.061,-.686,-6.655)&&hasVertex(room,x+.061,-.686,-6.655),'both landed cargo lugs stay fixed');
 }
-assert.ok(hasVertex(cradleSeated,1.96,.331,-6.838)&&hasVertex(room,1.96,.471,-6.838),'upper gripper jaw opens away from cargo');
-assert.ok(hasVertex(cradleSeated,1.96,.022,-6.838)&&hasVertex(room,1.96,-.118,-6.838),'lower gripper jaw opens away from cargo');
-assert.ok(hasVertex(room,2.17,.13,-7.13)&&hasVertex(room,2.20,.22,-6.523),'the load and robot wrist hold steady through the handoff');
+assert.ok(hasVertex(cradleSeated,1.96,.331,-6.838)&&hasVertex(room,...armVertex(14,1.96,.471,-6.838)),'upper gripper jaw opens away from cargo');
+assert.ok(hasVertex(cradleSeated,1.96,.022,-6.838)&&hasVertex(room,...armVertex(14,1.96,-.118,-6.838)),'lower gripper jaw opens away from cargo');
+assert.ok(hasVertex(room,2.17,.13,-7.13)&&hasVertex(room,...armVertex(14,2.20,.22,-6.523)),'the load remains fixed as the elbow clears the wrist');
 for(let i=0;i<60;i++)step(64);
-assert.equal(roomLoads,countBeforeLatch+16,'the handoff publishes only six bounded world poses');
+assert.equal(roomLoads,countBeforeLatch+25,'the handoff publishes only a bounded fifteen world poses');
 assert.equal(state[19],4,'held transfer does not push off');
 step();step(64);until(()=>state[19]===5,0);
 assert.equal(state[18],0,"release never advertises a stale console speed cue as the hatch");
@@ -373,7 +415,7 @@ assert.ok(hasVertex(room,2.17,.13,-7.13)&&hasVertex(room,.49+.041,-.705,-6.554),
 assert.deepEqual(locatorColor(room),['0.28','0.99','0.58']);
 for(let i=0;i<30;i++){step();step(64);}
 assert.equal(state[19],7);
-assert.equal(roomLoads,countBeforeLatch+20,'only the four hatch poses republish geometry');
+assert.equal(roomLoads,countBeforeLatch+29,'only the four hatch poses republish geometry');
 reset();assert.deepEqual(capture(),evaStart,'reset restores the current exercise');
 assert.deepEqual(room,evaRoom);
 // Old outboard barrier is gone. Coast through it without a reset or a hidden brake.
@@ -394,7 +436,7 @@ assert.ok(state[7]>0,'station contact preserves tangential translation');
 step(64);assert.equal(state[17],0,'skipping the rails cannot lock cargo');
 engine.select_deck(0);step(0,0,0,0);
 assert.deepEqual(capture(),initial,'indoor mode round-trips without exterior state');
-assert.equal(roomLoads,24,'only deck changes, locks, authored alignment poses and reset republish geometry');
+assert.equal(roomLoads,33,'only deck changes, locks, authored alignment poses and reset republish geometry');
 console.log('EVA WASM: geometry, distinct grip, eligibility and release, exterior bulkhead, reset and indoor round-trip passed.');
 
 const raw=readFileSync(new URL('./apollo-arm.bin',import.meta.url));

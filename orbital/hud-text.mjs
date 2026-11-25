@@ -46,6 +46,7 @@ const messages=[
  ["Separated from station","Velocity persists. Aim back toward the station and counterthrust, or coast at 120×.","Station out of reach","Counterthrust to return"],
  ["Separated from station","Coasting at 120×. Thrust resumes normal time.","Station out of reach","Thrust returns to 1×"],
  ["Atmosphere reached","Your orbit crossed 120 km altitude. Reset to return to the station.","EVA ended","120 km entry · reset"],
+ ["Robot arm clearing","The cradle is carrying the load. Wait for the robot arm to clear.","Arm clearing","Arm clearing"]
 ];
 const sections=["TRAINING 01 / HANDRAIL","EVA / 1 OF 3","EVA / 2 OF 3","EVA / 3 OF 3","EVA / CARGO ALIGNMENT","EVA / AIRLOCK RETURN","ORBIT / REENTRY"];
 const arrow=["+","+","+","+","→","←","↑","↓"];

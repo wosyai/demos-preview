@@ -1,4 +1,4 @@
-import {hudText} from "./hud-text.mjs?v=1";
+import {hudText} from "./hud-text.mjs?v=2";
 import {earthDetail} from "./earth-detail.mjs";
 import {exteriorSky} from "./exterior-sky.mjs?v=2";
 import {chaseView,loadApolloBody,loadProceduralSuit,stationGrip} from "./apollo-body.mjs?v=14";
@@ -473,27 +473,58 @@ function batch() {
  for(const [i,n,offset] of [[0,3,0],[1,3,12],[2,2,24]]) {gl.enableVertexAttribArray(i);gl.vertexAttribPointer(i,n,gl.FLOAT,false,32,offset);}
  return {vao,buffer,num:0};
 }
+// Room faces keep one indexed batch for color and shadow. Reserve stable
+// room-buffer slots for the moving robot so neither pass sees stale geometry.
+function packRange(payload,indices,first,last,seen,vertices,base=0){
+ for(let at=first;at<last;at+=8){
+  const v=payload.subarray(at,at+8),key=v.join(",");
+  let found=seen.get(key);
+  if(found===undefined){found=base+vertices.length/8;seen.set(key,found);vertices.push(...v);}
+  indices[(at-first)/8]=found;
+ }
+}
+function packMotion(payload,base){
+ const vertices=[],indices=new Uint16Array(payload.length/8);
+ packRange(payload,indices,0,payload.length,new Map(),vertices,base);
+ return [vertices,indices];
+}
 function update(b,ptr,n,usage){
  if(n<0 || n%24!==0 || n/24>=6680)throw Error("Invalid orbital mesh");
  const payload=new Float32Array(engine.memory.buffer,ptr,n);
  worldVersion++;
  gl.bindVertexArray(b.vao);gl.bindBuffer(gl.ARRAY_BUFFER,b.buffer);
  if(usage===gl.STATIC_DRAW){
-  shadowDirty=true;
+  const start=b===room?engine.scenery_motion(0):0,len=b===room?engine.scenery_motion(1):0;
+  if(start<0||len<0||start%24||len%24||start+len>n||(!len&&start))throw Error("Invalid robot mesh span");
   const seen=new Map(), packed=[],index=new Uint16Array(n/8);
-  for(let at=0;at<n;at+=8){
-    const v=payload.subarray(at,at+8);
-    const token=v.join(",");
-    let found=seen.get(token);
-    if(found===undefined){found=packed.length/8;seen.set(token,found);packed.push(...v);}
-    index[at/8]=found;
-  }
-  gl.bufferData(gl.ARRAY_BUFFER,new Float32Array(packed),usage);
+  packRange(payload,index.subarray(0,start/8),0,start,seen,packed);
+  packRange(payload,index.subarray((start+len)/8),start+len,n,seen,packed);
+  let buffer=packed;
+  if(len){
+   const base=packed.length/8,[moving,movingIndices]=packMotion(payload.subarray(start,start+len),base);
+   buffer=new Float32Array(packed.length+len);
+   buffer.set(packed);buffer.set(moving,packed.length);index.set(movingIndices,start/8);
+   b.motion={start,len,base};
+  }else b.motion=null;
+  gl.bufferData(gl.ARRAY_BUFFER,buffer instanceof Float32Array?buffer:new Float32Array(buffer),usage);
   b.indices??=gl.createBuffer();
   gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER,b.indices);
   gl.bufferData(gl.ELEMENT_ARRAY_BUFFER,index,usage);
+  shadowDirty=true;
  }else gl.bufferData(gl.ARRAY_BUFFER,payload,usage);
  b.num=n/8;
+}
+function updateRoom(ptr,n){
+ if(!engine.scenery_motion(2)){update(room,ptr,n,gl.STATIC_DRAW);return;}
+ const span=room.motion,start=engine.scenery_motion(0);
+ if(!span||start!==span.start||n!==span.len||n!==engine.scenery_motion(1))throw Error("Unmatched robot mesh update");
+ const payload=new Float32Array(engine.memory.buffer,ptr+start*4,n);
+ const [moving,indices]=packMotion(payload,span.base);
+ gl.bindVertexArray(room.vao);gl.bindBuffer(gl.ARRAY_BUFFER,room.buffer);
+ gl.bufferSubData(gl.ARRAY_BUFFER,span.base*32,new Float32Array(moving));
+ gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER,room.indices);
+ gl.bufferSubData(gl.ELEMENT_ARRAY_BUFFER,start/4,indices);
+ shadowDirty=true;worldVersion++;
 }
 let importedArm=null,armSurfaceReady=false,panelStampReady=false,pressureStampReady=false,fasciaStampReady=false;
 function uploadArm(bytes){
@@ -976,12 +1007,12 @@ try{
   };
   stars.src=new URL("./starfield.jpg?v=1",import.meta.url).href;
  }
- const response=await fetch(new URL("./orbital.wasm?v=40",import.meta.url));
+ const response=await fetch(new URL("./orbital.wasm?v=42",import.meta.url));
  if(!response.ok)throw Error("The station engine could not be downloaded.");
  const {instance}=await WebAssembly.instantiate(await response.arrayBuffer(),{
   orbital:{
    hull(p,n){update(hull,p,n,gl.STATIC_DRAW);},
-   scenery(p,n){update(room,p,n,gl.STATIC_DRAW);},hands(p,n){update(hand,p,n,gl.DYNAMIC_DRAW);},
+   scenery:updateRoom,hands(p,n){update(hand,p,n,gl.DYNAMIC_DRAW);},
    frame(p,n){if(n!==38)throw Error("Unexpected station frame");frame=new Float32Array(engine.memory.buffer,p,n).slice();}
   },
   wasi_snapshot_preview1:{proc_exit(n){throw Error("Station exited: "+n);}}

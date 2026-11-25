@@ -14,15 +14,31 @@ f32[8][16][16][16] page2 = [page1, page1, page1, page1, page1, page1, page1, pag
 f32[8][16][16][16][5] mesh = [page2,page2,page2,page2,page2];
 f32[38] state = [0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0];
 i32 count = 0;
+i32 motion_first=0;
+i32 motion_size=0;
+bool room_partial=false;
+i32(i32) scenery_motion=fn(field){
+    if(field==0){motion_first*8}else{if(field==1){motion_size*8}else{if(room_partial){1}else{0}}}
+};
 f32 r = 0.0;
 f32 g = 0.0;
 f32 b = 0.0;
 f32 lit = 0.0;
 unit(f32,f32,f32,f32) paint = fn(red,green,blue,glow) { r=red; g=green; b=blue; lit=glow; };
+bool robot_turn=false;
+f32 robot_px=0.0; f32 robot_py=0.0;
+f32 robot_c=1.0; f32 robot_s=0.0;
+f32(f32,f32) robot_x=fn(x,y){robot_px+robot_c*(x-robot_px)-robot_s*(y-robot_py)};
+f32(f32,f32) robot_y=fn(x,y){robot_py+robot_s*(x-robot_px)+robot_c*(y-robot_py)};
 unit(f32,f32,f32,f32) pt = fn(x,y,z,shade) {
+    f32 mx=x;f32 my=y;
+    if(robot_turn){
+        mx=robot_x(x,y);
+        my=robot_y(x,y);
+    };
     if (count<20480) {
         u64 hi=core.int_extend<u64>(count/4096); u64 a=core.int_extend<u64>((count/256)%16); u64 j=core.int_extend<u64>((count/16)%16); u64 k=core.int_extend<u64>(count%16);
-        mesh[hi][a][j][k][0]=x;mesh[hi][a][j][k][1]=y;mesh[hi][a][j][k][2]=z;mesh[hi][a][j][k][3]=r;mesh[hi][a][j][k][4]=g;mesh[hi][a][j][k][5]=b;mesh[hi][a][j][k][6]=shade;mesh[hi][a][j][k][7]=lit;
+        mesh[hi][a][j][k][0]=mx;mesh[hi][a][j][k][1]=my;mesh[hi][a][j][k][2]=z;mesh[hi][a][j][k][3]=r;mesh[hi][a][j][k][4]=g;mesh[hi][a][j][k][5]=b;mesh[hi][a][j][k][6]=shade;mesh[hi][a][j][k][7]=lit;
         count=count+1;
     };
 };
@@ -71,7 +87,7 @@ unit(i32) rack = fn(n) {
     };
 };
 unit() draw = fn {
-    count=0;
+    motion_first=0;motion_size=0;count=0;
     paint(0.26,0.34,0.38,0.0);
     box(-2.26,-1.78,-10.1,4.52,0.1,12.4);
     box(-2.26,1.72,-10.1,4.52,0.12,12.4);
@@ -551,10 +567,19 @@ unit(f32,f32,f32,f32) actuator_case = fn(x,y,z,radius){
     paint(0.69,0.48,0.23,0.34);
     box(x-radius*0.24,y+radius*0.82,z-0.176,radius*0.52,radius*0.36,0.120);
 };
+f32[7] park_cos=[1.000000000,0.996578872,0.958359501,0.848048096,0.676780799,0.511154195,0.438371147];
+f32[7] park_sin=[0.000000000,0.082647157,0.285564470,0.529919264,0.736184590,0.859489028,0.898794046];
 unit() manipulator = fn {
     f32 dy=load_drop();
     u64 pose=core.int_extend<u64>(seat_pose);
     f32 ex=elbow_dx[pose]; f32 ey=elbow_dy[pose]; f32 ez=elbow_dz[pose];
+    f32 slide=0.30*transfer_ease(transfer_pose-6);
+    bool parking=transfer_pose>9;
+    if(parking){
+        u64 index=core.int_extend<u64>(transfer_pose-9);
+        robot_px=2.88+ex;robot_py=0.46+ey;
+        robot_c=park_cos[index];robot_s=park_sin[index];
+    };
     paint(0.21,0.28,0.31,0.65);
     drive_link(2.76,2.49,-10.07,3.23,1.20,-7.97,0.194,0.121);
     paint(0.59,0.62,0.60,0.71);
@@ -567,42 +592,46 @@ unit() manipulator = fn {
     drive_link(3.23,1.20,-8.23,2.88+ex,0.46+ey,-7.27+ez,0.101,0.088);
     paint(0.69,0.70,0.66,0.71);
     drive_link(3.205,1.06,-7.75,2.924+ex,0.54+ey,-6.99+ez,0.091,0.046);
+    robot_turn=parking;
     paint(0.48,0.55,0.58,0.64);
-    drive_link(2.88+ex,0.46+ey,-7.00+ez,2.24,0.62+dy,-6.74,0.121,0.069);
+    drive_link(2.88+ex,0.46+ey,-7.00+ez,2.24+slide,0.62+dy,-6.74,0.121,0.069);
     paint(0.19,0.25,0.29,0.62);
-    sweep(2.88+ex,0.46+ey,-7.29+ez,2.18,0.62+dy,-6.98,0.080,0.074,0,0,10);
+    sweep(2.88+ex,0.46+ey,-7.29+ez,2.18+slide,0.62+dy,-6.98,0.080,0.074,0,0,10);
     paint(0.63,0.70,0.71,0.62);
-    sweep(2.84+ex,0.52+ey+dy*0.08,-6.904+ez,2.43,0.626+dy*0.78,-6.77,0.045,0.045,0,0,14);
+    sweep(2.84+ex,0.52+ey+dy*0.08,-6.904+ez,2.43+slide,0.626+dy*0.78,-6.77,0.045,0.045,0,0,14);
     paint(0.19,0.23,0.25,0.39);
-    sweep(2.66,0.569+dy*0.4,-6.85,2.60,0.585+dy*0.51,-6.83,0.065,0.065,0,0,12);
+    sweep(2.66+slide*0.56,0.569+dy*0.4,-6.85,2.60+slide*0.56,0.585+dy*0.51,-6.83,0.065,0.065,0,0,12);
+    robot_turn=false;
     actuator_case(3.23,1.20,-7.81,0.265);
     actuator_case(2.88+ex,0.46+ey,-6.89+ez,0.262);
-    pin_z(3.23,1.20,-7.81,0.265);pin_z(2.88+ex,0.46+ey,-6.89+ez,0.262);pin_z(2.20,0.62+dy,-6.62,0.165);
+    pin_z(3.23,1.20,-7.81,0.265);pin_z(2.88+ex,0.46+ey,-6.89+ez,0.262);robot_turn=parking;pin_z(2.20+slide,0.62+dy,-6.62,0.165);robot_turn=false;
     paint(0.80,0.48,0.18,0.65);
     sweep(3.29,1.16,-7.60,3.16,0.91,-7.24,0.034,0.034,2,0,10);
     sweep(3.16,0.91,-7.24,3.05+ex,0.63+ey,-6.83+ez,0.034,0.034,2,0,10);
-    sweep(3.05+ex,0.63+ey,-6.83+ez,2.51,0.58+dy*0.63,-6.52,0.032,0.032,0,0,10);
+    sweep(3.05+ex,0.63+ey,-6.83+ez,if(parking){robot_x(2.51+slide,0.58+dy*0.63)}else{2.51+slide},if(parking){robot_y(2.51+slide,0.58+dy*0.63)}else{0.58+dy*0.63},-6.52,0.032,0.032,0,0,10);
     paint(0.19,0.24,0.26,0.34);
     sweep(3.23,1.13,-7.61,3.10,0.88,-7.23,0.025,0.025,2,0,10);
     sweep(3.10,0.88,-7.23,2.99+ex,0.58+ey,-6.82+ez,0.025,0.025,2,0,10);
-    sweep(2.99+ex,0.58+ey,-6.82+ez,2.48,0.54+dy*0.63,-6.51,0.024,0.024,0,0,10);
+    sweep(2.99+ex,0.58+ey,-6.82+ez,if(parking){robot_x(2.48+slide,0.54+dy*0.63)}else{2.48+slide},if(parking){robot_y(2.48+slide,0.54+dy*0.63)}else{0.54+dy*0.63},-6.51,0.024,0.024,0,0,10);
     paint(0.62,0.64,0.63,0.62);
     sweep(3.20,1.03,-7.425,3.16,0.95,-7.31,0.055,0.055,2,0,12);
-    sweep(2.72,0.57+dy*0.29,-6.65,2.63,0.57+dy*0.41,-6.59,0.057,0.057,0,0,12);
+    robot_turn=parking;
+    sweep(2.72+slide*0.50,0.57+dy*0.29,-6.65,2.63+slide*0.50,0.57+dy*0.41,-6.59,0.057,0.057,0,0,12);
     paint(0.41,0.46,0.48,0.68);
-    box(2.13,0.50+dy,-6.88,0.14,0.22,0.25);
+    box(2.13+slide,0.50+dy,-6.88,0.14,0.22,0.25);
     paint(0.19,0.24,0.27,0.62);
-    box(2.08,0.36+dy,-6.73,0.28,0.12,0.14);
+    box(2.08+slide,0.36+dy,-6.73,0.28,0.12,0.14);
     if(alignment_stage>=4){paint(0.94,0.62,0.23,0.92);}else{if(alignment_stage==3){paint(0.28,1.0,0.60,0.92);}else{paint(0.28,0.72,0.92,0.92);};};
-    box(2.14,0.407+dy,-6.581,0.13,0.033,0.010);
+    box(2.14+slide,0.407+dy,-6.581,0.13,0.033,0.010);
     paint(0.56,0.61,0.61,0.62);
-    box(2.16,0.22+dy,-6.892,0.064,0.72,0.092);
+    box(2.16+slide,0.22+dy,-6.892,0.064,0.72,0.092);
     f32 jaw_open=0.14*transfer_ease(transfer_pose-3);
-    box(2.04,0.700+dy+jaw_open,-6.889,0.16,0.128,0.140);
-    box(2.04,0.415+dy-jaw_open,-6.889,0.16,0.121,0.140);
+    box(2.04+slide,0.700+dy+jaw_open,-6.889,0.16,0.128,0.140);
+    box(2.04+slide,0.415+dy-jaw_open,-6.889,0.16,0.121,0.140);
     paint(0.71,0.50,0.24,0.35);
-    box(1.96,0.731+dy+jaw_open,-6.838,0.113,0.066,0.115);
-    box(1.96,0.422+dy-jaw_open,-6.838,0.113,0.065,0.115);
+    box(1.96+slide,0.731+dy+jaw_open,-6.838,0.113,0.066,0.115);
+    box(1.96+slide,0.422+dy-jaw_open,-6.838,0.113,0.065,0.115);
+    robot_turn=false;
 };
 unit() lock_support = fn {
     paint(0.45,0.48,0.50,0.65);
@@ -1182,10 +1211,23 @@ unit() eva_room = fn {
     paint(0.72,0.54,0.27,0.17);
     sweep(-1.59,-0.88,-5.38,-0.28,-0.88,-5.38,0.03,0.03,0,0,10);
     sweep(-1.59,-0.82,-5.38,-0.27,-0.82,-5.38,0.025,0.025,0,0,10);
-    suspended_cargo();manipulator();lock_support();
+    suspended_cargo();
+    motion_first=count;manipulator();motion_size=count-motion_first;
+    lock_support();
     traversal_rail(0);traversal_rail(1);traversal_rail(2);cargo_fixture();alignment_console();
     unsafe { host.scenery(core.pointer_cast<*?u8>(&?mesh[0][0][0][0][0]),count*8); };
 };
+unit() publish_robot=fn{
+    i32 previous=count;
+    count=motion_first;manipulator();
+    if(count-motion_first==motion_size){
+        room_partial=true;
+        unsafe {host.scenery(core.pointer_cast<*?u8>(&?mesh[0][0][0][0][0]),motion_size*8);};
+        room_partial=false;
+    }else{eva_room();};
+    count=previous;
+};
+
 f32 pilot_x=0.0;f32 pilot_y=0.0;f32 pilot_z=0.37;
 f32 vx=0.0;f32 vy=0.0;f32 vz=0.0;
 f32 yaw=0.0;f32 pitch=0.0;f32 timer=0.0;
@@ -1607,8 +1649,9 @@ unit(f32,i32,f32,f32) tick = fn(dt,keys,look_x,look_y) {
         transfer_clock=transfer_clock+d;
         if(transfer_clock>=core.sint_to_float<f32>(transfer_pose+1)*0.085){
             transfer_pose=transfer_pose+1;
-            if(transfer_pose==6){transfer_clock=0.0;alignment_stage=4;};
-            mesh_grip=-1.0;eva_room();
+            if(transfer_pose==15){transfer_clock=0.0;alignment_stage=4;};
+            if(transfer_pose>6 && transfer_pose<15){publish_robot();}
+            else{mesh_grip=-1.0;eva_room();};
         };
     };
     if(mode==1){

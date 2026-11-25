@@ -1,6 +1,6 @@
 %%start
 enum Motion { floating; taking; held; pushing; }
-enum Cargo { rails; pin; approach; aligning; lowering; seated; closing; opening; delivered; return_hatch; handle; locking; complete; }
+enum Cargo { rails; pin; approach; aligning; lowering; seated; closing; opening; parking; delivered; return_hatch; handle; locking; complete; }
 enum Steering { none; face_rail; slow_rail; counterthrust; right; left; up; down; hatch_right; hatch_left; }
 f32(Steering) guidance_code=fn(steering){
     f32 wire=0.0;
@@ -28,7 +28,7 @@ Cargo(i32,i32,f32,f32,i32) cargo=fn(alignment,lock_kind,seat_clock,transfer_cloc
     if(alignment==5){stage=Cargo::return_hatch;};
     if(alignment==6){stage=Cargo::handle;};
     if(alignment==7){stage=Cargo::complete;};
-    if(transfer_clock>0.0){stage=if(transfer_pose<3){Cargo::closing}else{Cargo::opening};};
+    if(transfer_clock>0.0){stage=if(transfer_pose<3){Cargo::closing}else{if(transfer_pose<6){Cargo::opening}else{Cargo::parking}};};
     if(seat_clock>0.0){stage=Cargo::lowering;};
     if(lock_kind==2){stage=Cargo::locking;};
     if(lock_kind==1){stage=Cargo::pin;};
@@ -40,6 +40,7 @@ f32(Cargo,i32) telemetry_stage=fn(stage,alignment){
     if(stage==Cargo::lowering){wire=2.5;};
     if(stage==Cargo::closing){wire=3.25;};
     if(stage==Cargo::opening){wire=3.5;};
+    if(stage==Cargo::parking){wire=3.75;};
     if(stage==Cargo::locking){wire=6.5;};
     wire
 };
@@ -75,6 +76,7 @@ i32(Motion,Cargo,bool,bool,Steering,i32) outside=fn(motion,stage,locked,reach,cu
         if(stage==Cargo::seated){message=18;};
         if(stage==Cargo::closing){message=19;};
         if(stage==Cargo::opening){message=20;};
+        if(stage==Cargo::parking){message=41;};
         if(stage==Cargo::delivered){message=if(motion==Motion::pushing){22}else{21};};
         if(stage==Cargo::return_hatch){
             message=if(cue==Steering::hatch_right){23}else{if(cue==Steering::hatch_left){24}else{22}};
@@ -121,7 +123,7 @@ fn(motion,stage,eva,locked,reach,reentry,entry,far,depleted,burn,warping,leg,mar
     if(entry){message=40;aim=0;hatch=false;};
     bool airlock=stage==Cargo::return_hatch||stage==Cargo::handle||stage==Cargo::locking||stage==Cargo::complete;
     bool console=eva&&motion==Motion::held&&stage!=Cargo::rails&&stage!=Cargo::pin&&stage!=Cargo::approach&&!airlock;
-    bool animating=stage==Cargo::pin||stage==Cargo::lowering||stage==Cargo::closing||stage==Cargo::opening||stage==Cargo::locking||stage==Cargo::complete;
+    bool animating=stage==Cargo::pin||stage==Cargo::lowering||stage==Cargo::closing||stage==Cargo::opening||stage==Cargo::parking||stage==Cargo::locking||stage==Cargo::complete;
     bool interact=!entry&&!far&&!animating&&(motion==Motion::held||(motion==Motion::floating&&reach));
     i32 section=if(reentry){6}else{if(eva){if(airlock){5}else{if(locked){4}else{leg+1}}}else{0}};
     message | (aim<<6) | (flag(hatch)<<9) | (flag(interact)<<10) | (flag(console)<<11) |

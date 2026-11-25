@@ -5,7 +5,7 @@ import sys
 
 partition, output, _, runtime = map(Path, sys.argv[1:])
 startup = Path(__file__).resolve().parent.parent / "tools" / "start.ll"
-names = ("_start", "reset", "tick", "select_deck", "select_arm", "set_thrust", "set_rotator", "select_reentry", "camera_clip", "hud_code")
+names = ("_start", "reset", "tick", "select_deck", "select_arm", "set_thrust", "set_rotator", "select_reentry", "camera_clip", "hud_code", "scenery_motion")
 objects = []
 for source, name in ((partition, "main.o"), (startup, "start.o"), (runtime, "runtime.o")):
     obj = output / name
