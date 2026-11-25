@@ -9,6 +9,13 @@ entry_view = namespace orbital "entry-presentation.w";
 control = namespace orbital "controls.w";
 render_policy = namespace orbital "render-budget.w";
 sky_art = namespace orbital "sky-art.w";
+avatar_kinematics = namespace orbital "avatar-kinematics.w";
+unit(f64,f64,f64,f64,f64,f64,f64,f64,i32) avatar_grip=fn(ex,ey,ez,ax,ay,az,weight,stage,valid){avatar_kinematics.publish_grip(ex,ey,ez,ax,ay,az,weight,stage,valid);};
+unit(f64,f64,f64,f64,f64,f64,f64,f64,f64,f64,f64,f64,i32) avatar_approach=fn(rx,ry,rz,cx,cy,cz,wx,wy,wz,progress,weight,radius,releasing){avatar_kinematics.publish_approach(rx,ry,rz,cx,cy,cz,wx,wy,wz,progress,weight,radius,releasing);};
+unit(f64,f64,f64,f64) avatar_facing=fn(by,bp,hy,hp){avatar_kinematics.publish_facing(by,bp,hy,hp);};
+unit(f64,f64,f64,f64) avatar_mmu=fn(lx,ly,rx,ry){avatar_kinematics.publish_mmu(lx,ly,rx,ry);};
+unit(f64,f64,f64,f64,f64,f64,f64,f64,f64,f64,f64) avatar_elbow=fn(sx,sy,sz,wx,wy,wz,upper,fore,px,py,pz){avatar_kinematics.publish_elbow(sx,sy,sz,wx,wy,wz,upper,fore,px,py,pz);};
+
 host = extern wasm "orbital" {
     unsafe unit(*?u8,i32) hands;
     unsafe unit(*?u8,i32) frame;

@@ -2,7 +2,9 @@ import {hudText} from "./hud-text.mjs?v=6";
 import {reentryGlow} from "./reentry-glow.mjs?v=2";
 import {earthDetail} from "./earth-detail.mjs?v=3";
 import {exteriorSky} from "./exterior-sky.mjs?v=6";
-import {loadApolloBody,loadProceduralSuit,stationGrip} from "./apollo-body.mjs?v=15";
+import {loadApolloBody,loadProceduralSuit} from "./apollo-body.mjs?v=16";
+import {bindAvatarRig} from "./avatar-rig.mjs?v=1";
+let avatarRig,rigRow;
 const $ = id => document.getElementById(id);
 const canvas = $("view");
 const main = canvas.parentElement;
@@ -615,7 +617,8 @@ function render(alpha) {
  gl.enable(gl.DEPTH_TEST);bind(scene);
  gl.uniform1i(scene.practicalLighting,Number(upgradedPractical));gl.uniform1i(scene.lightingUpgrade,Number(upgradedSky));gl.uniform3fv(scene.earthBounceDir,orbit.center.slice(0,3));
  // Both suit solvers use this same Wosy-derived rail anchor; shade only in contact.
- const contact=body&&(!apolloModelActive||upgradedPractical)?stationGrip(pose):null;
+ const grip=body?avatarRig.stationGrip(pose):null;
+ const contact=(!apolloModelActive||upgradedPractical)?grip:null;
  if(contact){gl.uniform4f(scene.gripContact,...contact.center,contact.progress);gl.uniform1f(scene.gripRadius,contact.radius);}
  else gl.uniform4f(scene.gripContact,0,0,0,0);
  gl.uniform1i(scene.routeLens,pose[20]);gl.uniform1i(scene.routeReach,pose[10]);
@@ -627,7 +630,7 @@ function render(alpha) {
   const relative=entry?{...camera,eye:camera.eye.map((n,i)=>n-pose[i])}:camera;
   let suitPose=pose;
   if(entry){suitPose=pose.slice();suitPose[0]=0;suitPose[1]=0;suitPose[2]=0;}
-  apolloBody.draw(suitPose,{camera:relative,optics,thirdPerson:drawBody,roll,sunDirection:orbitalSun});
+  apolloBody.draw(suitPose,{camera:relative,optics,thirdPerson:drawBody,roll,sunDirection:orbitalSun,contact:grip});
  }
  // The background lies behind the mesh; early depth rejects the sky and globe
  // across the station rather than shading those pixels and drawing over them.
@@ -843,11 +846,12 @@ function shadowBuffer(size){
  }
 try{
  if(!gl)throw Error("WebGL 2 is required to render the station.");
- const response=await fetch(new URL("./orbital.wasm?v=57",import.meta.url));
+ const response=await fetch(new URL("./orbital.wasm?v=58",import.meta.url));
  if(!response.ok)throw Error("The station engine could not be downloaded.");
  const {instance}=await WebAssembly.instantiate(await response.arrayBuffer(),{
   orbital:{
    indexed:uploadIndexed,hands:uploadHands,
+   avatar_rig(p,n){rigRow=new Float64Array(engine.memory.buffer,p,n);},
    material_art(p,n){if(n!==75)throw Error("Unexpected station material profile");materialArt=new Float64Array(engine.memory.buffer,p,n);},
    sky_art(p,n){if(n!==29)throw Error("Unexpected celestial profile");skyArt=new Float64Array(engine.memory.buffer,p,n);},
    hud_view(p,n){if(n!==7)throw Error("Unexpected HUD projection");hudRow=new Float64Array(engine.memory.buffer,p,n);},
@@ -860,7 +864,7 @@ try{
   },
   wasi_snapshot_preview1:{proc_exit(n){throw Error("Station exited: "+n);}}
  });
- engine=instance.exports;engine._start();engine.celestial_profile();engine.material_profile();
+ engine=instance.exports;avatarRig=bindAvatarRig(engine,produce=>{rigRow=null;produce();return rigRow;});engine._start();engine.celestial_profile();engine.material_profile();
  orbitalSun=skyArt.subarray(0,3);
  const sun=sunShader(skyArt);
  scene=program(vs,fs(sun,materialArt));space=program(svs,sfs(sun,skyArt));skyCopy=program(svs,skyCopyFS);depth=program(depthVS(sun),depthFS);room=batch();hand=batch();hull=batch();
@@ -1003,10 +1007,10 @@ try{
   apolloModelActive=isApollo;apolloBody=body;engine.select_arm(1);worldVersion++;hud();
  };
  const useDefaultSuit=()=>{
-  try{installSuit(loadProceduralSuit(gl));}
+  try{installSuit(loadProceduralSuit(gl,avatarRig));}
   catch(e){console.warn("EVA equipment fallback: "+e.message);loadBakedArm();}
  };
- if(wantsApollo)loadApolloBody(gl,new URL("./apollo-body.glb?v=1",import.meta.url)).then(body=>installSuit(body,true)).catch(e=>{console.warn("Apollo body fallback: "+e.message);useDefaultSuit();});
+ if(wantsApollo)loadApolloBody(gl,new URL("./apollo-body.glb?v=1",import.meta.url),avatarRig).then(body=>installSuit(body,true)).catch(e=>{console.warn("Apollo body fallback: "+e.message);useDefaultSuit();});
  else useDefaultSuit();
  $("start").disabled=false;$("training").disabled=false;$("reentry").disabled=false;requestAnimationFrame(animate);
 }catch(e){$("error").textContent=String(e.message);console.error(e);}

@@ -61,6 +61,11 @@ sky_plan = "sky_plan"
 globe_request = "globe_request"
 globe_retry = "globe_retry"
 material_profile = "material_profile"
+avatar_grip = "avatar_grip"
+avatar_approach = "avatar_approach"
+avatar_facing = "avatar_facing"
+avatar_mmu = "avatar_mmu"
+avatar_elbow = "avatar_elbow"
 
 [targets.app.profiles.dev]
 main_artifact = "main"

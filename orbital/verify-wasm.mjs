@@ -1,5 +1,6 @@
 import {hudText} from './hud-text.mjs';
-import {stationGrip,ProceduralPose} from './apollo-body.mjs';
+import {ProceduralPose} from './apollo-body.mjs';
+import {bindAvatarRig} from './avatar-rig.mjs';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import {createHash} from 'node:crypto';
@@ -7,11 +8,12 @@ const path=process.argv[2] ?? new URL('./orbital.wasm',import.meta.url);
 const wasm=new WebAssembly.Module(readFileSync(path));
 const imports=WebAssembly.Module.imports(wasm);
 const actual=imports.map(({module,name,kind})=>`${module}.${name}:${kind}`).sort();
-const orbitalImports=['orbital.earth_tiles:function','orbital.entry_shell:function','orbital.entry_visual:function','orbital.frame:function','orbital.hands:function','orbital.hud_view:function','orbital.indexed:function','orbital.material_art:function','orbital.render_budget:function','orbital.sky_art:function','orbital.visual:function'];
+const orbitalImports=['orbital.avatar_rig:function','orbital.earth_tiles:function','orbital.entry_shell:function','orbital.entry_visual:function','orbital.frame:function','orbital.hands:function','orbital.hud_view:function','orbital.indexed:function','orbital.material_art:function','orbital.render_budget:function','orbital.sky_art:function','orbital.visual:function'];
 const procExit='wasi_snapshot_preview1.proc_exit:function';
 assert.deepEqual(actual,actual.includes(procExit)?[...orbitalImports,procExit]:orbitalImports,
  'expected the exact browser import contract (Orbital callbacks and optional WASI proc_exit)');
 let materialArt,roomVertices,roomElements,skyArt,hudView,rendererPlan,entryMesh,entrySample,earthTiles,visual,hull,hullLoads=0,room,hand,state,engine,roomLoads=0,handLoads=0,roomSpan,stagedRoom;
+let rigRow;
 const roomPatches=[];
 function read(p,n){assert.equal(p%4,0);return new Float32Array(engine.memory.buffer,p,n).slice();}
 engine=new WebAssembly.Instance(wasm,{orbital:{
@@ -49,6 +51,7 @@ engine=new WebAssembly.Instance(wasm,{orbital:{
    roomPatches.push({id,start,len});
   }
  },hands(p,n){hand=read(p,n);handLoads++;},
+ avatar_rig(p,n){assert.equal(p%8,0);rigRow=new Float64Array(engine.memory.buffer,p,n);},
  material_art(p,n){assert.equal(n,75);assert.equal(p%8,0);materialArt=new Float64Array(engine.memory.buffer,p,n).slice();},
  sky_art(p,n){assert.equal(n,29);assert.equal(p%8,0);skyArt=new Float64Array(engine.memory.buffer,p,n).slice();},
  hud_view(p,n){assert.equal(n,7);assert.equal(p%8,0);hudView=new Float64Array(engine.memory.buffer,p,n).slice();},
@@ -652,11 +655,12 @@ lowHatchReach.set([-0.3595730364,-0.02891877852,-1.90815413,-0.7693254352,-0.150
 lowHatchReach.set([0.5337272882,1,0,1,-0.7766054273,-0.2747149467,-2.586382151,1],8);
 lowHatchReach.set([5,0,0.381921947,-0.07271004468],19);
 captureFrames.push(lowHatchReach);
-const handPose=new ProceduralPose();
+const rig=bindAvatarRig(engine,produce=>{rigRow=null;produce();return rigRow;});
+const handPose=new ProceduralPose(rig);
 const phalanges=[[.047,.041,.032],[.050,.044,.034],[.047,.042,.033],[.041,.038,.029]];
 let gripClearance=Infinity,heldSamples=0,sweepSamples=0;
 for(const frame of captureFrames){
- const grip=stationGrip(frame);
+ const grip=rig.stationGrip(frame);
  if(!grip)continue;
  const {palette,joints}=handPose.solve(frame);
  const nearest=(joint,beg,end,radius)=>{

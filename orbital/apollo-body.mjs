@@ -20,30 +20,6 @@ const approachBars=[null,{center:[-.18,-.57,-1.59],radius:.087},{center:[-.18,-.
 const radial=(center,x,r,t)=>add(center,[x,r*Math.cos(t),r*Math.sin(t)]);
 const inward=t=>[0,Math.sin(t),-Math.cos(t)];
 const gripSmooth=t=>{const q=clamp(t,0,1);return q*q*(3-2*q);};
-export function stationGrip(frame){
- const weight=frame[8];
- if(weight<.004||frame[15]!==1||frame[29]===1)return null;
- const rest=[frame[0]-.23,frame[1]-.40,frame[2]-.80];
- const center=rest.map((v,i)=>v+(frame[12+i]-v)/weight);
- const radius=frame[19]>=5?.082:.087;
- const theta=frame[19]>=5?.61:.365;
- const direction=inward(theta);
- const knuckle=radial(center,gripWidth,radius+.020,theta);
- const wrist=sub(knuckle,mul(direction,.066));
- const basis=transformBasis([-1,0,0],cross(direction,[-1,0,0]),direction,wrist);
- return {center,radius,theta,wrist,direction,basis,progress:gripSmooth((weight-.69)/.31)};
-}
-function wristApproach(rest,contact,weight,releasing){
- if(!contact)return rest;
- const {wrist,center}=contact;
- const end=sub(wrist,center), start=sub(rest,center), a=Math.atan2(start[2],start[1]), b=Math.atan2(end[2],end[1]);
- const r=Math.hypot(end[1],end[2]), h=r+.084;
- if(weight>=.69)return radial(center,end[0],r+(h-r)*(1-contact.progress),b);
- const q=gripSmooth(weight/.69), angle=a+Math.atan2(Math.sin(b-a),Math.cos(b-a))*q;
- const r0=Math.hypot(start[1],start[2]);
- const rr=r0+(h-r0)*q+.095*Math.sin(Math.PI*q)+(releasing?.096:.060)*gripSmooth(weight/.040)*(1-q);
- return radial(center,start[0]+(end[0]-start[0])*q,rr,angle);
-}
 function fitDigits(palette,palm,contact){
  const weight=contact?.progress??0;
  const localToFit=(from,to)=>{
@@ -108,10 +84,6 @@ function clearanceShift(palette,bar,normal){
  }
  return b;
 }
-function facing(yaw,pitch){
- const sy=Math.sin(yaw),cy=Math.cos(yaw),sp=Math.sin(pitch),cp=Math.cos(pitch);
- return {forward:[sy*cp,sp,-cy*cp],right:[cy,0,sy],up:[-sy*sp,cp,cy*sp]};
-}
 function transformBasis(forward,up,right,p=[0,0,0]){
  return [...forward,0,...up,0,...right,0,...p,1];
 }
@@ -125,20 +97,9 @@ function align(m,from,to){
  return dst;
 }
 
-// Project a requested wrist onto the anatomical reach annulus, then solve the
-// two rigid bone lengths in the plane defined by the side-specific elbow pole.
-export function elbowIK(shoulder,wrist,upper,fore,pole){
- const delta=sub(wrist,shoulder), dir=length(delta)>.00001?unit(delta):[0,0,-1];
- const d=clamp(length(delta),Math.abs(upper-fore)+.0005,upper+fore-.0005);
- let normal=sub(pole,mul(dir,dot(pole,dir)));
- if(length(normal)<.00001){const safe=Math.abs(dir[1])<.9?[0,-1,0]:[1,0,0];normal=sub(safe,mul(dir,dot(safe,dir)));}
- const run=(upper*upper-fore*fore+d*d)/(2*d);
- return {elbow:add(shoulder,add(mul(dir,run),mul(unit(normal),Math.sqrt(Math.max(upper*upper-run*run,0))))),
-         wrist:add(shoulder,mul(dir,d)), wristError:Math.abs(length(delta)-d)};
-}
-
 export class ApolloPose {
- constructor(asset){
+ constructor(asset,rig){
+  this.rig=rig;
   this.asset=asset;
   this.nodes=asset.json.nodes;
   this.local=this.nodes.map(n=>n.matrix||matrix(n.translation,n.rotation,n.scale));
@@ -159,9 +120,8 @@ export class ApolloPose {
  solve(frame,options={}){
   const joints=this.globals, index=name=>this.names.get(name);
   const eye=Array.from(frame.slice(0,3));
-  const body=facing(frame[21]??frame[3],frame[22]??frame[4]);
-  const head=facing(frame[3],frame[4]);
-  const grip=clamp(frame[8],0,1), contact=stationGrip(frame);
+  const {body,head}=this.rig.axes(frame);
+  const grip=clamp(frame[8],0,1), contact=options.contact===undefined?this.rig.stationGrip(frame):options.contact;
   // Apollo faces +X, +Y is up and right is +Z in the exported GLB.
   const base=transformBasis(body.forward,body.up,body.right,
       sub(eye,add(mul(body.up,1.623),mul(body.forward,-.095))));
@@ -181,7 +141,7 @@ export class ApolloPose {
   install(neck,[...look.slice(0,12),...neckPoint,1]);
   const debug={};
   const gear=transformBasis(body.right,body.up,mul(body.forward,-1),eye);
-  const {amount,controls}=equipmentPose(this.palette,frame,body,gear);
+  const {amount,controls}=equipmentPose(this.palette,frame,body,gear,this.rig);
   for(const [side,s] of [['Left',-1],['Right',1]]){
    const upper=index(side+'ArmUpper'),lower=index(side+'ArmLower'), wrist=index(side+'HandWrist');
    let a=origin(joints[upper]),b=origin(joints[lower]),c=origin(joints[wrist]);
@@ -192,7 +152,7 @@ export class ApolloPose {
    const reach=side==='Left'?grip:0;
    const authoredWrist=Array.from(frame.slice(12,15));
    const published=options.wrist??add(authoredWrist,[.068,.154,.077]);
-   const target=reach&&contact?wristApproach(rest,contact,reach,frame[9]===3):reach?mix(rest,published,reach):rest;
+   const target=reach&&contact?this.rig.approach(rest,contact,reach,frame[9]===3):reach?mix(rest,published,reach):rest;
    const pole=add(mul(body.right,s*.51),mul(body.up,-1));
    if(reach){
     const collar=index('LeftShoulder'), anchor=origin(joints[collar]);
@@ -207,7 +167,7 @@ export class ApolloPose {
      a=origin(joints[upper]);b=origin(joints[lower]);c=origin(joints[wrist]);
     }
    }
-   const M=elbowIK(a,target,length(sub(b,a)),length(sub(c,b)),pole);
+   const M=this.rig.elbow(a,target,length(sub(b,a)),length(sub(c,b)),pole);
    install(upper,align(joints[upper],sub(b,a),sub(M.elbow,a)));
    const afterLower=origin(joints[lower]), afterWrist=origin(joints[wrist]);
    install(lower,align(joints[lower],sub(afterWrist,afterLower),sub(M.wrist,M.elbow)));
@@ -359,10 +319,10 @@ function firstPersonSleeve(asset,part,indices){
  }
  return new indices.constructor(keep);
 }
-export async function loadApolloBody(gl,url=new URL('./apollo-body.glb',import.meta.url)){
+export async function loadApolloBody(gl,url,rig){
  const response=await fetch(url);
  if(!response.ok)throw Error('Apollo mesh: '+response.status);
- const asset=openApolloGLB(await response.arrayBuffer()), pose=new ApolloPose(asset);
+ const asset=openApolloGLB(await response.arrayBuffer()), pose=new ApolloPose(asset,rig);
  const textures=[];
  const TEX=8;
  for(let i=0;i<asset.json.images.length;i++){
@@ -408,7 +368,7 @@ function renderAvatar(gl,pose,meshes,hasEquipment=false){
  const UBO=3, TEX=8, palette=gl.createBuffer();
  gl.uniformBlockBinding(p,gl.getUniformBlockIndex(p,'ApolloJoints'),UBO);
  gl.bindBuffer(gl.UNIFORM_BUFFER,palette);gl.bufferData(gl.UNIFORM_BUFFER,89*64,gl.DYNAMIC_DRAW);
- if(!hasEquipment)meshes.push(...rigidMesh(gl,createEquipment()));
+ if(!hasEquipment)meshes.push(...rigidMesh(gl,createEquipment(pose.rig.neutralControls())));
  const plumes=[createPlume(gl,87),createPlume(gl,88)];
  gl.bindVertexArray(null);
  let last=null;
@@ -456,7 +416,7 @@ function renderAvatar(gl,pose,meshes,hasEquipment=false){
  };
 }
 
-function equipmentPose(palette,frame,body,gear){
+function equipmentPose(palette,frame,body,gear,rig){
   palette.set(gear,84*16);
   const acceleration=Array.from(frame.slice(23,26));
   const amount=length(acceleration);
@@ -470,23 +430,9 @@ function equipmentPose(palette,frame,body,gear){
     palette.set(transformBasis(side,up,mul(ex,.19+.27*scale),nozzle),(87+i)*16);
    }
   }
-  const controls=mmuControls(frame);
+  const controls=rig.controls(frame);
   for(const [i,control] of controls.entries())palette.set(product(gear,control.pivot), (85+i)*16);
   return {amount,controls};
-}
-
-// In eye-relative body space (+X right, +Y up, +Z behind). A geared
-// hinge at each arm tip is the one shared transform for hardware and fingers.
-const controllerPoint=([x,y,z])=>[x*.90,y+.040,z-.095];
-export function mmuControls(frame){
- return [-1,1].map((s,i)=>{
-  const x=clamp(frame[33+i*2]||0,-1,1), y=clamp(frame[34+i*2]||0,-1,1);
-  const stem=controllerPoint([s*.285,-.255,-.425]);
-  const handle=controllerPoint([s*.285,-.307,-.50]);
-  const r=matrix(stem,orbitRotation([y,-x,0],Math.min(1,Math.hypot(x,y))*.34));
-  const pivot=product(r,matrix(mul(stem,-1)));
-  return {stem,handle:transform(pivot,handle),pivot};
- });
 }
 
 // Round the load-bearing silhouette; seams and fasteners are physical geometry.
@@ -561,7 +507,7 @@ function metalShop(){
  };
  return {groups,get,box,tube};
 }
-function createEquipment(){
+function createEquipment(neutralControls){
  const {groups,box,tube}=metalShop();
  const titanium=[.39,.44,.46,.77],plate=[.73,.75,.70,.65],dark=[.026,.044,.050,.40],rubber=[.028,.040,.046,.36];
  const teal=[.06,.37,.44,.68],gold=[.79,.36,.08,.72],bright=[.73,.74,.66,.80],ceramic=[.23,.27,.26,.46],warning=[.34,.13,.06,.48];
@@ -595,8 +541,7 @@ function createEquipment(){
   box(84,[x(.287),-.290,-.451],[.043,.045,.071],dark,true,.015);
   box(84,[x(.285),-.243,-.446],[.025,.008,.046],accent,true,.005);
   for(const z of [-.436,-.400])tube(84,[[x(.310),-.245,z],[x(.310),-.236,z]],[.009,.008],bright,true,8);
-  const stem=controllerPoint([x(.285),-.255,-.425]);
-  const anchor=controllerPoint([x(.285),-.307,-.50]);
+  const {stem,handle:anchor}=neutralControls[i];
   tube(84,[add(stem,[0,-.036,.009]),stem],[.044,.032],titanium,true,16);
   tube(j,[stem,add(stem,[0,-.014,-.012]),add(stem,[0,-.016,-.023]),add(stem,[0,-.031,-.039]),anchor],[.023,.027,.021,.023,.018],rubber,true,14);
   tube(j,[add(anchor,[0,-.017,.005]),anchor,add(anchor,[0,.044,-.028])],[.026,.029,.022],dark,true,16);
@@ -624,7 +569,7 @@ function createPlume(gl,joint){
 }
 
 // Original low-poly EVA suit. No download, imported topology, texture, or bone store.
-export function loadProceduralSuit(gl){
+export function loadProceduralSuit(gl,rig){
  const navy=[.035,.067,.085,.48], rubber=[.039,.048,.052,.32], white=[.75,.74,.66,.18], panel=[.24,.30,.32,.50], gold=[.42,.25,.09,.92], pale=[.83,.86,.83,.64], red=[.64,.18,.055,.54];
  const {groups,get,box,tube}=metalShop();
  const shell=(joint,center,rx,ry,rz,color,visibility=joint>=4,detail='all')=>{
@@ -705,19 +650,19 @@ export function loadProceduralSuit(gl){
    shell(25,[0,0,.016],.013,.012,.021,rubber,true,'grip');
   }
  }
- return renderAvatar(gl,new ProceduralPose(),rigidMesh(gl,[...groups,...createEquipment()]),true);
+ return renderAvatar(gl,new ProceduralPose(rig),rigidMesh(gl,[...groups,...createEquipment(rig.neutralControls())]),true);
 }
 
 export class ProceduralPose{
- constructor(){this.palette=new Float32Array(89*16);}
+ constructor(rig){this.palette=new Float32Array(89*16);this.rig=rig;}
  solve(frame,options={}){
   const eye=Array.from(frame.slice(0,3));
-  const body=facing(frame[21]??frame[3],frame[22]??frame[4]), head=facing(frame[3],frame[4]);
+  const {body,head}=this.rig.axes(frame);
   const gear=transformBasis(body.right,body.up,mul(body.forward,-1),eye);
   const helmet=transformBasis(head.right,head.up,mul(head.forward,-1),eye);
   this.palette.set(gear,0);this.palette.set(helmet,16);
-  const {amount,controls}=equipmentPose(this.palette,frame,body,gear);
-  const grip=clamp(frame[8],0,1), debug={},contact=stationGrip(frame);
+  const {amount,controls}=equipmentPose(this.palette,frame,body,gear,this.rig);
+  const grip=clamp(frame[8],0,1), debug={},contact=options.contact===undefined?this.rig.stationGrip(frame):options.contact;
   let detailedHand=Boolean(contact);
   const wristFrame=options.wrist??add(Array.from(frame.slice(12,15)),[.068,.154,.077]);
   const aim=(a,b)=>{
@@ -729,11 +674,11 @@ export class ProceduralPose{
    let a=transform(gear,[s*.228,-.177,-.076]);
    const control=controls[i], handle=transform(gear,control.handle), controlAxis=unit(sub(handle,transform(gear,control.stem)));
    const rest=sub(handle,mul(controlAxis,.064));
-   const reach=i===0?grip:0, target=i===0&&contact?wristApproach(rest,contact,reach,frame[9]===3):mix(rest,wristFrame,reach);
+   const reach=i===0?grip:0, target=i===0&&contact?this.rig.approach(rest,contact,reach,frame[9]===3):mix(rest,wristFrame,reach);
    const deficit=Math.max(0,length(sub(target,a))-.496);
    if(reach&&deficit)a=add(a,mul(unit(sub(target,a)),Math.min(contact&&frame[19]>=5?.242:contact&&frame[19]>=1?.182:.17,deficit)*Math.min(1,reach*2.1)));
    const pole=add(mul(body.right,s*.46),mul(body.up,-1));
-   let M=elbowIK(a,target,.276,.232,pole);
+   let M=this.rig.elbow(a,target,.276,.232,pole);
    const alignment=contact&&i===0?gripSmooth(reach/.69):reach;
    const hand=unit(mix(controlAxis,(contact&&i===0?contact.direction:(options.gripForward??head.forward)),alignment));
    const j=(4+3*i)*16;
@@ -759,7 +704,7 @@ export class ProceduralPose{
       const amount=clearanceShift(this.palette,check,normal);
       if(amount>0){
        detailedHand=true;
-       M=elbowIK(a,add(M.wrist,mul(normal,amount)),.276,.232,pole);
+       M=this.rig.elbow(a,add(M.wrist,mul(normal,amount)),.276,.232,pole);
        palm=palmAt(M.wrist);
        fitDigits(this.palette,palm,contact);
       }

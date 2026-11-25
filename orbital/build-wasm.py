@@ -5,7 +5,7 @@ import sys
 
 partition, output, _, runtime = map(Path, sys.argv[1:])
 startup = Path(__file__).resolve().parent.parent / "tools" / "start.ll"
-names = ("_start", "reset", "tick", "select_deck", "select_arm", "set_thrust", "set_rotator", "select_reentry", "camera_clip", "hud_code", "scenery_motion", "entry_flow", "project_visual", "camera_mode", "globe_tiles", "reentry_shell", "reentry_visual", "input_key", "input_action", "input_clear", "input_release", "input_pointer", "input_stick", "input_status", "input_advance", "quality_adapt", "quality_plan", "quality_shadow", "hud_view", "celestial_profile", "draw_plan", "sky_plan", "globe_request", "globe_retry", "material_profile")
+names = ("_start", "reset", "tick", "select_deck", "select_arm", "set_thrust", "set_rotator", "select_reentry", "camera_clip", "hud_code", "scenery_motion", "entry_flow", "project_visual", "camera_mode", "globe_tiles", "reentry_shell", "reentry_visual", "input_key", "input_action", "input_clear", "input_release", "input_pointer", "input_stick", "input_status", "input_advance", "quality_adapt", "quality_plan", "quality_shadow", "hud_view", "celestial_profile", "draw_plan", "sky_plan", "globe_request", "globe_retry", "material_profile", "avatar_grip", "avatar_approach", "avatar_facing", "avatar_mmu", "avatar_elbow")
 objects = []
 for source, name in ((partition, "main.o"), (startup, "start.o"), (runtime, "runtime.o")):
     obj = output / name
