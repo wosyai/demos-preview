@@ -10,27 +10,37 @@ const orbitalImports=['orbital.frame:function','orbital.hands:function','orbital
 const procExit='wasi_snapshot_preview1.proc_exit:function';
 assert.deepEqual(actual,actual.includes(procExit)?[...orbitalImports,procExit]:orbitalImports,
  'expected the exact browser import contract (Orbital callbacks and optional WASI proc_exit)');
-let hull,hullLoads=0,room,hand,state,engine,roomLoads=0,handLoads=0,roomSpan;
+let hull,hullLoads=0,room,hand,state,engine,roomLoads=0,handLoads=0,roomSpan,stagedRoom;
 const roomPatches=[];
 function read(p,n){assert.equal(p%4,0);return new Float32Array(engine.memory.buffer,p,n).slice();}
 engine=new WebAssembly.Instance(wasm,{orbital:{
  hull(p,n){hull=read(p,n);hullLoads++;},
  scenery(p,n){
-  const start=engine.scenery_motion(0),len=engine.scenery_motion(1);
-  assert.ok(start>=0&&len>=0&&start%24===0&&len%24===0);
-  if(engine.scenery_motion(2)){
-    assert.deepEqual([start,len],roomSpan,'partial room segment matches the last full indexed upload');
-    assert.ok(n===len&&len>0&&start+len<room.length);
-    const next=room.slice(),moving=read(p+start*4,n);
-    assert.ok(moving.every(Number.isFinite));
-    next.set(moving,start);room=next;roomPatches.push({start,len,n});
+  const id=engine.scenery_motion(10)-1;
+  if(id!==-1){
+    const start=engine.scenery_motion(2*id),len=engine.scenery_motion(2*id+1);
+    assert.deepEqual([start,len],roomSpan[id],'partial room segment matches the last full indexed upload');
+    assert.ok(n===len&&len>0&&start+len<=room.length);
+    stagedRoom??=room.slice();
+    const moving=read(p+start*4,n);assert.ok(moving.every(Number.isFinite));
+    stagedRoom.set(moving,start);roomPatches.push({id,start,len});
   }else{
-    assert.ok(start+len<=n&&Boolean(start)===Boolean(len));
-    room=read(p,n);roomSpan=[start,len];
+    assert.equal(stagedRoom,undefined,'partial room panes never interleave with a full publish');
+    roomSpan=Array.from({length:5},(_,i)=>[engine.scenery_motion(i*2),engine.scenery_motion(i*2+1)]);
+    let end=0;
+    for(const [start,len] of roomSpan){
+     assert.ok(start>=end&&len>=0&&start%24===0&&len%24===0&&start+len<=n);
+     if(len)end=start+len;
+    }
+    assert.ok(roomSpan.every(v=>v[1]===0)||roomSpan.every(v=>v[1]>0),'register all five exterior boundaries or none');
+    room=read(p,n);roomLoads++;
   }
-  roomLoads++;
  },hands(p,n){hand=read(p,n);handLoads++;},
- frame(p,n){assert.equal(n,38);state=read(p,n);}
+ frame(p,n){
+  assert.equal(n,38);assert.equal(engine.scenery_motion(10),0);
+  if(stagedRoom){room=stagedRoom;stagedRoom=undefined;roomLoads++;}
+  state=read(p,n);
+ }
 },wasi_snapshot_preview1:{proc_exit(n){throw Error("Station exited: "+n);}}}).exports;
 engine._start();
 const captureFrames=[];
@@ -311,8 +321,9 @@ for(let n=0;n<90&&state[19]<4;n++){
 assert.equal(state[19],4);
 assert.equal(roomLoads,transferBatches+15);
 const patches=roomPatches.slice(patchStart);
-assert.equal(patches.length,8,'the eight intermediate parking poses issue robot-only updates');
-const {start:patchFirst,len:patchCount}=patches[0];
+assert.deepEqual(patches.map(v=>v.id),[...Array.from({length:6},()=>[1,2,4]).flat(),...Array(8).fill(2),0,2,4],
+ 'initial transfer: keepers, robot and console; parking: robot only; final colors: hatch, robot, console, no complete upload');
+const {start:patchFirst,len:patchCount}=patches.find(v=>v.id===2);
 assert.ok(patchCount/room.length<.26,'room pool updates are restricted to the robot');
 const whole=transferMeshes[5].room;
 for(const {room:current} of transferMeshes.slice(6,-1)){

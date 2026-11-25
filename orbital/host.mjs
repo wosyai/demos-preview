@@ -474,7 +474,7 @@ function batch() {
  return {vao,buffer,num:0};
 }
 // Room faces keep one indexed batch for color and shadow. Reserve stable
-// room-buffer slots for the moving robot so neither pass sees stale geometry.
+// room-buffer slots for the moving actuator parts so neither pass sees stale geometry.
 function packRange(payload,indices,first,last,seen,vertices,base=0){
  for(let at=first;at<last;at+=8){
   const v=payload.subarray(at,at+8),key=v.join(",");
@@ -494,19 +494,30 @@ function update(b,ptr,n,usage){
  worldVersion++;
  gl.bindVertexArray(b.vao);gl.bindBuffer(gl.ARRAY_BUFFER,b.buffer);
  if(usage===gl.STATIC_DRAW){
-  const start=b===room?engine.scenery_motion(0):0,len=b===room?engine.scenery_motion(1):0;
-  if(start<0||len<0||start%24||len%24||start+len>n||(!len&&start))throw Error("Invalid robot mesh span");
+  const spans=[];
+  let prior=0;
+  if(b===room)for(let i=0;i<5;i++){
+   const start=engine.scenery_motion(i*2),len=engine.scenery_motion(i*2+1);
+   if(start<prior||len<0||start%24||len%24||start+len>n||(!len&&start))throw Error("Invalid actuator mesh span");
+   if(len){spans.push({id:i,start,len,base:0});prior=start+len;}
+  }
   const seen=new Map(), packed=[],index=new Uint16Array(n/8);
-  packRange(payload,index.subarray(0,start/8),0,start,seen,packed);
-  packRange(payload,index.subarray((start+len)/8),start+len,n,seen,packed);
-  let buffer=packed;
-  if(len){
-   const base=packed.length/8,[moving,movingIndices]=packMotion(payload.subarray(start,start+len),base);
-   buffer=new Float32Array(packed.length+len);
-   buffer.set(packed);buffer.set(moving,packed.length);index.set(movingIndices,start/8);
-   b.motion={start,len,base};
-  }else b.motion=null;
-  gl.bufferData(gl.ARRAY_BUFFER,buffer instanceof Float32Array?buffer:new Float32Array(buffer),usage);
+  let cursor=0,reserved=0;
+  for(const span of spans){
+   packRange(payload,index.subarray(cursor/8,span.start/8),cursor,span.start,seen,packed);
+   cursor=span.start+span.len;reserved+=span.len;
+  }
+  packRange(payload,index.subarray(cursor/8),cursor,n,seen,packed);
+  const buffer=new Float32Array(packed.length+reserved);buffer.set(packed);
+  b.motion=[];
+  let offset=packed.length;
+  for(const span of spans){
+   span.base=offset/8;
+   const [moving,movingIndices]=packMotion(payload.subarray(span.start,span.start+span.len),span.base);
+   buffer.set(moving,offset);index.set(movingIndices,span.start/8);
+   b.motion[span.id]=span;offset+=span.len;
+  }
+  gl.bufferData(gl.ARRAY_BUFFER,buffer,usage);
   b.indices??=gl.createBuffer();
   gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER,b.indices);
   gl.bufferData(gl.ELEMENT_ARRAY_BUFFER,index,usage);
@@ -515,9 +526,10 @@ function update(b,ptr,n,usage){
  b.num=n/8;
 }
 function updateRoom(ptr,n){
- if(!engine.scenery_motion(2)){update(room,ptr,n,gl.STATIC_DRAW);return;}
- const span=room.motion,start=engine.scenery_motion(0);
- if(!span||start!==span.start||n!==span.len||n!==engine.scenery_motion(1))throw Error("Unmatched robot mesh update");
+ const id=engine.scenery_motion(10)-1;
+ if(id===-1){update(room,ptr,n,gl.STATIC_DRAW);return;}
+ const span=room.motion?.[id],start=engine.scenery_motion(id*2);
+ if(!span||start!==span.start||n!==span.len||n!==engine.scenery_motion(id*2+1))throw Error("Unmatched actuator mesh update");
  const payload=new Float32Array(engine.memory.buffer,ptr+start*4,n);
  const [moving,indices]=packMotion(payload,span.base);
  gl.bindVertexArray(room.vao);gl.bindBuffer(gl.ARRAY_BUFFER,room.buffer);
@@ -1007,7 +1019,7 @@ try{
   };
   stars.src=new URL("./starfield.jpg?v=1",import.meta.url).href;
  }
- const response=await fetch(new URL("./orbital.wasm?v=42",import.meta.url));
+ const response=await fetch(new URL("./orbital.wasm?v=43",import.meta.url));
  if(!response.ok)throw Error("The station engine could not be downloaded.");
  const {instance}=await WebAssembly.instantiate(await response.arrayBuffer(),{
   orbital:{

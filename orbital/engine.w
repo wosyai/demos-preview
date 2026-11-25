@@ -14,11 +14,14 @@ f32[8][16][16][16] page2 = [page1, page1, page1, page1, page1, page1, page1, pag
 f32[8][16][16][16][5] mesh = [page2,page2,page2,page2,page2];
 f32[38] state = [0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0];
 i32 count = 0;
-i32 motion_first=0;
-i32 motion_size=0;
-bool room_partial=false;
+i32[5] motion_first=[0,0,0,0,0];
+i32[5] motion_size=[0,0,0,0,0];
+i32 room_partial=0;
 i32(i32) scenery_motion=fn(field){
-    if(field==0){motion_first*8}else{if(field==1){motion_size*8}else{if(room_partial){1}else{0}}}
+    if(field==10){room_partial}else{
+        u64 i=core.int_extend<u64>(field/2);
+        if(field%2==0){motion_first[i]*8}else{motion_size[i]*8}
+    }
 };
 f32 r = 0.0;
 f32 g = 0.0;
@@ -87,7 +90,7 @@ unit(i32) rack = fn(n) {
     };
 };
 unit() draw = fn {
-    motion_first=0;motion_size=0;count=0;
+    motion_first=[0,0,0,0,0];motion_size=[0,0,0,0,0];count=0;
     paint(0.26,0.34,0.38,0.0);
     box(-2.26,-1.78,-10.1,4.52,0.1,12.4);
     box(-2.26,1.72,-10.1,4.52,0.12,12.4);
@@ -1175,11 +1178,29 @@ unit() hull_upload=fn{
     };
 };
 
+unit(i32) emit_actuator=fn(id){
+    if(id==0){airlock();};
+    if(id==1){suspended_cargo();};
+    if(id==2){manipulator();};
+    if(id==3){cargo_fixture();};
+    if(id==4){alignment_console();};
+};
+unit(i32) measure_actuator=fn(id){
+    u64 i=core.int_extend<u64>(id);
+    i32 start=count;
+    emit_actuator(id);
+    motion_first[i]=start;motion_size[i]=count-start;
+};
+i32 HATCH_GEOMETRY=1;
+i32 CARGO_GEOMETRY=2;
+i32 ROBOT_GEOMETRY=4;
+i32 LOCK_GEOMETRY=8;
+i32 CONSOLE_GEOMETRY=16;
 unit() eva_room = fn {
     hull_upload();count=0;
     exterior_primary_shell();
     hull_lap_joint(-1.28);hull_lap_joint(-0.47);hull_lap_joint(-4.74);hull_lap_joint(-5.86);
-    blanket(3);station_fasteners(0);airlock();catwalk(0);
+    blanket(3);station_fasteners(0);measure_actuator(0);catwalk(0);
     paint(0.40,0.44,0.43,0.13);
     box(-1.05,1.68,-5.48,0.078,0.096,3.48);
     box(-1.04,-1.22,-5.51,0.091,0.13,3.52);
@@ -1211,20 +1232,37 @@ unit() eva_room = fn {
     paint(0.72,0.54,0.27,0.17);
     sweep(-1.59,-0.88,-5.38,-0.28,-0.88,-5.38,0.03,0.03,0,0,10);
     sweep(-1.59,-0.82,-5.38,-0.27,-0.82,-5.38,0.025,0.025,0,0,10);
-    suspended_cargo();
-    motion_first=count;manipulator();motion_size=count-motion_first;
+    measure_actuator(1);measure_actuator(2);
     lock_support();
-    traversal_rail(0);traversal_rail(1);traversal_rail(2);cargo_fixture();alignment_console();
+    traversal_rail(0);traversal_rail(1);traversal_rail(2);measure_actuator(3);measure_actuator(4);
     unsafe { host.scenery(core.pointer_cast<*?u8>(&?mesh[0][0][0][0][0]),count*8); };
 };
-unit() publish_robot=fn{
+bool(i32,i32) prepare_actuators=fn(mask,id){
+    bool exact=true;
+    if(id<5 && mask>0){
+        if(mask%2!=0){
+            u64 i=core.int_extend<u64>(id);
+            count=motion_first[i];emit_actuator(id);
+            exact=count-motion_first[i]==motion_size[i];
+        };
+        if(exact){exact=prepare_actuators(mask/2,id+1);};
+    };
+    exact
+};
+unit(i32,i32) upload_actuators=fn(mask,id){
+    if(id<5 && mask>0){
+        if(mask%2!=0){
+            room_partial=id+1;
+            u64 i=core.int_extend<u64>(id);
+            unsafe {host.scenery(core.pointer_cast<*?u8>(&?mesh[0][0][0][0][0]),motion_size[i]*8);};
+        };
+        upload_actuators(mask/2,id+1);
+    };
+};
+unit(i32) publish_actuators=fn(mask){
     i32 previous=count;
-    count=motion_first;manipulator();
-    if(count-motion_first==motion_size){
-        room_partial=true;
-        unsafe {host.scenery(core.pointer_cast<*?u8>(&?mesh[0][0][0][0][0]),motion_size*8);};
-        room_partial=false;
-    }else{eva_room();};
+    if(prepare_actuators(mask,0)){upload_actuators(mask,0);room_partial=0;}
+    else{eva_room();};
     count=previous;
 };
 
@@ -1630,11 +1668,12 @@ unit(f32,i32,f32,f32) tick = fn(dt,keys,look_x,look_y) {
         lock_clock=lock_clock+d;
         if(lock_clock>=core.sint_to_float<f32>(lock_pose+1)*0.065){
             lock_pose=lock_pose+1;
+            i32 actuator=if(lock_kind==1){LOCK_GEOMETRY}else{HATCH_GEOMETRY};
             if(lock_pose==4){
                 if(lock_kind==1){cargo_locked=true;mark=2;}else{alignment_stage=7;};
                 lock_kind=0;lock_pose=0;lock_clock=0.0;
             };
-            mesh_grip=-1.0;eva_room();
+            mesh_grip=-1.0;publish_actuators(actuator);
         };
     };
     if(seat_clock>0.0){
@@ -1642,7 +1681,7 @@ unit(f32,i32,f32,f32) tick = fn(dt,keys,look_x,look_y) {
         if(seat_clock>=core.sint_to_float<f32>(seat_pose+1)*0.08){
             seat_pose=seat_pose+1;
             if(seat_pose==6){seat_clock=0.0;alignment_stage=3;};
-            mesh_grip=-1.0;eva_room();
+            mesh_grip=-1.0;publish_actuators(CARGO_GEOMETRY|ROBOT_GEOMETRY|CONSOLE_GEOMETRY);
         };
     };
     if(transfer_clock>0.0){
@@ -1650,8 +1689,11 @@ unit(f32,i32,f32,f32) tick = fn(dt,keys,look_x,look_y) {
         if(transfer_clock>=core.sint_to_float<f32>(transfer_pose+1)*0.085){
             transfer_pose=transfer_pose+1;
             if(transfer_pose==15){transfer_clock=0.0;alignment_stage=4;};
-            if(transfer_pose>6 && transfer_pose<15){publish_robot();}
-            else{mesh_grip=-1.0;eva_room();};
+            if(transfer_pose>6 && transfer_pose<15){publish_actuators(ROBOT_GEOMETRY);}
+            else{
+                mesh_grip=-1.0;
+                publish_actuators(if(transfer_pose==15){HATCH_GEOMETRY|ROBOT_GEOMETRY|CONSOLE_GEOMETRY}else{CARGO_GEOMETRY|ROBOT_GEOMETRY|CONSOLE_GEOMETRY});
+            };
         };
     };
     if(mode==1){
