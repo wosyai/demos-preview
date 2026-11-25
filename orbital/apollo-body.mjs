@@ -173,6 +173,10 @@ layout(location=1) in vec3 normal;
 layout(location=2) in vec2 uv;
 layout(location=3) in uvec4 joints;
 layout(location=4) in vec4 weights;
+layout(location=5) in vec4 bakedColor;
+uniform bool baked;
+uniform vec4 baseColor;
+flat out vec4 surfaceColor;
 layout(std140) uniform ApolloJoints { mat4 bones[89]; };
 uniform vec3 eye;
 uniform vec4 basis;
@@ -181,14 +185,15 @@ uniform vec2 roll;
 out vec2 tex;
 out vec3 n;
 out vec3 world;
+out vec3 surfacePoint;
 void main(){
- mat4 skin=weights.x*bones[joints.x]+weights.y*bones[joints.y]+weights.z*bones[joints.z]+weights.w*bones[joints.w];
+ mat4 skin=baked?bones[joints.x]:(weights.x*bones[joints.x]+weights.y*bones[joints.y]+weights.z*bones[joints.z]+weights.w*bones[joints.w]);
  world=(skin*vec4(pos,1.)).xyz;
  vec3 p=world-eye;
  vec3 q=vec3(basis.x*p.x+basis.y*p.z,p.y,-basis.y*p.x+basis.x*p.z);
  vec3 a=vec3(q.x,basis.z*q.y+basis.w*q.z,-basis.w*q.y+basis.z*q.z);
  gl_Position=vec4((roll.x*a.x+roll.y*a.y)*optics.x,(-roll.y*a.x+roll.x*a.y)*optics.y,-1.002*a.z-.1,-a.z);
- tex=uv;n=mat3(skin)*normal;
+ tex=uv;n=mat3(skin)*normal;surfacePoint=pos;surfaceColor=baked?bakedColor:baseColor;
 }`;
 const fragment=`#version 300 es
 precision highp float;
@@ -196,12 +201,13 @@ uniform vec3 sunDirection;
 uniform vec3 eye;
 uniform bool firstPerson;
 uniform float plume;
-uniform vec4 baseColor;
+flat in vec4 surfaceColor;
 uniform bool mapped;
 uniform sampler2D albedo;
 in vec2 tex;
 in vec3 n;
 in vec3 world;
+in vec3 surfacePoint;
 out vec4 pix;
 void main(){
  if(plume>0.){
@@ -210,10 +216,28 @@ void main(){
     return;
  }
  if(firstPerson && distance(world,eye)<.20)discard;
- vec3 color=baseColor.rgb;
+ vec3 color=surfaceColor.rgb;
  if(mapped)color*=texture(albedo,tex).rgb;
- float direct=max(dot(normalize(n),sunDirection),0.);
- vec3 lit=color*(vec3(.25,.29,.36)+direct*vec3(1.08,1.04,.94));
+ vec3 N=normalize(n);
+ float direct=max(dot(N,sunDirection),0.);
+ vec3 lit=color*(vec3(.15,.18,.23)+vec3(.035,.079,.118)*max(0.,dot(N,vec3(.46,-.80,-.35)))+direct*vec3(1.08,1.04,.94));
+ if(!mapped&&surfaceColor.a<.99){
+   vec3 V=normalize(eye-world);
+   if(surfaceColor.a<.3){
+     // Faint weave locked to the stitched piece, not to the world or screen.
+     vec3 u=surfacePoint*760.;
+     vec3 a=abs(N);
+     float pattern=sin(u.y)*sin(mix(u.z,u.x,step(.52,a.z)));
+     float coverage=1.-smoothstep(.8,3.4,length(fwidth(u)));
+     lit*=1.+.055*pattern*coverage;
+   }
+   float metal=smoothstep(.50,.93,surfaceColor.a);
+   float facing=max(dot(V,N),0.);
+   float h=max(dot(N,normalize(sunDirection+V)),0.);
+   float h2=h*h,h4=h2*h2,h8=h4*h4,h16=h8*h8,h32=h16*h16;
+   float spec=mix(h8*h4*h,h32*h16*h4*h,metal);
+   lit+=mix(vec3(.66,.74,.82),mix(vec3(.60,.71,.78),color,.46),metal)*(max(.0,1.-facing)*.035+spec*mix(.10,.48,metal)*sqrt(direct));
+ }
  pix=vec4(pow(max(lit,0.),vec3(.45455)),1.);
 }`;
 function program(gl){
@@ -282,13 +306,13 @@ export async function loadApolloBody(gl,url=new URL('./apollo-body.glb',import.m
  return renderAvatar(gl,pose,meshes);
 }
 
-function renderAvatar(gl,pose,meshes){
+function renderAvatar(gl,pose,meshes,hasEquipment=false){
  const p=program(gl);
- const U=Object.fromEntries(['eye','basis','optics','roll','sunDirection','firstPerson','plume','baseColor','mapped','albedo'].map(n=>[n,gl.getUniformLocation(p,n)]));
+ const U=Object.fromEntries(['eye','basis','optics','roll','sunDirection','firstPerson','plume','baseColor','baked','mapped','albedo'].map(n=>[n,gl.getUniformLocation(p,n)]));
  const UBO=3, TEX=8, palette=gl.createBuffer();
  gl.uniformBlockBinding(p,gl.getUniformBlockIndex(p,'ApolloJoints'),UBO);
  gl.bindBuffer(gl.UNIFORM_BUFFER,palette);gl.bufferData(gl.UNIFORM_BUFFER,89*64,gl.DYNAMIC_DRAW);
- meshes.push(...createEquipment(gl));
+ if(!hasEquipment)meshes.push(...rigidMesh(gl,createEquipment()));
  const plumes=[createPlume(gl,87),createPlume(gl,88)];
  gl.bindVertexArray(null);
  let last=null;
@@ -305,11 +329,16 @@ function renderAvatar(gl,pose,meshes){
     if(!thirdPerson&&!m.first)continue;
     gl.bindVertexArray(m.vao);
     if(m.tex)gl.bindTexture(gl.TEXTURE_2D,m.tex);
-    gl.uniform1i(U.mapped,Boolean(m.tex));gl.uniform4fv(U.baseColor,m.color);
-    if(m.joint!==undefined){
-     gl.vertexAttribI4ui(3,m.joint,0,0,0);gl.vertexAttrib4f(4,1,0,0,0);
-     gl.drawArrays(gl.TRIANGLES,0,m.len);
-    }else {
+    gl.uniform1i(U.mapped,Boolean(m.tex));gl.uniform1i(U.baked,Boolean(m.baked));
+    if(m.baked){
+     gl.vertexAttrib4f(4,1,0,0,0);
+     const skip=thirdPerson?m.closeCount:0;
+     const cull=thirdPerson&&!gl.isEnabled(gl.CULL_FACE);
+     if(cull)gl.enable(gl.CULL_FACE);
+     gl.drawElements(gl.TRIANGLES,thirdPerson?m.len-skip:m.nearCount,gl.UNSIGNED_SHORT,skip*2);
+     if(cull)gl.disable(gl.CULL_FACE);
+    }else{
+     gl.uniform4fv(U.baseColor,m.color);
      const near=!thirdPerson&&m.nearElements;
      gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER,near?m.nearElements:m.elements);
      gl.drawElements(gl.TRIANGLES,near?m.nearCount:m.len,m.kind,0);
@@ -317,7 +346,7 @@ function renderAvatar(gl,pose,meshes){
    }
    if(last.plume>.03){
     gl.depthMask(false);gl.enable(gl.BLEND);gl.blendFunc(gl.SRC_ALPHA,gl.ONE);
-    gl.uniform1f(U.plume,last.plume);gl.vertexAttrib4f(4,1,0,0,0);
+    gl.uniform1f(U.plume,last.plume);gl.uniform1i(U.baked,0);gl.vertexAttrib4f(4,1,0,0,0);
     for(const m of plumes){
      gl.bindVertexArray(m.vao);gl.vertexAttribI4ui(3,m.joint,0,0,0);
      gl.drawArrays(gl.TRIANGLES,0,m.len);
@@ -363,43 +392,109 @@ export function mmuControls(frame){
  });
 }
 
-function createEquipment(gl){
- const geometry=[];
- const box=(joint,center,half,color)=>{
-  if(joint===85||joint===86)center=controllerPoint(center);
-  let group=geometry.find(g=>g.joint===joint&&g.color===color);
-  if(!group){group={joint,color,buf:[]};geometry.push(group);}
-  const vertices=Array.from({length:8},(_,i)=>add(center,half.map((v,j)=>(i&(1<<j))?v:-v)));
-  for(const face of [[0,2,3,1],[4,5,7,6],[0,1,5,4],[2,6,7,3],[0,4,6,2],[1,3,7,5]]){
-   const n=unit(cross(sub(vertices[face[1]],vertices[face[0]]),sub(vertices[face[2]],vertices[face[0]])));
-   for(const i of [0,1,2,0,2,3])group.buf.push(...vertices[face[i]],...n);
+// Round the load-bearing silhouette; seams and fasteners are physical geometry.
+function rigidMesh(gl,groups){
+ // Draw the near prefix or the full rigid suit as one indexed batch. The
+ // original bone palette supplies transforms without CPU vertex uploads.
+ const vao=gl.createVertexArray();gl.bindVertexArray(vao);
+ const vertices=[],indices=[],joints=[];
+ let nearCount=0,closeCount=0;
+ for(const {joint,color,buf,first} of [...groups.filter(g=>g.first==='close'),...groups.filter(g=>g.first===true),...groups.filter(g=>!g.first)]){
+  const seen=new Map();
+  for(let i=0;i<buf.length;i+=6){
+   const v=buf.slice(i,i+6).map(x=>Math.round(x*100000)/100000), key=v.join(',');
+   let n=seen.get(key);
+   if(n===undefined){
+    n=joints.length;
+    if(n>65535)throw Error("Suit mesh index budget exceeded");
+    seen.set(key,n);vertices.push(...v,...color);joints.push(joint);
+   }
+   indices.push(n);
+  }
+  if(first)nearCount=indices.length;
+  if(first==='close')closeCount=indices.length;
+ }
+ gl.bindBuffer(gl.ARRAY_BUFFER,gl.createBuffer());gl.bufferData(gl.ARRAY_BUFFER,new Float32Array(vertices),gl.STATIC_DRAW);
+ for(const [i,n,offset] of [[0,3,0],[1,3,12],[5,4,24]]){
+  gl.enableVertexAttribArray(i);gl.vertexAttribPointer(i,n,gl.FLOAT,false,40,offset);
+ }
+ gl.bindBuffer(gl.ARRAY_BUFFER,gl.createBuffer());gl.bufferData(gl.ARRAY_BUFFER,new Uint8Array(joints),gl.STATIC_DRAW);
+ gl.enableVertexAttribArray(3);gl.vertexAttribIPointer(3,1,gl.UNSIGNED_BYTE,1,0);
+ gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER,gl.createBuffer());gl.bufferData(gl.ELEMENT_ARRAY_BUFFER,new Uint16Array(indices),gl.STATIC_DRAW);
+ return [{vao,len:indices.length,nearCount,closeCount,first:true,baked:true}];
+}
+function metalShop(){
+ const groups=[];
+ const get=(joint,color,first)=>{let g=groups.find(g=>g.joint===joint&&g.color===color&&g.first===first);
+  if(!g){g={joint,color,first,buf:[]};groups.push(g);}return g.buf;};
+ const flat=(buf,...pts)=>{const n=unit(cross(sub(pts[1],pts[0]),sub(pts[2],pts[0])));for(let i=1;i<pts.length-1;i++)buf.push(...pts[0],...n,...pts[i],...n,...pts[i+1],...n);};
+ const box=(j,c,h,k,first=true,r=.007)=>{
+  // Eight-point chamfer cut in each corner of a beveled perimeter.
+  const b=Math.min(r,...h.map(t=>t*.8)),buf=get(j,k,first),[w,t,d]=h;
+  const ring=(v,u,z)=>[[-v+b,-u], [v-b,-u],[v,-u+b],[v,u-b],[v-b,u],[-v+b,u],[-v,u-b],[-v,-u+b]].map(([x,y])=>add(c,[x,y,z]));
+  const layers=[ring(w-b*.65,t-b*.65,-d),ring(w,t,-d+b),ring(w,t,d-b),ring(w-b*.65,t-b*.65,d)];
+  flat(buf,...layers[0].slice().reverse());flat(buf,...layers[3]);
+  for(let z=0;z<3;z++)for(let i=0;i<8;i++){const k1=(i+1)%8;flat(buf,layers[z][i],layers[z][k1],layers[z+1][k1],layers[z+1][i]);}
+ };
+ const tube=(j,pts,rad,mat,first=true,sides=12,caps=false)=>{
+  const buf=get(j,mat,first),rings=pts.map((p,i)=>{
+   const axis=unit(sub(pts[Math.min(pts.length-1,i+1)],pts[Math.max(0,i-1)])), guide=Math.abs(axis[1])>.92?[1,0,0]:[0,1,0];
+   const u=unit(cross(guide,axis)),v=cross(axis,u);
+   return Array.from({length:sides},(_,k)=>{const a=k*Math.PI*2/sides,n=add(mul(u,Math.cos(a)),mul(v,Math.sin(a)));return [...add(p,mul(n,Array.isArray(rad)?rad[i]:rad)),...n];});
+  });
+  for(let i=1;i<rings.length;i++)for(let k=0;k<sides;k++){
+   const l=(k+1)%sides;buf.push(...rings[i-1][k],...rings[i-1][l],...rings[i][k],...rings[i][k],...rings[i-1][l],...rings[i][l]);
+  }
+  if(caps)for(const end of [0,rings.length-1])if((Array.isArray(rad)?rad[end]:rad)>0){
+   const r=rings[end].map(x=>x.slice(0,3));flat(buf,...(end===0?r.reverse():r));
   }
  };
- const silver=[.62,.66,.69,1], dark=[.065,.079,.082,1], alloy=[.20,.25,.27,1], amber=[.97,.43,.063,1], cyan=[.07,.55,.68,1];
- box(84,[0,-.53,.28],[.31,.19,.09],alloy);
- for(const [i,s] of [-1,1].entries()){
-  const j=85+i;
-  box(84,[s*.347,-.52,.17],[.095,.15,.13],silver);
-  box(84,[s*.309,-.345,-.083],[.035,.032,.372],silver);
-  box(84,[s*.287,-.290,-.451],[.042,.055,.074],dark);
-  box(84,controllerPoint([s*.285,-.255,-.397]),[.038,.03,.039],alloy);
-  box(84,[s*.286,-.235,-.433],[.041,.006,.018],s<0?amber:cyan);
-  box(j,[s*.285,-.277,-.462],[.019,.023,.047],alloy);
-  box(j,[s*.285,-.300,-.501],[.037,.040,.029],dark);
-  for(const y of [-.273,-.287,-.301,-.315])
-   box(j,[s*.285,y,-.530],[.031,.003,.006],silver);
-  box(j,[s*.285,-.261,-.505],[.012,.008,.013],s<0?amber:cyan);
-  for(const y of [-.60,-.45])box(84,[s*.375,y,.287],[.045,.041,.056],dark);
- }
- return geometry.map(({joint,color,buf})=>{
-  const vao=gl.createVertexArray(),v=gl.createBuffer();
-  gl.bindVertexArray(vao);gl.bindBuffer(gl.ARRAY_BUFFER,v);gl.bufferData(gl.ARRAY_BUFFER,new Float32Array(buf),gl.STATIC_DRAW);
-  gl.enableVertexAttribArray(0);gl.vertexAttribPointer(0,3,gl.FLOAT,false,24,0);
-  gl.enableVertexAttribArray(1);gl.vertexAttribPointer(1,3,gl.FLOAT,false,24,12);
-  return {name:'MMU',joint,vao,len:buf.length/6,color,first:true};
- });
+ return {groups,get,box,tube};
 }
-
+function createEquipment(){
+ const {groups,box,tube}=metalShop();
+ const titanium=[.39,.44,.46,.77],plate=[.73,.75,.70,.65],dark=[.026,.044,.050,.40],rubber=[.028,.040,.046,.36];
+ const teal=[.06,.37,.44,.68],gold=[.79,.36,.08,.72],bright=[.73,.74,.66,.80],ceramic=[.23,.27,.26,.46],warning=[.34,.13,.06,.48];
+ const back=(c,h,m,r)=>box(84,c,h,m,false,r);
+ // Split main pack, rear pressure canisters and removable louver panel.
+ back([0,-.49,.24],[.278,.205,.094],dark,.032);
+ back([0,-.485,.325],[.258,.190,.057],plate,.033);
+ back([0,-.433,.386],[.228,.104,.019],titanium,.018);
+ back([0,-.432,.408],[.158,.069,.012],dark,.014);
+ back([0,-.625,.375],[.185,.036,.022],ceramic,.012);
+ for(let n=0;n<6;n++)back([0,-.480+n*.020,.422],[.140,.004,.006],titanium,.003);
+ for(const x of [-.195,.195]){
+  tube(84,[[x,-.646,.405],[x,-.617,.431],[x,-.342,.431],[x,-.317,.407]],[.047,.067,.067,.043],ceramic,false,16,true);
+  for(const y of [-.591,-.390])tube(84,[[x,y-.011,.431],[x,y+.011,.431]],[.071,.071],titanium,false,14);
+  for(const y of [-.579,-.286])tube(84,[[x,y,.381],[x,y,.412]],[.012,.009],bright,false,8);
+ }
+ for(const [i,sign] of [-1,1].entries()){
+  const x=t=>sign*t,j=85+i,accent=i?teal:gold;
+  back([x(.302),-.480,.268],[.055,.145,.082],plate,.019);
+  back([x(.328),-.617,.308],[.054,.038,.053],titanium,.012);
+  const hose=[[x(.259),-.312,.368],[x(.327),-.296,.326],[x(.370),-.321,.232],[x(.372),-.391,.151],[x(.339),-.421,.095]];
+  tube(84,hose,.020,rubber,false,12);
+  tube(84,hose.map(p=>add(p,[0,-.039,.015])),.012,warning,false,10);
+  for(const y of [-.585,-.450]){
+   tube(84,[[x(.374),y,.287],[x(.396),y,.287],[x(.415),y,.287],[x(.422),y,.287]],[.037,.044,.039,.029],titanium,false,14);
+   tube(84,[[x(.421),y,.287],[x(.429),y,.287]],[.024,.020],dark,false,14,true);
+  }
+  // Parallel support channel, outer hinge, captive bolts and a controller bellows.
+  box(84,[x(.309),-.345,-.083],[.033,.029,.372],titanium,true,.014);
+  box(84,[x(.311),-.319,-.142],[.024,.011,.298],plate,true,.008);
+  box(84,[x(.287),-.290,-.451],[.043,.045,.071],dark,true,.015);
+  box(84,[x(.285),-.243,-.446],[.025,.008,.046],accent,true,.005);
+  for(const z of [-.436,-.400])tube(84,[[x(.310),-.245,z],[x(.310),-.236,z]],[.009,.008],bright,true,8);
+  const stem=controllerPoint([x(.285),-.255,-.425]);
+  const anchor=controllerPoint([x(.285),-.307,-.50]);
+  tube(84,[add(stem,[0,-.036,.009]),stem],[.044,.032],titanium,true,16);
+  tube(j,[stem,add(stem,[0,-.014,-.012]),add(stem,[0,-.016,-.023]),add(stem,[0,-.031,-.039]),anchor],[.023,.027,.021,.023,.018],rubber,true,14);
+  tube(j,[add(anchor,[0,-.017,.005]),anchor,add(anchor,[0,.044,-.028])],[.026,.029,.022],dark,true,16);
+  const cap=add(anchor,[0,.048,-.028]);
+  tube(j,[add(cap,[0,-.011,0]),cap,add(cap,[0,.008,-.005])],[.023,.025,.020],accent,true,14,true);
+ }
+ return groups;
+}
 function createPlume(gl,joint){
  const source=[];
  // Short translucent gas mesh; no sprite, particles, textures or depth pass.
@@ -420,12 +515,11 @@ function createPlume(gl,joint){
 
 // Original low-poly EVA suit. No download, imported topology, texture, or bone store.
 export function loadProceduralSuit(gl){
- const navy=[.035,.067,.085,1], rubber=[.028,.042,.049,1], white=[.73,.76,.75,1], panel=[.21,.3,.34,1], gold=[.30,.17,.075,1], pale=[.84,.89,.85,1], red=[.65,.11,.035,1];
- const groups=[];
+ const navy=[.035,.067,.085,.48], rubber=[.039,.048,.052,.32], white=[.75,.74,.66,.18], panel=[.24,.30,.32,.50], gold=[.42,.25,.09,.92], pale=[.83,.86,.83,.64], red=[.64,.18,.055,.54];
+ const {groups,get,box,tube}=metalShop();
  const shell=(joint,center,rx,ry,rz,color)=>{
-  let group=groups.find(g=>g.joint===joint&&g.color===color);
-  if(!group){group={joint,color,buf:[],first:joint>=4};groups.push(group);}
-  const L=10,S=6;
+  const buf=get(joint,color,joint>=4);
+  const L=joint===1?24:joint===0?14:rx>=.070?20:12,S=joint===1?12:joint===0?7:rx>=.070?9:6;
   const p=(i,j)=>{
    const theta=j*2*Math.PI/L, phi=(i/S-.5)*Math.PI, c=Math.cos(phi);
    const [x,y,z]=[c*Math.cos(theta),c*Math.sin(theta),Math.sin(phi)];
@@ -433,12 +527,19 @@ export function loadProceduralSuit(gl){
   };
   for(let i=0;i<S;i++)for(let j=0;j<L;j++){
    const a=p(i,j),b=p(i,j+1),c=p(i+1,j),d=p(i+1,j+1);
-   if(i)group.buf.push(...a,...b,...c);
-   if(i!==S-1)group.buf.push(...b,...d,...c);
+   if(i)buf.push(...a,...b,...c);
+   if(i!==S-1)buf.push(...b,...d,...c);
   }
  };
  shell(0,[0,-.38,0],.26,.325,.16,white);
  shell(0,[0,-.39,.102],.205,.21,.126,panel);
+ const seam=[.59,.59,.53,.22],trim=[.098,.138,.144,.49];
+ tube(0,[[0,-.169,.013],[0,-.143,.013],[0,-.126,.013]],[.112,.118,.106],trim,false,24);
+ tube(0,[[0,-.141,.013],[0,-.132,.013]],[.119,.116],pale,false,20);
+ for(const side of [-1,1]){
+  tube(0,[[side*.157,-.186,.044],[side*.173,-.223,.120],[side*.165,-.295,.190],[side*.144,-.368,.199]],.013,trim,false,10);
+  box(0,[side*.166,-.250,.150],[.027,.019,.024],panel,false,.006);
+ }
  shell(0,[0,-.37,-.14],.135,.104,.066,navy);
  shell(0,[0,-.37,-.196],.092,.042,.015,panel);
  for(const s of [-1,1]){
@@ -448,29 +549,35 @@ export function loadProceduralSuit(gl){
   shell(0,[s*.171,-1.237,.014],.083,.184,.089,white);
   shell(0,[s*.173,-1.409,-.044],.100,.103,.158,navy);
   shell(0,[s*.173,-1.417,-.093],.089,.065,.148,panel);
+  for(const y of [-.995,-1.020,-1.040])tube(0,[[s*.163,y-.006,.012],[s*.164,y+.006,.012]],[.091,.092],seam,false,16);
+  box(0,[s*.165,-1.091,.103],[.065,.047,.020],navy,false,.015);
+  box(0,[s*.173,-1.393,.091],[.078,.027,.021],trim,false,.009);
+  box(0,[s*.173,-1.449,-.057],[.095,.015,.142],rubber,false,.014);
+  for(let n=0;n<4;n++)box(0,[s*.173,-1.461,-.128+n*.055],[.077,.007,.014],navy,false,.004);
  }
  shell(1,[0,.009,.01],.148,.166,.155,pale);
  shell(1,[0,-.019,-.099],.125,.092,.079,navy);
  shell(1,[0,-.020,-.129],.106,.069,.056,gold);
+ box(1,[0,-.016,.148],[.033,.020,.015],navy,false,.006);
+ box(1,[0,-.015,.164],[.013,.006,.004],red,false,.003);
  for(let i=0;i<2;i++){
   const j=4+3*i;
   shell(j,[0,0, .11],.098,.098,.171,white);
   shell(j,[0,0,.225],.082,.081,.069,panel);
-  shell(j+1,[0,0,.107],.077,.079,.138,white);
-  shell(j+1,[0,0,.203],.064,.068,.055,navy);
-  shell(j+1,[0,.004,.175],.069,.069,.012,red);
+  shell(j+1,[0,0,.018],.072,.074,.062,seam);
+  tube(j+1,[[0,0,.014],[0,0,.046],[0,0,.103],[0,0,.156],[0,0,.176]],[.077,.080,.077,.067,.060],white,true,26);
+  for(const z of [.045,.062,.081,.101,.121,.141])tube(j+1,[[0,0,z-.004],[0,0,z],[0,0,z+.004]],[.077-(z-.045)*.09,.081-(z-.045)*.10,.077-(z-.045)*.09],white,'close',22);
+  tube(j+1,[[0,0,.158],[0,0,.180],[0,0,.212],[0,0,.227]],[.063,.073,.065,.051],navy,true,28);
+  tube(j+1,[[0,0,.176],[0,0,.183],[0,0,.189]],[.073,.074,.071],gold,true,26);
+  tube(j+1,[[0,0,.193],[0,0,.197]],[.072,.071],red,true,24);
+  box(j+1,[0,.068,.116],[.034,.012,.041],panel,'close',.009);
+  box(j+1,[0,.081,.116],[.023,.002,.024],navy,'close',.005);
+  box(j+1,[.007,.084,.124],[.011,.001,.004],gold,'close',.002);
   shell(j+2,[0,0,.040],.047,.039,.058,panel);
   shell(j+2,[(i?1:-1)*.037,-.012,.044],.021,.026,.042,rubber);
   for(let f=0;f<4;f++)shell(j+2,[(f-1.5)*.021,.001,.079],.013,.020,.037,rubber);
  }
- const meshes=groups.map(({joint,color,buf,first})=>{
-  const vao=gl.createVertexArray(),v=gl.createBuffer();
-  gl.bindVertexArray(vao);gl.bindBuffer(gl.ARRAY_BUFFER,v);gl.bufferData(gl.ARRAY_BUFFER,new Float32Array(buf),gl.STATIC_DRAW);
-  gl.enableVertexAttribArray(0);gl.vertexAttribPointer(0,3,gl.FLOAT,false,24,0);
-  gl.enableVertexAttribArray(1);gl.vertexAttribPointer(1,3,gl.FLOAT,false,24,12);
-  return {vao,joint,len:buf.length/6,color,first};
- });
- return renderAvatar(gl,new ProceduralPose(),meshes);
+ return renderAvatar(gl,new ProceduralPose(),rigidMesh(gl,[...groups,...createEquipment()]),true);
 }
 
 class ProceduralPose{

@@ -1,5 +1,5 @@
 import {exteriorSky} from "./exterior-sky.mjs?v=1";
-import {chaseView,loadApolloBody,loadProceduralSuit} from "./apollo-body.mjs?v=3";
+import {chaseView,loadApolloBody,loadProceduralSuit} from "./apollo-body.mjs?v=5";
 const $ = id => document.getElementById(id);
 const canvas = $("view");
 const main = canvas.parentElement;
