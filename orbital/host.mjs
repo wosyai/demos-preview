@@ -1,4 +1,5 @@
-import {hudText} from "./hud-text.mjs?v=2";
+import {hudText} from "./hud-text.mjs?v=3";
+import {reentryGlow} from "./reentry-glow.mjs?v=1";
 import {earthDetail} from "./earth-detail.mjs";
 import {exteriorSky} from "./exterior-sky.mjs?v=2";
 import {chaseView,loadApolloBody,loadProceduralSuit,stationGrip} from "./apollo-body.mjs?v=14";
@@ -601,6 +602,7 @@ function bakeBackdrop(bind,w,h,eva,heading,pitch,roll,orbit){
  gl.bindFramebuffer(gl.FRAMEBUFFER,null);
  skyHeading=heading;skyPitch=pitch;skyDeck=Number(eva);skyPhoto=earthReady;skyRoll=roll[1];skyStars=starReady;skyOrbit=orbit.center;skySpin=orbit.spin;
 }
+let glow=null;
 function render(alpha) {
  if(!frame)return;
  const fraction=nativeQuality||stillFrames>14?1:renderLoad;
@@ -613,12 +615,14 @@ function render(alpha) {
  const interpolate=previous&&frame[15]===previous[15]&&frame[32]===previous[32];
  const mixAngle=(a,b)=>a+Math.atan2(Math.sin(b-a),Math.cos(b-a))*alpha;
  const pose=interpolate ? frame.map((n,i)=>i===3||i===21?mixAngle(previous[i],n):i<5||i===8||i===22||(!seatContact&&i>=12&&i<=14)?previous[i]+(n-previous[i])*alpha:n):frame;
- const eva=pose[15]===1, body=eva&&apolloBody;
+ const eva=pose[15]===1, body=eva&&apolloBody, entry=pose[32]===1;
+ const heat=entry&&pose[29]===1?engine.entry_flow(3):0;
+ const heated=heat>.01, evolving=heated&&engine.entry_flow(4)<1;
  const immersed={eye:[...pose.slice(0,3)],yaw:pose[3],pitch:pose[4]};
  const chase=Boolean(body&&thirdPerson);
  const to=chase?1:0;
  if(Math.abs(chaseBlend-to)>.005)chaseBlend+=(to-chaseBlend)*.22;else chaseBlend=to;
- const camera=chaseBlend>0&&body ? chaseView(pose,{blend:chaseBlend,clip:(from,to)=>engine.camera_clip(...from,...to)}) : immersed;
+ const camera=chaseBlend>0&&body ? chaseView(pose,{blend:chaseBlend,clip:(from,to)=>entry?1:engine.camera_clip(...from,...to)}) : immersed;
  const [x,y,z]=camera.eye,{yaw:heading,pitch}=camera;
  const drawBody=Boolean(body&&(chase||chaseBlend>.03)&&Math.hypot(x-pose[0],y-pose[1],z-pose[2])>.8);
  const orbit=skyState(pose);
@@ -629,7 +633,7 @@ function render(alpha) {
  if(eva&&upgradedSky&&earthReady&&$("intro").hidden)fineEarth.update(orbit,heading,pitch,optics,roll,h);
  const skyMoved=eva&&upgradedSky&&!(Math.abs(orbit.spin-renderSkySpin)<.0006);
  const motion=body?[pose[21],pose[22],...pose.slice(23,26),...pose.slice(33,37),drawBody].join(","):"";
- if(renderVersion===worldVersion && renderYaw===heading && renderPitch===pitch && renderW===w && renderH===h && Math.abs(renderX-x)<.00002 && Math.abs(renderY-y)<.00002 && Math.abs(renderZ-z)<.00002 && renderGrip===pose[8] && renderRoute===pose[20] && renderReach===pose[10] && avatarMotion===motion && !skyMoved)return;
+ if(renderVersion===worldVersion && renderYaw===heading && renderPitch===pitch && renderW===w && renderH===h && Math.abs(renderX-x)<.00002 && Math.abs(renderY-y)<.00002 && Math.abs(renderZ-z)<.00002 && renderGrip===pose[8] && renderRoute===pose[20] && renderReach===pose[10] && avatarMotion===motion && !skyMoved&&!evolving)return;
  renderVersion=worldVersion;renderYaw=heading;renderPitch=pitch;renderW=w;renderH=h;renderX=x;renderY=y;renderZ=z;renderGrip=pose[8];renderRoute=pose[20];renderReach=pose[10];avatarMotion=motion;if(skyMoved)renderSkySpin=orbit.spin;
  if(eva&&shadowDirty){
    shadowDirty=false;
@@ -660,7 +664,13 @@ function render(alpha) {
  gl.activeTexture(gl.TEXTURE2);gl.bindTexture(gl.TEXTURE_2D,shadowTexture);gl.uniform1i(scene.sunMap,2);gl.uniform1i(scene.detailedShadow,Number(detailed));
  gl.activeTexture(gl.TEXTURE4);gl.bindTexture(gl.TEXTURE_2D_ARRAY,surfaceTexture);gl.uniform1i(scene.surfaceTile,4);gl.uniform1i(scene.armSurfaceReady,Number(armSurfaceReady));gl.uniform1i(scene.panelStampReady,Number(panelStampReady));gl.uniform1i(scene.pressureStampReady,Number(pressureStampReady));gl.uniform1i(scene.fasciaStampReady,Number(fasciaStampReady));
  meshes(scene,eva,pose,Boolean(body));
- if(body)apolloBody.draw(pose,{camera,optics,thirdPerson:drawBody,roll});
+ if(body){
+  // Keep meter-scale suit vertices precise millions of meters from Kestrel.
+  const relative=entry?{...camera,eye:camera.eye.map((n,i)=>n-pose[i])}:camera;
+  let suitPose=pose;
+  if(entry){suitPose=pose.slice();suitPose[0]=0;suitPose[1]=0;suitPose[2]=0;}
+  apolloBody.draw(suitPose,{camera:relative,optics,thirdPerson:drawBody,roll});
+ }
  // The background lies behind the mesh; early depth rejects the sky and globe
  // across the station rather than shading those pixels and drawing over them.
  gl.depthMask(false);
@@ -671,6 +681,10 @@ function render(alpha) {
    bind(space);bindOrbit(orbit);
  }
  gl.bindVertexArray(null);gl.drawArrays(gl.TRIANGLES,0,3);gl.depthMask(true);
+ if(heated){
+  glow??=reentryGlow(gl);
+  glow(pose,camera,optics,roll,[0,1,2].map(engine.entry_flow),heat,evolving?performance.now()*.001:pose[37]*.17);
+ }
 }
 let touchLookSeen=false;
 function hud(){
@@ -680,7 +694,8 @@ function hud(){
  const driftAhead=(vx*Math.sin(heading)-vz*Math.cos(heading))*Math.cos(pitch)+vy*Math.sin(pitch);
  const speed=Math.hypot(vx,vy,vz);
  const eva=frame[15]===1, contact=frame[26]===1;
- const view=hudText(engine.hud_code(),frame[16],touchLookSeen);
+ const hudCode=engine.hud_code();
+ const view=hudText(hudCode,frame[16],touchLookSeen);
  const coastButton=$("coast");
  coastButton.hidden=!active||!view.coast;
  if(coastButton.hidden)coast=false;
@@ -694,10 +709,15 @@ function hud(){
  instrument.hidden=!active;
  instrument.classList.toggle("burn",view.burn);
  instrument.classList.toggle("contact",contact);
- const readout=(frame[30]>1?"×120 · ":"")+(contact?"HULL CONTACT · ":view.burn?"THRUST · ":"DRIFT · ")+speed.toFixed(1)+" m/s"+(eva?" · Δv "+frame[31].toFixed(1)+" m/s":"")+(view.far?" · "+(frame[28]/1000).toFixed(0)+" km":"");
+ const clock=frame[30]>1?"×"+frame[30]+" · ":"";
+ const entry=frame[32]===1&&frame[29]===1;
+ $("flight-keys").hidden=entry;$("entry-keys").hidden=!entry;
+ text("systems",(hudCode&63)===43?"SIGNAL LOST":"SYSTEMS ONLINE");
+ const readout=entry?clock+(frame[28]/1000).toFixed(1)+" km · "+(engine.entry_flow(5)/1000).toFixed(2)+" km/s":
+   clock+(contact?"HULL CONTACT · ":view.burn?"THRUST · ":"DRIFT · ")+speed.toFixed(1)+" m/s"+(eva?" · Δv "+frame[31].toFixed(1)+" m/s":"")+(view.far?" · "+(frame[28]/1000).toFixed(0)+" km":"");
  text("flight-speed",readout);
  const vector=$("drift-vector");
- vector.style.opacity=String(speed>.08?1:0);
+ vector.style.opacity=String(speed>.08&&!entry?1:0);
  vector.style.transform="rotate("+Math.atan2(driftRight,driftAhead)+"rad)";
  main.classList.toggle("console-hud",view.console);
  const reticle=$("reticle");
@@ -1019,7 +1039,7 @@ try{
   };
   stars.src=new URL("./starfield.jpg?v=1",import.meta.url).href;
  }
- const response=await fetch(new URL("./orbital.wasm?v=43",import.meta.url));
+ const response=await fetch(new URL("./orbital.wasm?v=44",import.meta.url));
  if(!response.ok)throw Error("The station engine could not be downloaded.");
  const {instance}=await WebAssembly.instantiate(await response.arrayBuffer(),{
   orbital:{

@@ -42,11 +42,13 @@ const messages=[
  ["Gripping the handrail","Your drift is arrested.","Grip rail"],
  ["Rail secured","Release the rail to push off.","Release & push"],
  ["Exercise complete","You pushed off. Reset to practice again.","Grip rail"],
- ["Low-perigee orbit","Reentry scenario. This orbit already dips into the upper atmosphere. Use Coast ×120 to observe the crossing.","Station not in this exercise","Observe the orbit with Coast ×120"],
+ ["Low-perigee orbit","Reentry scenario. This orbit descends into the upper atmosphere. Use Coast ×120 to approach the interface.","Station not in this exercise","Observe the orbit with Coast ×120"],
  ["Separated from station","Velocity persists. Aim back toward the station and counterthrust, or coast at 120×.","Station out of reach","Counterthrust to return"],
  ["Separated from station","Coasting at 120×. Thrust resumes normal time.","Station out of reach","Thrust returns to 1×"],
- ["Atmosphere reached","Your orbit crossed 120 km altitude. Reset to return to the station.","EVA ended","120 km entry · reset"],
- ["Robot arm clearing","The cradle is carrying the load. Wait for the robot arm to clear.","Arm clearing","Arm clearing"]
+ ["Atmosphere reached","120 km interface crossed. Watch the descent at ×24. Thrusters cannot arrest this entry.","Coasting through entry","120 km interface · ×24"],
+ ["Robot arm clearing","The cradle is carrying the load. Wait for the robot arm to clear.","Arm clearing","Arm clearing"],
+ ["Entry heating","Hot gas is forming along the flight path. Switch camera to see the wake.","Entry in progress","Plasma heating · ×24"],
+ ["Suit lost","The unshielded suit exceeded its heating limit in this exercise. Reset to replay.","Reset to replay","Heating limit exceeded"]
 ];
 const sections=["TRAINING 01 / HANDRAIL","EVA / 1 OF 3","EVA / 2 OF 3","EVA / 3 OF 3","EVA / CARGO ALIGNMENT","EVA / AIRLOCK RETURN","ORBIT / REENTRY"];
 const arrow=["+","+","+","+","→","←","↑","↓"];

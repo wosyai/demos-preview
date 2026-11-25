@@ -37,6 +37,7 @@ select_reentry = "select_reentry"
 camera_clip = "camera_clip"
 hud_code = "hud_code"
 scenery_motion = "scenery_motion"
+entry_flow = "entry_flow"
 
 [targets.app.profiles.dev]
 main_artifact = "main"

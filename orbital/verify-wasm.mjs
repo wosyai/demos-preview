@@ -518,12 +518,32 @@ for(;warpTicks<2000&&state[29]===0;warpTicks++){
 assert.ok(warpTicks>700&&warpTicks<1450);
 assert.ok(Math.abs(state[37]-warpTicks*2)<.01);
 assert.ok(lastAbove>120000&&state[28]<=120000&&state[29]===1&&state[30]===1,'a distinct low-perigee orbit crosses threshold and exits warp on the crossing tick');
-const entryPos=[...state.slice(0,3)];
-step(4|64);assert.deepEqual([...state.slice(0,3)],entryPos,'entry is terminal until player reset');
-reset();assert.equal(state[28],260000);assert.equal(state[29],0);assert.equal(state[30],1);assert.equal(state[31],20);
+const interfacePos=[...state.slice(0,3)];
+assert.equal(engine.entry_flow(3),0,'interface crossing does not display heat');
+hudIs('Atmosphere reached',false);
+step(4|64);assert.notDeepEqual([...state.slice(0,3)],interfacePos,'after interface the orbit continues');
+assert.equal(state[30],24);assert.equal(state[31],20);assert.deepEqual([...state.slice(23,26)],[0,0,0]);
+assert.deepEqual([...state.slice(33,35)],[0,0],'manual propulsion remains disabled during irreversible entry');
+let flightTicks=0, lastHeatLoad=0, lastAltitude=state[28], onset=0, peakAirSpeed=0;
+for(;flightTicks<2200&&engine.entry_flow(4)<1;flightTicks++){
+ step(512|4|64);
+ const [x,y,z,heat,load,speed]=[0,1,2,3,4,5].map(engine.entry_flow);
+ assert.ok(Math.abs(Math.hypot(x,y,z)-1)<1e-5);
+ assert.ok(load>=lastHeatLoad&&state[28]<lastAltitude&&state[30]<120&&state[31]===20);
+ if(heat>.08&&!onset){onset=state[28];hudIs('Entry heating',false);}
+ lastHeatLoad=load;lastAltitude=state[28];peakAirSpeed=Math.max(peakAirSpeed,speed);
+}
+assert.ok(onset>95000&&onset<105000,'visible plasma only appears deeper than the interface');
+assert.ok(flightTicks>800&&flightTicks<1400&&engine.entry_flow(4)===1&&state[28]>72000&&state[28]<87000);
+assert.ok(engine.entry_flow(5)<peakAirSpeed-25,'denser airflow causes observable deceleration before terminal');
+hudIs('Suit lost',false);
+const end=[...state.slice(0,3),state[28],state[37]];
+for(let i=0;i<30;i++){step(4|64);assert.deepEqual([...state.slice(0,3),state[28],state[37]],end);}
+
+reset();assert.equal(state[28],260000);assert.equal(state[29],0);assert.equal(state[30],1);assert.equal(state[31],20);assert.equal(engine.entry_flow(3),0);assert.equal(engine.entry_flow(4),0);
 engine.select_deck(1);step(0,0,0,0);
 assert.equal(state[28],390000);assert.equal(state[32],0);
-console.log('Orbital dynamics: full retrograde EVA tank remains above '+(lowest/1000).toFixed(0)+' km; separate low-perigee case crosses 120 km after '+warpTicks*2+' orbital seconds; reset passed.');
+console.log('Orbital dynamics: full retrograde EVA tank remains above '+(lowest/1000).toFixed(0)+' km; separate low-perigee case crosses 120 km after '+warpTicks*2+' orbital seconds, then heating and suit loss after continued descent; reset passed.');
 const cameraBefore=[...state];
 assert.equal(engine.camera_clip(0,0,0,3,0,3),1,'unobstructed chase boom keeps its full length');
 assert.ok(Math.abs(engine.camera_clip(0,0,0,-3,0,0)-(-1.37/-3-.04))<.0001,'chase boom clips using the same station hull');

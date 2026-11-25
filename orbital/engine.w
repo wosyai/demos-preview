@@ -1278,6 +1278,11 @@ f32 stick_x=0.0;f32 stick_forward=0.0;
 f32 thrust_x=0.0;f32 thrust_y=0.0;f32 thrust_z=0.0;
 bool wall_contact=false;
 bool atmosphere=false;
+bool thermal_end=false;
+f32 heat=0.0;
+f32 heat_load=0.0;
+f32 flow_x=0.0;f32 flow_y=0.0;f32 flow_z=-1.0;
+f32 air_speed=0.0;
 bool reentry_exercise=false;
 f32 delta_v=20.0;
 f32 rotation_x=0.0;f32 rotation_y=0.0;
@@ -1450,12 +1455,46 @@ unit() measure_altitude = fn {
     orbit_altitude=core.float_trunc<f32>(radius_now-6371000.0);
     if(orbit_altitude<=120000.0){atmosphere=true;orbit_warp=1.0;};
 };
+f32(i32) entry_flow=fn(field){
+    if(field==0){flow_x}else{if(field==1){flow_y}else{if(field==2){flow_z}else{
+        if(field==3){heat}else{if(field==4){heat_load}else{air_speed}}
+    }}}
+};
+f32(f32) upper_air_density=fn(altitude){
+    f32 h=limit(120000.0-altitude,0.0,75000.0);
+    f32 expansion=1.0+h*0.000002297794;
+    expansion=expansion*expansion;expansion=expansion*expansion;expansion=expansion*expansion;expansion=expansion*expansion;expansion=expansion*expansion;expansion=expansion*expansion;
+    0.0000000235*expansion
+};
+unit(f32) descend_atmosphere=fn(d){
+    f32 air_vx=vx;
+    f32 air_vy=vy+0.0010627497*pilot_z;
+    f32 air_vz=vz-0.0010627497*(6761000.0+pilot_y);
+    f32 speed_sq=air_vx*air_vx+air_vy*air_vy+air_vz*air_vz;
+    air_speed=core.float_trunc<f32>(scaled_root(core.float_extend<f64>(speed_sq),1.0));
+    if(air_speed>1.0){
+        flow_x=air_vx/air_speed;flow_y=air_vy/air_speed;flow_z=air_vz/air_speed;
+        f32 rho=upper_air_density(orbit_altitude);
+        f32 drag=0.0028*rho*air_speed;
+        f32 ratio=air_speed/7000.0;
+        f32 thermal=core.float_trunc<f32>(scaled_root(core.float_extend<f64>(rho)*1000000.0,1.0))*ratio*ratio*ratio;
+        heat=limit((thermal-0.59)*0.48,0.0,1.0);
+        heat_load=limit(heat_load+limit(thermal-0.61,0.0,16.0)*d*0.0041,0.0,1.0);
+        orbital_gravity(d);
+        f32 resistance=limit(drag*d,0.0,0.08);
+        vx=vx-air_vx*resistance;vy=vy-air_vy*resistance;vz=vz-air_vz*resistance;
+        pilot_x=pilot_x+vx*d;pilot_y=pilot_y+vy*d;pilot_z=pilot_z+vz*d;
+        orbital_seconds=orbital_seconds+core.float_extend<f64>(d);measure_altitude();
+        thermal_end=heat_load>=1.0;
+    };
+};
 unit() reset = fn {
     pilot_x=0.0; pilot_y=0.0; pilot_z=0.37;vx=0.0;vy=0.0;vz=0.0;yaw=if(deck==0){0.13}else{-0.03};pitch=if(deck==0){-0.035}else{-0.095};timer=0.0;
     if(reentry_exercise){
-        pilot_y=-130000.0;vz=-176.55786;pitch=-0.40;yaw=-0.25;
+        pilot_y=-130000.0;vz=-161.43300;pitch=-0.40;yaw=-0.25;
     };
     delta_v=20.0;orbital_seconds=0.0;set_rotator(0.0,0.0);
+    thermal_end=false;heat=0.0;heat_load=0.0;flow_x=0.0;flow_y=0.0;flow_z=-1.0;air_speed=0.0;
     atmosphere=false;orbit_altitude=if(reentry_exercise){260000.0}else{390000.0};orbit_warp=1.0;body_yaw=yaw;body_pitch=pitch;hold_yaw=yaw;hold_pitch=pitch;set_thrust(0.0,0.0);thrust_x=0.0;thrust_y=0.0;thrust_z=0.0;wall_contact=false;
     mode=0;mark=0;grip=0.0;reach=0.0;carry=0.0;latch=0;station_leg=0;
     if(cargo_locked||lock_pose>0){cargo_locked=false;ready=false;};
@@ -1576,8 +1615,13 @@ i32() hud_code = fn{
         f32 forward=sy*vx-cy*vz;
         opposite=hud.counter(vx*cy+vz*sy,forward*cp+vy*sp,vy*cp-forward*sp);
     };
-    hud.packet(motion,cargo_phase,deck==1,cargo_locked,reach==1.0,reentry_exercise,atmosphere,far,delta_v==0.0,
-               burn,orbit_warp>1.0,station_leg,mark,steer_cue,opposite)
+    i32 code=hud.packet(motion,cargo_phase,deck==1,cargo_locked,reach==1.0,reentry_exercise,atmosphere,far,delta_v==0.0,
+               burn,orbit_warp>1.0,station_leg,mark,steer_cue,opposite);
+    if(reentry_exercise && atmosphere){
+        if(thermal_end){code=(code&-64)|43;}
+        else{if(heat>0.08){code=(code&-64)|42;};};
+    };
+    code
 };
 unit(f32,i32,f32,f32) tick = fn(dt,keys,look_x,look_y) {
     if(!ready){if(deck==0){draw();}else{eva_room();};ready=true;};
@@ -1619,9 +1663,12 @@ unit(f32,i32,f32,f32) tick = fn(dt,keys,look_x,look_y) {
         vx=vx+d*thrust_x;vy=vy+d*thrust_y;vz=vz+d*thrust_z;
         flight_move(d*orbit_warp);
         if(deck==1){orbital_seconds=orbital_seconds+core.float_extend<f64>(d*orbit_warp);measure_altitude();};
+    }else{if(reentry_exercise && atmosphere && !thermal_end){
+        descend_atmosphere(d*24.0);
+        orbit_warp=if(thermal_end){1.0}else{24.0};
     }else{
         if(deck==1 && !atmosphere){orbital_seconds=orbital_seconds+core.float_extend<f64>(d);};
-    };
+    };};
     bool for_hatch=deck==1 && alignment_stage>=5;
     bool for_alignment=deck==1 && alignment_stage>=1 && !for_hatch;
     f32 dock_x=if(for_hatch){-0.39}else{if(for_alignment){1.04}else{if(deck==0){0.12}else{0.05}}};
@@ -1771,7 +1818,7 @@ unit(f32,i32,f32,f32) tick = fn(dt,keys,look_x,look_y) {
     state[27]=speed_sq;state[28]=orbit_altitude;
     state[29]=if(atmosphere){1.0}else{0.0};state[30]=orbit_warp;
     state[31]=delta_v;state[32]=if(reentry_exercise){1.0}else{0.0};
-    state[33]=if(mode==0 || mode==3){ax}else{0.0};state[34]=if(mode==0 || mode==3){forward}else{0.0};
+    state[33]=if(!atmosphere&&(mode==0 || mode==3)){ax}else{0.0};state[34]=if(!atmosphere&&(mode==0 || mode==3)){forward}else{0.0};
     state[35]=if(mode==1){0.0}else{rotation_x};state[36]=if(mode==1){0.0}else{rotation_y};
     state[37]=core.float_trunc<f32>(orbital_seconds);
     unsafe {host.frame(core.pointer_cast<*?u8>(&?state[0]),38);};

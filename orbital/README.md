@@ -66,10 +66,14 @@ Newtonian gravity, centrifugal and Coriolis terms in the station's rotating
 frame; an unpowered release does not deorbit you. Once 150 m from the station,
 **Coast ×120** is available; starting a burn returns to ordinary time. The
 separate **Reentry scenario** starts at the 260 km apogee of a hypothetical
-low-perigee orbit (105 km nominal perigee), not as a consequence of releasing
-an EVA handhold. It ends only when the propagated path crosses 120 km altitude.
-This is a spherical Earth and threshold exercise, not a drag, heating, or
-orbital navigation model.
+low-perigee orbit (about 55 km nominal without atmospheric drag), not as a
+consequence of releasing an EVA handhold. At 120 km, coast gives way to a
+displayed ×24 atmospheric descent. Heating appears deeper as air grows denser;
+hot gas follows the atmosphere-relative motion. An unshielded suit eventually
+loses the exercise to accumulated heating. Reset to replay. Either camera
+works; third person shows the wake. This is an illustrative spherical Earth,
+simple density and drag, and an uncalibrated heating index, not an astronaut,
+engineering, or navigation model.
 
 From the scaffold rail you can see the cartridge separated from the hull by a
 visible gap. Its yoke suspends it from the starboard truss while the two-link
@@ -99,15 +103,16 @@ fixed-step capture curve.
 The contact and release states retain world-space rail anchors on all screen
 sizes. At the cargo brace the pin and hand share both Wosy-authored endpoints.
 The blue console first seats the cargo, then a separate press closes both
-cradle keepers and opens the robot jaws at a fixed cargo position. Green
+cradle keepers and opens the robot jaws at a fixed cargo position. The robot withdraws and parks before releasing the console. Green
 keeper indicators confirm the completed transfer. Release the console and ride the
 return push, counterthrust at the round airlock, and aim toward the amber locking bar.
 Grip the machined bar and slide its carriage into the upper detent to complete
 the EVA. Its local status light confirms the lock. The
 airlock stays closed: this exercise ends with an external lock confirmation,
 not a re-entry or pressurization sequence. The locks, cargo seating, and
-transfer use short, bounded Wosy pose sequences. The scene is cached between
-those samples rather than rebuilding the scenery every frame. The WebGL host interpolates presented camera and arm coordinates around
+transfer use short, bounded Wosy pose sequences. The handoff and lock actuators update only their own indexed spans, shared
+with the Sun shadow draw, rather than rebuilding the room. The scene is
+cached between those samples. The WebGL host interpolates presented camera and arm coordinates around
 the fixed 60 Hz Wosy simulation. Station shadows are cached until actual
 station geometry changes, and the canvas can lower moving resolution on slow
 GPUs while keeping still scenes sharp.
