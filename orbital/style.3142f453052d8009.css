@@ -1,0 +1,104 @@
+:root{color-scheme:dark;color:#e2f3f2;background:#0c1518;font:16px system-ui,sans-serif}*{box-sizing:border-box}body{margin:0}main{height:100dvh;position:relative;overflow:hidden;isolation:isolate}canvas{width:100%;height:100%;display:block;touch-action:none;cursor:grab}button{font:inherit;color:inherit;cursor:pointer;touch-action:none;border-radius:.65rem;border:1px solid #8ab2b677;background:#10232bea}button:disabled{opacity:.55;cursor:default}button:focus-visible{outline:3px solid #ffa85d;outline-offset:3px}[hidden]{display:none!important}
+header{position:absolute;top:0;left:0;right:0;padding:max(1rem,env(safe-area-inset-top)) max(1.1rem,env(safe-area-inset-right)) .8rem max(1.1rem,env(safe-area-inset-left));display:flex;align-items:center;justify-content:space-between;background:linear-gradient(#0a151cdb,transparent);pointer-events:none}
+.lockup,.telemetry{display:flex;align-items:center;gap:.7rem;letter-spacing:.09em}.orb{display:grid;place-items:center;color:#69e2de;border:1px solid #5c8c91;border-radius:50%;height:2.25rem;width:2.25rem}.lockup strong,.lockup small{display:block}.lockup small,.telemetry b{font:650 .6rem/1.2 system-ui;color:#a9c4c3}.telemetry>span{width:.42rem;height:.42rem;border-radius:50%;background:#6bebb9;box-shadow:0 0 12px #6bebb9}.telemetry button{width:44px;height:44px;pointer-events:auto;font-size:1.35rem;margin-left:.25rem}
+.task{position:absolute;top:4.7rem;left:max(1.1rem,env(safe-area-inset-left));width:min(16rem,68vw);padding:.8rem .95rem;border-left:2px solid #ffab58;background:#0c1d25db;border-radius:0 .6rem .6rem 0;pointer-events:none}.task small,#intro small{color:#ffb66b;font:750 .68rem/1.2 system-ui;letter-spacing:.12em}.task strong{display:block;margin-top:.24rem;font-size:1rem}.task p{margin:.2rem 0 0;color:#afc7c7;font-size:.81rem}.cross{position:absolute;inset:50% auto auto 50%;transform:translate(-50%,-50%);text-shadow:0 1px 4px #000;color:#c0e3e6a3;pointer-events:none}
+.action{position:absolute;inset:auto auto 4.25rem 50%;transform:translateX(-50%);min-width:8rem;min-height:44px;padding:.5rem .9rem;background:#ffaf65;color:#1b2428;font-weight:800;border-color:#ffd5ab}.action:disabled{background:#152a32;color:#e6eeee;border-color:#6e8c93}
+footer{position:absolute;bottom:1.35rem;left:50%;transform:translateX(-50%);width:max-content;max-width:96%;font:700 .7rem/1.45 system-ui;letter-spacing:.055em;color:#e2f3f2;background:#0a1a22df;padding:.5rem .9rem;border-radius:.4rem;pointer-events:none}footer span{color:#a9c4c3;font-weight:500}
+.touch{display:none}#intro{position:absolute;inset:0;display:grid;align-items:center;padding:clamp(1.25rem,8vw,7rem);background:linear-gradient(90deg,#09151ce8,#09151cbf 37%,#09151c1f 85%);overflow:auto}#intro section{max-width:31rem}#intro h1{font:850 clamp(3.8rem,11vw,8rem)/.93 system-ui;letter-spacing:-.085em;margin:.4rem 0 1.1rem}#intro h1 span{color:#ffae63}#intro p{max-width:23rem;color:#c4d9da}#start{min-height:50px;border:0;padding:.7rem 1rem;background:#bceee9;color:#102329;font-weight:800}#start span{padding-left:.7rem}#error:empty{display:none}
+@media(pointer:coarse),(max-width:680px){.action{bottom:7.3rem}footer{display:none}}
+@media(max-height:420px){header{padding-top:.45rem}.task{top:3.55rem;padding:.55rem .75rem}.task p{display:none}.action{bottom:1.05rem}}
+/* EVA controls sit outside the sight line, including on the shortest phones. */
+#intro button + button{margin-left:.55rem}#training{min-height:50px;padding:.65rem .95rem;color:#d9f1ed}
+#intro{background:linear-gradient(90deg,#08141bef,#09151cbd 37%,#09151c12 88%)}
+.telemetry button{display:grid;place-items:center;font-size:1.1rem}.telemetry #menu{font-size:.9rem}
+.action:not(:disabled){box-shadow:0 2px 20px #ffa04c35}
+
+@media(pointer:coarse),(max-width:680px){.action{bottom:max(2.8rem,calc(env(safe-area-inset-bottom) + 2.65rem));min-width:0;white-space:nowrap}.task{padding:.55rem .7rem}}
+@media(max-width:420px){.telemetry b,.telemetry>span{display:none}header{padding-inline:.7rem}.lockup{gap:.46rem}.task{top:4.4rem;left:.7rem;width:auto;max-width:calc(100% - 1.4rem)}.task p{font-size:.75rem}#intro{background:linear-gradient(90deg,#08141bdd,#09151c8a 76%)}}
+@media(max-width:400px){.action{font-size:.85rem;padding-inline:.55rem}}
+@media(orientation:landscape) and (max-height:420px){.action{bottom:.65rem}.task{top:3.45rem;max-width:none}.task p{display:none}#intro h1{font-size:clamp(3.2rem,10vw,5rem)}#intro p{margin-block:.6rem}#intro{padding-block:.65rem}}
+@media(orientation:portrait) and (max-width:420px){.action{bottom:max(6.65rem,calc(env(safe-area-inset-bottom) + 6.1rem))}}
+.quality-label{display:flex;align-items:center;gap:.65rem;margin-top:.65rem;color:#bed3d5;font-size:.82rem;font-weight:650}
+.quality-label select{min-height:44px;background:#10232be8;border:1px solid #80a6aa80;border-radius:.4rem;color:#f0f7f3;font:inherit;padding-inline:.6rem}
+/* Explicit URL-only diagnostics; normal play never creates this panel. */
+.orbital-timing{position:absolute;right:.6rem;top:4.3rem;z-index:2;display:flex;align-items:center;gap:.35rem;flex-wrap:wrap;max-width:90vw;padding:.35rem;background:#0b1929e8;border:1px solid #65828b;border-radius:.45rem;color:#e9f6f5;font:650 .72rem system-ui}
+.orbital-timing button{min-height:34px;padding:.2rem .46rem}
+
+.cross.aim-cue{font-weight:800;color:#8bf3ff;text-shadow:0 1px 5px #000,0 0 8px #09c8ec88}
+.cross.route-aim{font-size:1.32rem;color:#ffcb81;text-shadow:0 1px 4px #000,0 0 7px #211607}
+
+
+#compact-help{display:none}
+@media(orientation:portrait) and (max-width:390px){
+ .task{max-width:min(65vw,12rem);padding:.46rem .58rem}
+ .task small{font-size:.59rem;letter-spacing:.085em}
+ .task strong{font-size:.91rem;line-height:1.18;margin-top:.12rem}
+ .task #help{display:none}
+ .task #compact-help:not([hidden]){display:block;font-size:.73rem;color:#d5edf1;margin-top:.22rem}
+
+}
+
+
+
+
+@media(orientation:portrait) and (max-width:390px){
+ .console-hud .lockup{visibility:hidden}
+ .console-hud .task{top:max(.6rem,env(safe-area-inset-top));max-width:min(calc(100vw - 12.125rem),12rem)}
+}
+/* The touch halves are transparent interactive surfaces, not drawn controls. */
+.touch{display:none}
+@media(pointer:coarse){
+ .touch{display:flex;position:absolute;inset:0;gap:0;pointer-events:none}
+ .thumb-zone{width:50%;pointer-events:auto;touch-action:none;user-select:none}
+ header,.action,.coast{z-index:2}
+ #intro{z-index:3}
+}
+#reentry{margin-top:.5rem;min-height:44px;padding:.5rem .75rem}
+.flight-instrument{position:absolute;top:max(4.7rem,calc(env(safe-area-inset-top) + 3.5rem));right:max(1.1rem,env(safe-area-inset-right));display:flex;align-items:center;gap:.4rem;padding:.28rem .45rem;border-radius:.3rem;background:#0b1a22cc;color:#c4e5e6;font:650 .62rem/1.3 system-ui;letter-spacing:.04em;pointer-events:none}
+.flight-instrument span{width:5px;height:5px;border-radius:50%;background:#769498}.flight-instrument.burn span{background:#99efff;box-shadow:0 0 8px #89efff}.flight-instrument.contact{color:#ffc785}
+@media(pointer:coarse),(max-width:680px){.action{bottom:max(1.4rem,calc(env(safe-area-inset-bottom) + .85rem));max-width:42vw;font-size:.82rem}.flight-instrument{top:auto;bottom:max(7rem,calc(env(safe-area-inset-bottom) + 6.7rem));right:max(.6rem,env(safe-area-inset-right))}}
+.flight-instrument #drift-vector{display:block;width:8px;height:10px;background:#abdde4;clip-path:polygon(50% 0,100% 92%,50% 68%,0 92%)}
+.coast{position:absolute;right:max(.7rem,env(safe-area-inset-right));top:7rem;padding:.48rem .56rem;min-height:44px;font-size:.74rem;font-weight:750}
+.coast[aria-pressed=true]{background:#265b70;border-color:#abe3ed}
+@media(pointer:coarse),(max-width:680px){.coast{top:auto;bottom:max(8.6rem,calc(env(safe-area-inset-bottom) + 8.2rem))}}
+
+.signal-lost .telemetry>span{background:#f28b76;box-shadow:0 0 10px #d15e49}
+.signal-lost .telemetry>b{color:#ffd0c5}
+
+#pause{width:min(25rem,calc(100% - 2rem));max-height:calc(100dvh - 1rem);overflow:auto;padding:1rem 1.25rem 1.25rem;color:#e2f3f2;border:1px solid #8ab2b677;border-radius:.8rem;background:#10232b}
+#pause::backdrop{background:#08141b88}
+#pause h2{margin:0 0 .65rem;font-size:1.25rem}
+#pause button{min-height:44px;margin:0 .4rem .45rem 0;padding:.5rem .7rem}
+#resume{background:#bceee9;color:#102329;font-weight:800}
+#pause-settings .quality-label{margin-top:.3rem}
+
+#waypoint{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);pointer-events:none;color:#bfeee5;text-shadow:0 1px 3px #051414;font:700 1.05rem/1 system-ui}
+
+/* Helmet holograms do not take pointer focus from real equipment. */
+#visor-instructions,#flight-instrument{
+ color:#b9f8f5;background:linear-gradient(110deg,#102e36c9,#0b23254d);
+ border:1px solid #77dacf75;border-radius:.22rem;
+ box-shadow:inset 0 0 .62rem #67e0d515;text-shadow:0 1px .28rem #081013;
+ pointer-events:none;
+}
+#visor-instructions{
+ top:max(5.1rem,calc(env(safe-area-inset-top) + 4.4rem));
+ left:max(.8rem,env(safe-area-inset-left));width:min(15.6rem,49vw);padding:.55rem .68rem;
+ clip-path:polygon(0 0,calc(100% - .62rem) 0,100% .62rem,100% 100%,.62rem 100%,0 calc(100% - .62rem));
+}
+#visor-instructions small{color:#83e4dc}
+#equipment-prompt{color:#bafefa;font-weight:700;font-size:.75rem;margin-top:.33rem}
+#flight-instrument{
+ top:auto;bottom:max(4rem,calc(env(safe-area-inset-bottom) + 2.7rem));
+ right:max(.8rem,env(safe-area-inset-right));
+ max-width:52vw;padding:.44rem .54rem;font-variant-numeric:tabular-nums;
+}
+#view:focus-visible{outline:2px solid #7bdecf;outline-offset:-2px}
+@media(pointer:coarse),(max-width:680px){
+ #visor-instructions{top:max(4.2rem,calc(env(safe-area-inset-top) + 3.6rem));width:min(12rem,56vw);padding:.4rem .52rem}
+ #flight-instrument{bottom:max(.8rem,env(safe-area-inset-bottom));font-size:.59rem;max-width:61vw}
+ #equipment-prompt{font-size:.68rem}
+}
+@media(max-height:420px){
+ #visor-instructions{top:3.4rem;width:min(12rem,33vw)}
+}
